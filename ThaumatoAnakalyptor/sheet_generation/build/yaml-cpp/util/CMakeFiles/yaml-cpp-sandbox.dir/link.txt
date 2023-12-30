@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG "CMakeFiles/yaml-cpp-sandbox.dir/sandbox.cpp.o" -o sandbox  ../libyaml-cpp.a 

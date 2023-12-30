@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG "CMakeFiles/yaml-cpp-read.dir/read.cpp.o" -o read  ../libyaml-cpp.a 
