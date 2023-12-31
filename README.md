@@ -48,7 +48,7 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
     Checkpoint and training data can be downloaded from the private Vesuvius Challenge SFTP server under ```GrandPrizeSubmission-31-12-2023/Codebase/automatic segmentation/ThaumatoAnakalyptor```.
 
 - **Segmentations:**
-    The provided segmentations can be downloaded from the private Vesuvius Challenge SFTP server under ```julian_uploads/finished_segments/``` and ```julian_uploads/finished_segments/```.
+    The provided segmentations can be downloaded from the private Vesuvius Challenge SFTP server under ```julian_uploads/finished_segments/``` and ```julian_uploads/scroll3_segments/```.
 
 ### Execute the Pipeline
 - **Setup:**
