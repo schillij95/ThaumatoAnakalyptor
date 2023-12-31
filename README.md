@@ -43,7 +43,7 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
 
     *Note*:
         To generate an ```umbilicus.txt``` for a scroll, make sure to transform the coordinates from scroll coordinates ```x, y, z``` - where ```x,y``` is the tif 2D coordinates and ```z``` the tif layer number - into umbilicus coordinates ```uc``` with this formula:
-        ```bash
+        ```
         uc = y + 500, z + 500, x + 500 
         ```
 - **Checkpoint and Training Data:**
