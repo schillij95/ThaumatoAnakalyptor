@@ -38,8 +38,6 @@ The core principle of ThaumatoAnakalyptor involves extracting 3D points on papyr
 This example shows how to do segmentation on scroll 3 (PHerc0332).
 
 ### Download Data
-- **Checkpoint and Training Data:**
-    Checkpoint and training data can be downloaded from the private Vesuvius Challenge SFTP server under ```GrandPrize/ThaumatoAnakalyptor```.
 - **Scroll Data:**
     Download ```PHerc0332.volpkg``` into the directory ```<scroll-path>``` and make sure to have the volume ID ```20231027191953``` in the ```<scroll-path>/PHerc0332.volpkg/volumes``` directory. Place the ```umbilici/scroll_<nr>/umbilicus.txt``` and ```umbilici/scroll_<nr>/umbilicus_old.txt``` files into all the ```<scroll-path>/PHerc0332.volpkg/volumes/<ID>``` directories.
 
@@ -47,10 +45,12 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
     ```bash
     uc = y + 500, z + 500, x + 500 
     ```
+- **Checkpoint and Training Data:**
+    Checkpoint and training data can be downloaded from the private Vesuvius Challenge SFTP server under ```GrandPrizeSubmission-31-12-2023/Codebase/automatic segmentation/ThaumatoAnakalyptor```.
 
 ### Execute the Pipeline
 - **Setup:**
-    Download the checkpoint for the instance segmentation model and place it into ```ThaumatoAnakalyptor/mask3d/saved/train/last-epoch.ckpt```. Build and start the Docker Container:
+    Download the checkpoint ```last-epoch.ckpt``` for the instance segmentation model and place it into ```ThaumatoAnakalyptor/mask3d/saved/train/last-epoch.ckpt```. Build and start the Docker Container:
 
     ```bash
     docker build -t thaumato_image -f DockerfileThaumato .
@@ -120,7 +120,7 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
 
 ### Training 3D instance segmentation (advanced)
 If you would like to train the 3D instance segmentation model refer to [Mask3D](ThaumatoAnakalyptor/mask3d/README.md) and [these additional instructions](ThaumatoAnakalyptor/mask3d/install_commands.txt).
-Make sure to download the provided training data, preprocess the data and place them in the appropriate directories.
+Make sure to download the provided training data ```3d_instance_segmentation_training_data```, preprocess the data and place it in the appropriate directories.
 
 ### Debugging
 - **3D Visualization:** For debugging and visualization, CloudCompare or a similar 3D tool is recommended.
