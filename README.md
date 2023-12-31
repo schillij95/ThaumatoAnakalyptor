@@ -41,10 +41,11 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
 - **Scroll Data:**
     Download ```PHerc0332.volpkg``` into the directory ```<scroll-path>``` and make sure to have the volume ID ```20231027191953``` in the ```<scroll-path>/PHerc0332.volpkg/volumes``` directory. Place the ```umbilici/scroll_<nr>/umbilicus.txt``` and ```umbilici/scroll_<nr>/umbilicus_old.txt``` files into all the ```<scroll-path>/PHerc0332.volpkg/volumes/<ID>``` directories.
 
-    To generate an ```umbilicus.txt``` for a scroll, make sure to transform the coordinates from scroll coordinates ```x, y, z``` - where ```x,y``` is the tif 2D coordinates and ```z``` the tif layer number - into umbilicus coordinates ```uc``` with this formula:
-    ```bash
-    uc = y + 500, z + 500, x + 500 
-    ```
+    *Note*:
+        To generate an ```umbilicus.txt``` for a scroll, make sure to transform the coordinates from scroll coordinates ```x, y, z``` - where ```x,y``` is the tif 2D coordinates and ```z``` the tif layer number - into umbilicus coordinates ```uc``` with this formula:
+        ```bash
+        uc = y + 500, z + 500, x + 500 
+        ```
 - **Checkpoint and Training Data:**
     Checkpoint and training data can be downloaded from the private Vesuvius Challenge SFTP server under ```GrandPrizeSubmission-31-12-2023/Codebase/automatic segmentation/ThaumatoAnakalyptor```.
 
