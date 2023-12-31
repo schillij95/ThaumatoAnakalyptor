@@ -42,6 +42,10 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
     Checkpoint and training data can be downloaded from the private Vesuvius Challenge SFTP server under ```GrandPrize/ThaumatoAnakalyptor```.
 - **Scroll Data:**
     Download ```PHerc0332.volpkg``` into the directory ```<scroll-path>``` and make sure to have the volume ID ```20231027191953``` in the ```<scroll-path>/PHerc0332.volpkg/volumes``` directory. Place the ```umbilici/scroll_<nr>/umbilicus.txt``` and ```umbilici/scroll_<nr>/umbilicus_old.txt``` files into all the ```<scroll-path>/PHerc0332.volpkg/volumes/<ID>``` directories.
+    To generate a umbilicus.txt for a scroll, make sure to transform the coordinates from scroll coordinates ```x, y, z``` - where ```x,y``` is the tif 2D coordinate and ```z``` the tif layer number - into umbilicus coordinate ```uc``` with this formula:
+    ```bash
+    uc = y + 500, z + 500, x + 500 
+    ```
 
 ### Execute the Pipeline
 - **Setup:**
