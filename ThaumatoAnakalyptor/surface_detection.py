@@ -10,8 +10,8 @@ import unittest
 
 ## sobel_filter_3d from https://github.com/lukeboi/scroll-viewer/blob/dev/server/app.py
 ### adjusted for my use case and improve efficiency
-def sobel_filter_3d(input, chunks=4, overlap=3):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def sobel_filter_3d(input, chunks=4, overlap=3, device=None):
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     input = input.unsqueeze(0).unsqueeze(0).to(device, dtype=torch.float16)
 
     # Define 3x3x3 kernels for Sobel operator in 3D
@@ -78,8 +78,8 @@ def get_uniform_kernel(size=3, channels=1):
     return kernel.half()
 
 # Function to create a 3D convolution layer with a Uniform kernel
-def uniform_blur3d(channels=1, size=3):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def uniform_blur3d(channels=1, size=3, device=None):
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     kernel = get_uniform_kernel(size, channels)
     # Repeat the kernel for all input channels
     kernel = kernel.repeat(channels, 1, 1, 1, 1)
@@ -117,8 +117,8 @@ def loss(candidates, vectors):
     return scaled_losses
 
 # Function to find the vector that is the propper mean vector for the input vectors vs when -v = v
-def find_mean_indiscriminative_vector(vectors, n):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def find_mean_indiscriminative_vector(vectors, n, device):
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # Normalize the input vectors
     vectors = normalize(vectors)
     
@@ -176,8 +176,8 @@ def scale_to_0_1(tensor):
 
 
 # Function that convolutes a 3D Volume of vectors to find their mean indiscriminative vector
-def vector_convolution(input_tensor, window_size=20, stride=20):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def vector_convolution(input_tensor, window_size=20, stride=20, device=None):
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     input_tensor = input_tensor.to(device)
     # get the size of your 4D input tensor
     input_size = input_tensor.size()
@@ -197,7 +197,7 @@ def vector_convolution(input_tensor, window_size=20, stride=20):
                 window_vectors = window_vectors.reshape(-1, 3)  # flatten the 3D window into a 2D tensor
                 
                 # calculate the closest vector
-                best_vector = find_mean_indiscriminative_vector(window_vectors, 100)  # adjust the second parameter as needed
+                best_vector = find_mean_indiscriminative_vector(window_vectors, 100, device)  # adjust the second parameter as needed
                 # check if the indices are within the output_tensor's dimension
                 if i//stride < output_tensor.shape[0] and j//stride < output_tensor.shape[1] and k//stride < output_tensor.shape[2]:
                     # store the result in the output tensor
@@ -246,21 +246,23 @@ def subsample_uniform(points, n_samples):
 
 # Function to detect surface points in a 3D volume
 def surface_detection(volume, global_reference_vector, blur_size=3, sobel_chunks=4, sobel_overlap=3, window_size=20, stride=20, threshold_der=0.1, threshold_der2=0.001):
+    # device
+    device = volume.device
     # using half percision to save memory
     volume = volume.half()
     # Blur the volume
-    blur = uniform_blur3d(channels=1, size=blur_size)
+    blur = uniform_blur3d(channels=1, size=blur_size, device=device)
     blurred_volume = blur(volume.unsqueeze(0).unsqueeze(0)).squeeze(0).squeeze(0)
     
     # Apply Sobel filter to the blurred volume
-    sobel_vectors = sobel_filter_3d(blurred_volume, chunks=sobel_chunks, overlap=sobel_overlap)
+    sobel_vectors = sobel_filter_3d(blurred_volume, chunks=sobel_chunks, overlap=sobel_overlap, device=device)
     
     # Subsample the sobel_vectors
     sobel_stride = 10
     sobel_vectors_subsampled = sobel_vectors[::sobel_stride, ::sobel_stride, ::sobel_stride, :]
     
     # Apply vector convolution to the Sobel vectors
-    vector_conv = vector_convolution(sobel_vectors_subsampled, window_size=window_size, stride=stride).half()
+    vector_conv = vector_convolution(sobel_vectors_subsampled, window_size=window_size, stride=stride, device=device).half()
 
     # Adjust vectors to the global direction
     adjusted_vectors = adjust_vectors_to_global_direction(vector_conv, global_reference_vector).half()
@@ -275,7 +277,7 @@ def surface_detection(volume, global_reference_vector, blur_size=3, sobel_chunks
     first_derivative = scale_to_0_1(first_derivative).half()
 
     # Apply Sobel filter to the first derivative, project it onto the adjusted vectors, and calculate the norm
-    sobel_vectors_derivative = sobel_filter_3d(first_derivative, chunks=sobel_chunks, overlap=sobel_overlap)
+    sobel_vectors_derivative = sobel_filter_3d(first_derivative, chunks=sobel_chunks, overlap=sobel_overlap, device=device)
     second_derivative = adjusted_norm(sobel_vectors_derivative, adjusted_vectors_interp)
     second_derivative = scale_to_0_1(second_derivative)
     
@@ -332,19 +334,22 @@ class TestAngularDistance(unittest.TestCase):
 # Carefull, this test is not deterministic. Might fail sometimes.
 class TestFindMeanIndiscriminativeVector(unittest.TestCase):
     def test_single_vector(self):
-        vectors = torch.tensor([[1.0, 0.0, 0.0]])
-        best_vector = find_mean_indiscriminative_vector(vectors, 10000)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        vectors = torch.tensor([[1.0, 0.0, 0.0]]).to(device)
+        best_vector = find_mean_indiscriminative_vector(vectors, 10000, device)
         self.assertTrue(torch.allclose(best_vector, vectors[0], atol=5e-02) or torch.allclose(best_vector, -vectors[0], atol=5e-02))
         
     def test_opposite_vectors(self):
-        vectors = torch.tensor([[0.1, 10.0, 0.0], [-0.1, 10.0, 0.0]])
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        vectors = torch.tensor([[0.1, 10.0, 0.0], [-0.1, 10.0, 0.0]]).to(device)
         best_vector = find_mean_indiscriminative_vector(vectors, 10000)
         self.assertTrue(torch.allclose(best_vector, torch.tensor([0.0, 1.0, 0.0]), atol=5e-02) or torch.allclose(best_vector, torch.tensor([0.0, -1.0, 0.0]), atol=5e-02))
         
 class TestAdjustMeanVectorAmplitude(unittest.TestCase):
     def test_adjust_mean_vector_amplitude(self):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         vectors = torch.tensor([[1.5, 0.0, 0.0], [0.0, 2.0, 0.0], [0.0, 0.0, 0.1], [0.2, 0.5, 10.35]])
-        mean_vector = find_mean_indiscriminative_vector(vectors, 1000)
+        mean_vector = find_mean_indiscriminative_vector(vectors, 1000).to(device)
         adjusted_mean_vector = adjust_mean_vector_amplitude(mean_vector, vectors)
         self.assertTrue(torch.allclose(adjusted_mean_vector.norm(dim=-1), vectors.norm(dim=-1).mean(), atol=5e-02))
         

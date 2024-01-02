@@ -20,6 +20,8 @@ import multiprocessing
 import glob
 import argparse
 
+CFG = {'num_threads': 4, 'GPUs': 1}
+
 # Signal handler function
 def signal_handler(signal, frame):
     global interrupted
@@ -263,7 +265,7 @@ def extract_size(points, normals, grid_block_position_min, grid_block_position_m
     return filtered_points, filtered_normals
 
 def process_block(args):
-    corner_coords, blocks_to_process, blocks_processed, umbilicus_points, umbilicus_points_old, lock, path_template, save_template_v, save_template_r, grid_block_size, recompute, fix_umbilicus, maximum_distance = args
+    corner_coords, blocks_to_process, blocks_processed, umbilicus_points, umbilicus_points_old, lock, path_template, save_template_v, save_template_r, grid_block_size, recompute, fix_umbilicus, maximum_distance, gpu_num = args
     if fix_umbilicus:
         fix_umbilicus_indicator = fix_umbilicus_recompute(corner_coords, grid_block_size, umbilicus_points, umbilicus_points_old)
     else:
@@ -293,7 +295,8 @@ def process_block(args):
         if np.all(block == 0):
             return False
         
-        block = torch.tensor(np.array(block), device="cuda", dtype=torch.float16)
+        device = torch.device("cuda:" + str(gpu_num))
+        block = torch.tensor(np.array(block), device=device, dtype=torch.float16)
     
         block_point = np.array(corner_coords) + grid_block_size//2
         umbilicus_point = umbilicus_xz_at_y(umbilicus_points, block_point[2])
@@ -301,7 +304,8 @@ def process_block(args):
         umbilicus_normal = block_point - umbilicus_point
         umbilicus_normal = umbilicus_normal[[2, 0, 1]] # corner coords to tif
         unit_umbilicus_normal = umbilicus_normal / np.linalg.norm(umbilicus_normal)
-        reference_vector = torch.tensor(unit_umbilicus_normal).float().cuda()
+        # dtype float 32
+        reference_vector = torch.tensor(unit_umbilicus_normal, device=device, dtype=torch.float32)
         # Perform surface detection for this block
         recto, verso = surface_detection(block, reference_vector, blur_size=11, window_size=9, stride=1, threshold_der=0.075, threshold_der2=0.002)
         points_r, normals_r = recto
@@ -409,7 +413,7 @@ def compute_surface_for_block_multiprocessing(corner_coords, path_template, save
         start_time = time.time()
         current_blocks = list(blocks_to_process)  # Take a snapshot of current blocks
 
-        results = list(tqdm.tqdm(pool.imap(process_block, [(block, blocks_to_process, blocks_processed, umbilicus_points, umbilicus_points_old, lock, path_template, save_template_v, save_template_r, grid_block_size, recompute, fix_umbilicus, maximum_distance) for block in current_blocks]), total=len(current_blocks)))
+        results = list(tqdm.tqdm(pool.imap(process_block, [(block, blocks_to_process, blocks_processed, umbilicus_points, umbilicus_points_old, lock, path_template, save_template_v, save_template_r, grid_block_size, recompute, fix_umbilicus, maximum_distance, proc_nr % CFG['GPUs']) for proc_nr, block in enumerate(current_blocks)]), total=len(current_blocks)))
         current_time = time.time()
         print("Blocks total processed:", len(blocks_processed), "Blocks to process:", len(blocks_to_process), "Time per block:", f"{(current_time - start_time) / (len(blocks_processed) - processed_nr):.3f}" if len(blocks_processed)-processed_nr > 0 else "Unknown")
         processed_nr = len(blocks_processed)
@@ -440,6 +444,8 @@ if __name__ == "__main__":
     parser.add_argument("--recompute", action='store_true', help="Flag, recompute all blocks, even if they already exist")
     parser.add_argument("--fix_umbilicus", action='store_true', help="Flag, recompute all close to the updated umbilicus (make sure to also save the old umbilicus.txt as umbilicus_old.txt)")
     parser.add_argument("--start_block", type=int, nargs=3, help="Starting block to compute", default=start_block)
+    parser.add_argument("--num_threads", type=int, help="Number of threads to use", default=CFG['num_threads'])
+    parser.add_argument("--gpus", type=int, help="Number of GPUs to use", default=CFG['GPUs'])
 
     args = parser.parse_args()
 
@@ -452,6 +458,8 @@ if __name__ == "__main__":
     recompute = args.recompute
     fix_umbilicus = args.fix_umbilicus
     start_block = tuple(args.start_block)
+    CFG['num_threads'] = args.num_threads
+    CFG['GPUs'] = args.gpus
 
 
     pointcloud_subpath_recto = pointcloud_subpath + "_recto"
