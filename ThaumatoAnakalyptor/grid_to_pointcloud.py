@@ -387,7 +387,6 @@ def compute_surface_for_block_multiprocessing(corner_coords, path_template, save
     lock = manager.Lock()
 
     # Limit the number of concurrent jobs to, for instance, 4. You can change this value as desired.
-    num_cores = 4
     # for 2 threads:
     # Blocks processed: 0 Blocks to process: 1 Time per block: Unknown
     # Blocks processed: 1 Blocks to process: 6 Time per block: 5.990274429321289
@@ -404,7 +403,7 @@ def compute_surface_for_block_multiprocessing(corner_coords, path_template, save
     # Blocks processed: 41 Blocks to process: 52 Time per block: 2.366847770970042
     # for 4 threads: SLOWER
 
-    pool = multiprocessing.Pool(processes=num_cores)
+    pool = multiprocessing.Pool(processes=CFG['num_threads'])
 
     # Timing
     processed_nr = 0

@@ -64,12 +64,12 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
 - **Precomputation Steps:**
     The precomputation step is expected to take a few days.
 
-    The Grid Cells used for segmentation have to be in 8um resolution. ```generate_half_sized_grid.py``` is used for 4um resolution scans to generate Grid Cells in 8um resolution.
+    The Grid Cells used for segmentation have to be in 8um resolution. ```generate_half_sized_grid.py``` is used for 4um resolution scans to generate Grid Cells in 8um resolution. If you have acces to multiple GPU's, adjust the ```--num_threads``` and ```--gpus``` flags to speed up the process.
     ```bash
     python3 generate_half_sized_grid.py --input_directory <scroll-path>/PHerc0332.volpkg/volumes/20231027191953 --output_directory <scroll-path>/PHerc0332.volpkg/volumes/2dtifs_8um
     ```
     ```bash
-    python3 grid_to_pointcloud.py --base_path "" --volume_subpath "<scroll-path>/PHerc0332.volpkg/volumes/2dtifs_8um_grids" --disk_load_save "" "" --pointcloud_subpath "<scroll-path>/scroll3_surface_points/point_cloud"
+    python3 grid_to_pointcloud.py --base_path "" --volume_subpath "<scroll-path>/PHerc0332.volpkg/volumes/2dtifs_8um_grids" --disk_load_save "" "" --pointcloud_subpath "<scroll-path>/scroll3_surface_points/point_cloud" --num_threads 4 --gpus 1
     ```
     ```bash
     python3 pointcloud_to_instances.py --path "<scroll-path>/scroll3_surface_points" --dest "<scroll-path>/scroll3_surface_points" --umbilicus_path "<scroll-path>/PHerc0332.volpkg/volumes/umbilicus.txt" --main_drive "" --alternative_ply_drives "" --max_umbilicus_dist -1
@@ -133,6 +133,9 @@ Make sure to download the provided training data ```3d_instance_segmentation_tra
 ## Known Bugs
 - Recto and verso namings are switched.
 - Starting points should be and the very bottom side of the sheet in a z slice trough the scroll.
+
+## TODO
+- Multi GPU support for Mask3D inference.
 
 ## Contribution and Support
 - As this software is in active development, users are encouraged to report any encountered issues. I'm happy to help and answer questions.
