@@ -135,7 +135,8 @@ Make sure to download the provided training data ```3d_instance_segmentation_tra
 - Starting points should be and the very bottom side of the sheet in a z slice trough the scroll.
 
 ## TODO
-- Multi GPU support for Mask3D inference.
+- Test Multi GPU
+- Test Dockerization
 
 ## Contribution and Support
 - As this software is in active development, users are encouraged to report any encountered issues. I'm happy to help and answer questions.
