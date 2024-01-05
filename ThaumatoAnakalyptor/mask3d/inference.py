@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 import logging
 import os
 os.environ["WANDB_MODE"] = "dryrun" # turn off annoying bugging wandb logging
@@ -70,6 +71,7 @@ def get_parameters(cfg: DictConfig):
         )
     if cfg.general.checkpoint is not None:
         cfg, model = load_checkpoint_with_missing_or_exsessive_keys(cfg, model)
+        
     logger.info(flatten_dict(OmegaConf.to_container(cfg, resolve=True)))
     return cfg, model, loggers
 
@@ -119,6 +121,7 @@ def init(cfg: DictConfig):
     res = get_parameters(cfg)
     global model
     model = res[1]
+    model = nn.DataParallel(model)
     model.to("cuda")
     #print("dataset config", cfg.data.datasets)
     model.prepare_data()

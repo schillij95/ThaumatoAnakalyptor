@@ -12,6 +12,7 @@ print(torch.cuda.device_count())
 print(torch.cuda.current_device())
 # show name of current device
 print(torch.cuda.get_device_name(torch.cuda.current_device()))
+
 from multiprocessing import Pool
 
 # plotting
@@ -237,52 +238,6 @@ def load_plys(src_folder, main_drive, alternative_drives, start, size, grid_bloc
     colors = colors[indices]
 
     return points, normals, colors
-
-## Single threaded version
-# def load_plys(src_folder, start, size, grid_block_size=200):
-#     path_template = "cell_yxz_{:03}_{:03}_{:03}.ply"
-#     ply_files = []
-#     for x in range(start[0], start[0]+size[0]):
-#         for y in range(start[1], start[1]+size[1]):
-#             for z in range(start[2], start[2]+size[2]):
-#                 ply_files.append(os.path.join(src_folder, path_template.format(x,y,z)))
-
-#     points = []
-#     normals = []
-#     colors = []
-#     for ply_file in ply_files:
-#         try:
-#             # Load volume
-#             points_, normals_, colors_ = load_ply(ply_file)
-#             # normalize size
-#             points_ = normalize_volume_scale(points_, grid_block_size=grid_block_size)
-#             points.append(points_)
-#             normals.append(normals_)
-#             colors.append(colors_)
-#         # File Not Found
-#         except FileNotFoundError:
-#             continue
-#         except Exception as e:
-#             continue
-        
-#     if len(points) == 0:
-#         return None
-    
-#     points = np.concatenate(points, axis=0)
-#     normals = np.concatenate(normals, axis=0)
-#     colors = np.concatenate(colors, axis=0)
-
-#     # Randomly shuffle the points (for data looking more like the training data during instance prediction with mask3d)
-#     indices = np.arange(points.shape[0])
-#     np.random.shuffle(indices)
-#     points = points[indices]
-#     normals = normals[indices]
-#     colors = colors[indices]
-
-#     # Assert that no point has any negative coordinate values in any dimension
-#     # assert np.all(points >= 0), "Some points have negative coordinate values."
-
-#     return points, normals, colors
 
 def extract_subvolume(points, normals, colors, angles, start, size=50):
     """
@@ -566,9 +521,6 @@ def subvolume_instances_multithreaded(path="/media/julian/FastSSD/scroll3_surfac
         umbilicus_points_old = None
 
     num_tasks = len(start_list)
-    # Setting up multiprocessing
-    # with Pool(12) as pool:
-    #     results = list(tqdm(pool.imap(subvolume_computation_function, [(start_list[i], size, path, folder) for i in range(num_tasks)]), total=num_tasks))
 
     # Single threaded computation
     for i in tqdm(range(num_tasks)):
@@ -585,7 +537,8 @@ def main():
     main_drive = "SSD2"
     alternative_ply_drives = ["FastSSD", "HDD8TB"]
     # umbilicus_distance_threshold=-1 #2250 scroll 1
-    umbilicus_distance_threshold=2200 # scroll 3
+    # umbilicus_distance_threshold=2200 # scroll 3
+    umbilicus_distance_threshold = -1
     score_threshold=0.10
 
     # Create an argument parser
