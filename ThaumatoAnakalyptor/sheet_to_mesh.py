@@ -1121,14 +1121,17 @@ def stitch_meshes(mesh0_tuple, mesh1_tuple, len_meshes):
     sorted_edges0 = list(sorted_edges0)
     sorted_edges1 = list(sorted_edges1)
 
-    # Stitching the meshes based on your described logic
+    stitch_direction = -1
+    # Stitching the meshes
     while sorted_edges0 and sorted_edges1:
         if all_vertices[sorted_edges0[0][0], 2] > all_vertices[sorted_edges1[0][0], 2]:
             sorted_edges0, sorted_edges1 = sorted_edges1, sorted_edges0
+            stitch_direction *= -1
         
         v1, v2 = sorted_edges0[0]
         u1, u2 = sorted_edges1[0]
-        new_triangles.append([v1, u1, u2])
+        triangle = [v1, u1, u2] if stitch_direction == 1 else [v1, u2, u1]
+        new_triangles.append(triangle)
         
         # Remove the processed edge from sorted_edges1
         sorted_edges1.pop(0)

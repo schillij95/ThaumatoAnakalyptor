@@ -132,7 +132,7 @@ Make sure to download the provided training data ```3d_instance_segmentation_tra
 
 ## Known Bugs
 - Recto and verso namings are switched.
-- Starting points should be and the very bottom side of the sheet in a z slice trough the scroll.
+- Starting points should be at the very bottom side of the sheet in a z slice trough the scroll.
 
 ## TODO
 - Test Multi GPU

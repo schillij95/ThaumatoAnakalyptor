@@ -43,7 +43,7 @@ def cleanup_temp_files(directory):
     else:
         print("No leftover .temp files found.")
 
-def load_grid(path_template, cords, grid_block_size=500, cell_block_size=500):
+def load_grid(path_template, cords, grid_block_size=500, cell_block_size=500, uint8=True):
         """
         path_template: Template for the path to load individual grid files
         cords: Tuple (x, y, z) representing the corner coordinates of the grid block
@@ -58,7 +58,10 @@ def load_grid(path_template, cords, grid_block_size=500, cell_block_size=500):
         file_x_end, file_y_end, file_z_end = (cords[0] + grid_block_size)//cell_block_size, (cords[1] + grid_block_size)//cell_block_size, (cords[2] + grid_block_size)//cell_block_size
 
         # Generate the grid block
-        grid_block = np.zeros((grid_block_size, grid_block_size, grid_block_size), dtype=np.uint8)
+        if uint8:
+            grid_block = np.zeros((grid_block_size, grid_block_size, grid_block_size), dtype=np.uint8)
+        else:
+            grid_block = np.zeros((grid_block_size, grid_block_size, grid_block_size), dtype=np.uint16)
 
         # Load the grid block from the individual grid files and place it in the larger grid block
         for file_x in range(file_x_start, file_x_end + 1):
@@ -75,7 +78,8 @@ def load_grid(path_template, cords, grid_block_size=500, cell_block_size=500):
                     with tifffile.TiffFile(path) as tif:
                         images = tif.asarray()
 
-                    images = np.uint8(images//256)
+                    if uint8:
+                        images = np.uint8(images//256)
 
                     # grid block slice position for the current file
                     x_start = max(file_x*cell_block_size, cords[0])
