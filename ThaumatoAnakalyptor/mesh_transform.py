@@ -58,14 +58,14 @@ if __name__ == "__main__":
     transform_path = f"{transform_path}/*.json"
     # Find the first json file in the directory
     transform_path = glob.glob(transform_path)[0]
-    mesh_path = f"{base_path}/point_cloud_colorized_verso_subvolume_blocks_uv_0.obj"
-    image_path = f"{base_path}/point_cloud_colorized_verso_subvolume_blocks_uv_0_0.png"
-    mtl_path = f"{base_path}/point_cloud_colorized_verso_subvolume_blocks_uv_0.mtl"
+    mesh_path = f"{base_path}/point_cloud_colorized_verso_subvolume_blocks_uv.obj"
+    image_path = f"{base_path}/point_cloud_colorized_verso_subvolume_blocks_uv_0.png"
+    mtl_path = f"{base_path}/point_cloud_colorized_verso_subvolume_blocks_uv.mtl"
 
     base_path_save = base_path + "_8um"
-    mesh_save_path = f"{base_path_save}/point_cloud_colorized_verso_subvolume_blocks_uv_0.obj"
-    image_save_path = f"{base_path_save}/point_cloud_colorized_verso_subvolume_blocks_uv_0_0.png"
-    mtl_save_path = f"{base_path_save}/point_cloud_colorized_verso_subvolume_blocks_uv_0.mtl"
+    mesh_save_path = f"{base_path_save}/point_cloud_colorized_verso_subvolume_blocks_uv.obj"
+    image_save_path = f"{base_path_save}/point_cloud_colorized_verso_subvolume_blocks_uv_0.png"
+    mtl_save_path = f"{base_path_save}/point_cloud_colorized_verso_subvolume_blocks_uv.mtl"
 
     print(f"Processing {transform_path}, {mesh_path}, {image_path}")
     print(f"Saving to {base_path_save}, {mesh_save_path}, {image_save_path}")
