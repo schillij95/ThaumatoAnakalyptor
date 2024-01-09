@@ -50,18 +50,21 @@ def load_grid(path_template, cords, grid_block_size=500, cell_block_size=500, ui
         grid_block_size: Size of the grid block
         cell_block_size: Size of the individual grid files
         """
+        # make grid_block_size an array with 3 elements
+        if isinstance(grid_block_size, int):
+            grid_block_size = np.array([grid_block_size, grid_block_size, grid_block_size])
         
         # Convert corner coordinates to file indices and generate the file path
         # Starting indices
         file_x_start, file_y_start, file_z_start = cords[0]//cell_block_size, cords[1]//cell_block_size, cords[2]//cell_block_size
         # Ending indices
-        file_x_end, file_y_end, file_z_end = (cords[0] + grid_block_size)//cell_block_size, (cords[1] + grid_block_size)//cell_block_size, (cords[2] + grid_block_size)//cell_block_size
+        file_x_end, file_y_end, file_z_end = (cords[0] + grid_block_size[0])//cell_block_size, (cords[1] + grid_block_size[1])//cell_block_size, (cords[2] + grid_block_size[2])//cell_block_size
 
         # Generate the grid block
         if uint8:
-            grid_block = np.zeros((grid_block_size, grid_block_size, grid_block_size), dtype=np.uint8)
+            grid_block = np.zeros((grid_block_size[2], grid_block_size[0], grid_block_size[1]), dtype=np.uint8)
         else:
-            grid_block = np.zeros((grid_block_size, grid_block_size, grid_block_size), dtype=np.uint16)
+            grid_block = np.zeros((grid_block_size[2], grid_block_size[0], grid_block_size[1]), dtype=np.uint16)
 
         # Load the grid block from the individual grid files and place it in the larger grid block
         for file_x in range(file_x_start, file_x_end + 1):
@@ -83,11 +86,11 @@ def load_grid(path_template, cords, grid_block_size=500, cell_block_size=500, ui
 
                     # grid block slice position for the current file
                     x_start = max(file_x*cell_block_size, cords[0])
-                    x_end = min((file_x + 1) * cell_block_size, cords[0] + grid_block_size)
+                    x_end = min((file_x + 1) * cell_block_size, cords[0] + grid_block_size[0])
                     y_start = max(file_y*cell_block_size, cords[1])
-                    y_end = min((file_y + 1) * cell_block_size, cords[1] + grid_block_size)
+                    y_end = min((file_y + 1) * cell_block_size, cords[1] + grid_block_size[1])
                     z_start = max(file_z*cell_block_size, cords[2])
-                    z_end = min((file_z + 1) * cell_block_size, cords[2] + grid_block_size)
+                    z_end = min((file_z + 1) * cell_block_size, cords[2] + grid_block_size[2])
 
                     # Place the current file in the grid block
                     try:

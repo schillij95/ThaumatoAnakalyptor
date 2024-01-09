@@ -53,7 +53,6 @@ def extract_from_image_3d(
         `(..., )` array of complex valued samples from `image`.
     """
     device = image.device
-    print(f"input shape image: {image.shape}, coordinates: {coordinates.shape}")
     # pack coordinates into shape (b, 3)
     coordinates, ps = einops.pack([coordinates], pattern='* zyx')
     n_samples = coordinates.shape[0]
@@ -76,13 +75,6 @@ def extract_from_image_3d(
     inside = torch.logical_and(coordinates >= 0, coordinates <= volume_shape)
     inside = torch.all(inside, dim=-1)  # (b, d, h, w)
     samples[~inside] *= 0
-
-    # print out some stats
-    print(f'Extracted {inside.sum()} samples from {n_samples} coordinates.')
-    print(f"samples nr: {samples.shape[0]}, samples shape: {samples.shape[1:]}, packed shape: {ps}")
-
-    print(f"Shape of samples before unpacking: {samples.shape}")
-    print(f"Original packed shapes: {ps}")
 
     # pack data back up and return
     samples = samples.squeeze(-1)  # Remove the last dimension if it's 1
