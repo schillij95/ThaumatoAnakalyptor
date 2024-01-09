@@ -84,9 +84,9 @@ class PPMParser(object):
                 if imx % step or imy % step:
                     continue
 
-                yield imx // step, imy // step, x, y, z, nx, ny, nz
+                yield imx // step, imy // step, x, y, z, nx, ny, nz, buf
             else:
-                yield imx, imy, x, y, z, nx, ny, nz
+                yield imx, imy, x, y, z, nx, ny, nz, buf
 
     def get_3d_coords(self, imx, imy):
         f = self.f
@@ -109,9 +109,10 @@ class PPMParser(object):
         :return: A dictionary with cube coordinates as keys and list of entries as values.
         """
         cubes = {}
-        for imx, imy, x, y, z, nx, ny, nz in self.read_next_coords():
+        for imx, imy, x, y, z, nx, ny, nz, buf in self.read_next_coords():
             cube_coord = tuple((int(x // cube_size), int(y // cube_size), int(z // cube_size)))
             if cube_coord not in cubes:
                 cubes[cube_coord] = []
-            cubes[cube_coord].append((imx, imy, x, y, z, nx, ny, nz))
+            # cubes[cube_coord].append((int(imx), int(imy), float(x), float(y), float(z), float(nx), float(ny), float(nz)))
+            cubes[cube_coord].append(buf)
         return cubes
