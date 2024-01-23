@@ -164,7 +164,7 @@ class UmbilicusWindow(QMainWindow):
 
     def loadPoints(self):
         self.points = {}
-        umbilicus_name = "umbilicus_test.txt"
+        umbilicus_name = "umbilicus.txt"
         umbilicus_path = os.path.join(self.imagePath, umbilicus_name)
         if os.path.exists(umbilicus_path):
             with open(umbilicus_path, "r") as file:
@@ -176,7 +176,7 @@ class UmbilicusWindow(QMainWindow):
 
 
     def savePoints(self):
-        umbilicus_name = "umbilicus_test.txt"
+        umbilicus_name = "umbilicus.txt"
         try:
             umbilicus_path_grids = os.path.join(self.imagePath + "_grids", umbilicus_name)
             print(umbilicus_path_grids)
