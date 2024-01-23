@@ -249,6 +249,7 @@ dependencies:
       - pyflakes==3.0.1
       - pygments==2.15.1
       - pyparsing==3.0.9
+      - pyqt5==5.15.10
       - pyqt5-qt5==5.15.2
       - pyqt5-sip==12.11.0
       - pyqt6-qt6==6.5.2

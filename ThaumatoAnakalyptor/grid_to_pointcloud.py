@@ -424,49 +424,13 @@ def compute_surface_for_block_multiprocessing(corner_coords, path_template, save
         print("Blocks total processed:", len(blocks_processed), "Blocks to process:", len(blocks_to_process), "Time per block:", f"{(current_time - start_time) / (len(blocks_processed) - processed_nr):.3f}" if len(blocks_processed)-processed_nr > 0 else "Unknown")
         processed_nr = len(blocks_processed)
 
-if __name__ == "__main__": 
+def compute(disk_load_save, base_path, volume_subpath, pointcloud_subpath, maximum_distance, recompute, fix_umbilicus, start_block, num_threads, gpus):
     # Initialize CUDA context
     # _ = torch.tensor([0.0]).cuda()
     multiprocessing.set_start_method('spawn')
 
-    # Parse arguments defaults
-    maximum_distance = 2300 # scroll 3 all
-    maximum_distance= -1 #1750 # maximum distance between blocks to compute and the umbilicus (speed up pointcloud generation if only interested in inner part of scrolls)
-    recompute=False # whether to completely recompute all already processed blocks or continue (recompute=False). 
-    fix_umbilicus = False
-    disk_load_save = ["SSD4TB", "SSD2"] # Disk that contains input data, and dist that should be used to save output data
-    base_path = "/media/julian/SSD4TB"
-    volume_subpath = "PHerc0332.volpkg/volumes/2dtifs_8um_grids"
-    pointcloud_subpath = "scroll3_surface_points/point_cloud"
-    # start_block = (3000, 4000, 2000) # scroll1
-    start_block = (500, 500, 500)
-
-    parser = argparse.ArgumentParser(description="Extract papyrus sheet surface points from a 3D volume of a scroll CT scan")
-    parser.add_argument("--base_path", type=str, help="Base path to the data", default=base_path)
-    parser.add_argument("--disk_load_save", type=str, nargs=2, help="Disk that contains input data, and dist that should be used to save output data", default=disk_load_save)
-    parser.add_argument("--volume_subpath", type=str, help="Subpath to the volume data", default=volume_subpath)
-    parser.add_argument("--pointcloud_subpath", type=str, help="Subpath to the pointcloud data", default=pointcloud_subpath)
-    parser.add_argument("--max_umbilicus_dist", type=float, help="Maximum distance between the umbilicus and blocks that should be computed. -1.0 for no distance restriction", default=-1.0)
-    parser.add_argument("--recompute", action='store_true', help="Flag, recompute all blocks, even if they already exist")
-    parser.add_argument("--fix_umbilicus", action='store_true', help="Flag, recompute all close to the updated umbilicus (make sure to also save the old umbilicus.txt as umbilicus_old.txt)")
-    parser.add_argument("--start_block", type=int, nargs=3, help="Starting block to compute", default=start_block)
-    parser.add_argument("--num_threads", type=int, help="Number of threads to use", default=CFG['num_threads'])
-    parser.add_argument("--gpus", type=int, help="Number of GPUs to use", default=CFG['GPUs'])
-
-    args = parser.parse_args()
-
-    # update variables from arguments
-    disk_load_save = args.disk_load_save
-    base_path = args.base_path
-    volume_subpath = args.volume_subpath
-    pointcloud_subpath = args.pointcloud_subpath
-    maximum_distance = args.max_umbilicus_dist
-    recompute = args.recompute
-    fix_umbilicus = args.fix_umbilicus
-    start_block = tuple(args.start_block)
-    CFG['num_threads'] = args.num_threads
-    CFG['GPUs'] = args.gpus
-
+    CFG['num_threads'] = num_threads
+    CFG['GPUs'] = gpus
 
     pointcloud_subpath_recto = pointcloud_subpath + "_recto"
     pointcloud_subpath_verso = pointcloud_subpath + "_verso"
@@ -522,3 +486,46 @@ if __name__ == "__main__":
 
     dest_folder_r = dest_dir_r.replace(pointcloud_subpath, pointcloud_subpath_colorized).replace(disk_load_save[0], disk_load_save[1])
     add_random_colors(dest_dir_r, dest_folder_r)
+
+def main():
+    # Parse arguments defaults
+    maximum_distance = 2300 # scroll 3 all
+    maximum_distance= -1 #1750 # maximum distance between blocks to compute and the umbilicus (speed up pointcloud generation if only interested in inner part of scrolls)
+    recompute=False # whether to completely recompute all already processed blocks or continue (recompute=False). 
+    fix_umbilicus = False
+    disk_load_save = ["SSD4TB", "SSD2"] # Disk that contains input data, and dist that should be used to save output data
+    base_path = "/media/julian/SSD4TB"
+    volume_subpath = "PHerc0332.volpkg/volumes/2dtifs_8um_grids"
+    pointcloud_subpath = "scroll3_surface_points/point_cloud"
+    # start_block = (3000, 4000, 2000) # scroll1
+    start_block = (500, 500, 500)
+
+    parser = argparse.ArgumentParser(description="Extract papyrus sheet surface points from a 3D volume of a scroll CT scan")
+    parser.add_argument("--base_path", type=str, help="Base path to the data", default=base_path)
+    parser.add_argument("--disk_load_save", type=str, nargs=2, help="Disk that contains input data, and dist that should be used to save output data", default=disk_load_save)
+    parser.add_argument("--volume_subpath", type=str, help="Subpath to the volume data", default=volume_subpath)
+    parser.add_argument("--pointcloud_subpath", type=str, help="Subpath to the pointcloud data", default=pointcloud_subpath)
+    parser.add_argument("--max_umbilicus_dist", type=float, help="Maximum distance between the umbilicus and blocks that should be computed. -1.0 for no distance restriction", default=-1.0)
+    parser.add_argument("--recompute", action='store_true', help="Flag, recompute all blocks, even if they already exist")
+    parser.add_argument("--fix_umbilicus", action='store_true', help="Flag, recompute all close to the updated umbilicus (make sure to also save the old umbilicus.txt as umbilicus_old.txt)")
+    parser.add_argument("--start_block", type=int, nargs=3, help="Starting block to compute", default=start_block)
+    parser.add_argument("--num_threads", type=int, help="Number of threads to use", default=CFG['num_threads'])
+    parser.add_argument("--gpus", type=int, help="Number of GPUs to use", default=CFG['GPUs'])
+
+    args = parser.parse_args()
+
+    # update variables from arguments
+    disk_load_save = args.disk_load_save
+    base_path = args.base_path
+    volume_subpath = args.volume_subpath
+    pointcloud_subpath = args.pointcloud_subpath
+    maximum_distance = args.max_umbilicus_dist
+    recompute = args.recompute
+    fix_umbilicus = args.fix_umbilicus
+    start_block = tuple(args.start_block)
+    
+    # Compute the surface points
+    compute(disk_load_save, base_path, volume_subpath, pointcloud_subpath, maximum_distance, recompute, fix_umbilicus, start_block, args.num_threads, args.gpus)
+
+if __name__ == "__main__":
+    main()

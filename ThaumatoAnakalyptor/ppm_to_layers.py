@@ -1,3 +1,5 @@
+### Julian Schilliger - ThaumatoAnakalyptor - Vesuvius Challenge 2023
+
 from rendering_utils.interpolate_image_3d import extract_from_image_3d, insert_into_image_3d
 from rendering_utils.ppmparser import PPMParser
 from grid_to_pointcloud import load_grid
@@ -33,11 +35,12 @@ def load_and_process_grid_volume(layers, cubes, cube, args, path_template, axis_
     cube_xyz = np.zeros((len(cube_ppm), 3), dtype=np.float32)
     cube_normals = np.zeros((len(cube_ppm), 3), dtype=np.float32)
     cube_image_positions = np.zeros((len(cube_ppm), 2), dtype=np.int32)
-    for i, c_ in enumerate(cube_ppm):
+    for i, (imx, imy, c_) in enumerate(cube_ppm):
         c = struct.unpack('<dddddd', c_)
-        cube_xyz[i] = c[2:5]
-        cube_normals[i] = c[5:]
-        cube_image_positions[i] = c[:2][::-1]
+        cube_xyz[i] = c[:3]
+        cube_normals[i] = c[3:]
+        cube_image_positions[i] = [imy, imx]
+
     xyz = torch.tensor(cube_xyz, dtype=torch.float32).cuda()
     normals = torch.tensor(cube_normals, dtype=torch.float32).cuda()
     # construct all coordinate in positive and negative r
