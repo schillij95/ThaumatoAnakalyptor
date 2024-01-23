@@ -43,22 +43,28 @@ def cleanup_temp_files(directory):
     else:
         print("No leftover .temp files found.")
 
-def load_grid(path_template, cords, grid_block_size=500, cell_block_size=500):
+def load_grid(path_template, cords, grid_block_size=500, cell_block_size=500, uint8=True):
         """
         path_template: Template for the path to load individual grid files
         cords: Tuple (x, y, z) representing the corner coordinates of the grid block
         grid_block_size: Size of the grid block
         cell_block_size: Size of the individual grid files
         """
+        # make grid_block_size an array with 3 elements
+        if isinstance(grid_block_size, int):
+            grid_block_size = np.array([grid_block_size, grid_block_size, grid_block_size])
         
         # Convert corner coordinates to file indices and generate the file path
         # Starting indices
         file_x_start, file_y_start, file_z_start = cords[0]//cell_block_size, cords[1]//cell_block_size, cords[2]//cell_block_size
         # Ending indices
-        file_x_end, file_y_end, file_z_end = (cords[0] + grid_block_size)//cell_block_size, (cords[1] + grid_block_size)//cell_block_size, (cords[2] + grid_block_size)//cell_block_size
+        file_x_end, file_y_end, file_z_end = (cords[0] + grid_block_size[0])//cell_block_size, (cords[1] + grid_block_size[1])//cell_block_size, (cords[2] + grid_block_size[2])//cell_block_size
 
         # Generate the grid block
-        grid_block = np.zeros((grid_block_size, grid_block_size, grid_block_size), dtype=np.uint8)
+        if uint8:
+            grid_block = np.zeros((grid_block_size[2], grid_block_size[0], grid_block_size[1]), dtype=np.uint8)
+        else:
+            grid_block = np.zeros((grid_block_size[2], grid_block_size[0], grid_block_size[1]), dtype=np.uint16)
 
         # Load the grid block from the individual grid files and place it in the larger grid block
         for file_x in range(file_x_start, file_x_end + 1):
@@ -75,15 +81,16 @@ def load_grid(path_template, cords, grid_block_size=500, cell_block_size=500):
                     with tifffile.TiffFile(path) as tif:
                         images = tif.asarray()
 
-                    images = np.uint8(images//256)
+                    if uint8:
+                        images = np.uint8(images//256)
 
                     # grid block slice position for the current file
                     x_start = max(file_x*cell_block_size, cords[0])
-                    x_end = min((file_x + 1) * cell_block_size, cords[0] + grid_block_size)
+                    x_end = min((file_x + 1) * cell_block_size, cords[0] + grid_block_size[0])
                     y_start = max(file_y*cell_block_size, cords[1])
-                    y_end = min((file_y + 1) * cell_block_size, cords[1] + grid_block_size)
+                    y_end = min((file_y + 1) * cell_block_size, cords[1] + grid_block_size[1])
                     z_start = max(file_z*cell_block_size, cords[2])
-                    z_end = min((file_z + 1) * cell_block_size, cords[2] + grid_block_size)
+                    z_end = min((file_z + 1) * cell_block_size, cords[2] + grid_block_size[2])
 
                     # Place the current file in the grid block
                     try:
@@ -417,49 +424,13 @@ def compute_surface_for_block_multiprocessing(corner_coords, path_template, save
         print("Blocks total processed:", len(blocks_processed), "Blocks to process:", len(blocks_to_process), "Time per block:", f"{(current_time - start_time) / (len(blocks_processed) - processed_nr):.3f}" if len(blocks_processed)-processed_nr > 0 else "Unknown")
         processed_nr = len(blocks_processed)
 
-if __name__ == "__main__": 
+def compute(disk_load_save, base_path, volume_subpath, pointcloud_subpath, maximum_distance, recompute, fix_umbilicus, start_block, num_threads, gpus):
     # Initialize CUDA context
     # _ = torch.tensor([0.0]).cuda()
     multiprocessing.set_start_method('spawn')
 
-    # Parse arguments defaults
-    maximum_distance = 2300 # scroll 3 all
-    maximum_distance= -1 #1750 # maximum distance between blocks to compute and the umbilicus (speed up pointcloud generation if only interested in inner part of scrolls)
-    recompute=False # whether to completely recompute all already processed blocks or continue (recompute=False). 
-    fix_umbilicus = False
-    disk_load_save = ["SSD4TB", "SSD2"] # Disk that contains input data, and dist that should be used to save output data
-    base_path = "/media/julian/SSD4TB"
-    volume_subpath = "PHerc0332.volpkg/volumes/2dtifs_8um_grids"
-    pointcloud_subpath = "scroll3_surface_points/point_cloud"
-    # start_block = (3000, 4000, 2000) # scroll1
-    start_block = (500, 500, 500)
-
-    parser = argparse.ArgumentParser(description="Extract papyrus sheet surface points from a 3D volume of a scroll CT scan")
-    parser.add_argument("--base_path", type=str, help="Base path to the data", default=base_path)
-    parser.add_argument("--disk_load_save", type=str, nargs=2, help="Disk that contains input data, and dist that should be used to save output data", default=disk_load_save)
-    parser.add_argument("--volume_subpath", type=str, help="Subpath to the volume data", default=volume_subpath)
-    parser.add_argument("--pointcloud_subpath", type=str, help="Subpath to the pointcloud data", default=pointcloud_subpath)
-    parser.add_argument("--max_umbilicus_dist", type=float, help="Maximum distance between the umbilicus and blocks that should be computed. -1.0 for no distance restriction", default=-1.0)
-    parser.add_argument("--recompute", action='store_true', help="Flag, recompute all blocks, even if they already exist")
-    parser.add_argument("--fix_umbilicus", action='store_true', help="Flag, recompute all close to the updated umbilicus (make sure to also save the old umbilicus.txt as umbilicus_old.txt)")
-    parser.add_argument("--start_block", type=int, nargs=3, help="Starting block to compute", default=start_block)
-    parser.add_argument("--num_threads", type=int, help="Number of threads to use", default=CFG['num_threads'])
-    parser.add_argument("--gpus", type=int, help="Number of GPUs to use", default=CFG['GPUs'])
-
-    args = parser.parse_args()
-
-    # update variables from arguments
-    disk_load_save = args.disk_load_save
-    base_path = args.base_path
-    volume_subpath = args.volume_subpath
-    pointcloud_subpath = args.pointcloud_subpath
-    maximum_distance = args.max_umbilicus_dist
-    recompute = args.recompute
-    fix_umbilicus = args.fix_umbilicus
-    start_block = tuple(args.start_block)
-    CFG['num_threads'] = args.num_threads
-    CFG['GPUs'] = args.gpus
-
+    CFG['num_threads'] = num_threads
+    CFG['GPUs'] = gpus
 
     pointcloud_subpath_recto = pointcloud_subpath + "_recto"
     pointcloud_subpath_verso = pointcloud_subpath + "_verso"
@@ -515,3 +486,46 @@ if __name__ == "__main__":
 
     dest_folder_r = dest_dir_r.replace(pointcloud_subpath, pointcloud_subpath_colorized).replace(disk_load_save[0], disk_load_save[1])
     add_random_colors(dest_dir_r, dest_folder_r)
+
+def main():
+    # Parse arguments defaults
+    maximum_distance = 2300 # scroll 3 all
+    maximum_distance= -1 #1750 # maximum distance between blocks to compute and the umbilicus (speed up pointcloud generation if only interested in inner part of scrolls)
+    recompute=False # whether to completely recompute all already processed blocks or continue (recompute=False). 
+    fix_umbilicus = False
+    disk_load_save = ["SSD4TB", "SSD2"] # Disk that contains input data, and dist that should be used to save output data
+    base_path = "/media/julian/SSD4TB"
+    volume_subpath = "PHerc0332.volpkg/volumes/2dtifs_8um_grids"
+    pointcloud_subpath = "scroll3_surface_points/point_cloud"
+    # start_block = (3000, 4000, 2000) # scroll1
+    start_block = (500, 500, 500)
+
+    parser = argparse.ArgumentParser(description="Extract papyrus sheet surface points from a 3D volume of a scroll CT scan")
+    parser.add_argument("--base_path", type=str, help="Base path to the data", default=base_path)
+    parser.add_argument("--disk_load_save", type=str, nargs=2, help="Disk that contains input data, and dist that should be used to save output data", default=disk_load_save)
+    parser.add_argument("--volume_subpath", type=str, help="Subpath to the volume data", default=volume_subpath)
+    parser.add_argument("--pointcloud_subpath", type=str, help="Subpath to the pointcloud data", default=pointcloud_subpath)
+    parser.add_argument("--max_umbilicus_dist", type=float, help="Maximum distance between the umbilicus and blocks that should be computed. -1.0 for no distance restriction", default=-1.0)
+    parser.add_argument("--recompute", action='store_true', help="Flag, recompute all blocks, even if they already exist")
+    parser.add_argument("--fix_umbilicus", action='store_true', help="Flag, recompute all close to the updated umbilicus (make sure to also save the old umbilicus.txt as umbilicus_old.txt)")
+    parser.add_argument("--start_block", type=int, nargs=3, help="Starting block to compute", default=start_block)
+    parser.add_argument("--num_threads", type=int, help="Number of threads to use", default=CFG['num_threads'])
+    parser.add_argument("--gpus", type=int, help="Number of GPUs to use", default=CFG['GPUs'])
+
+    args = parser.parse_args()
+
+    # update variables from arguments
+    disk_load_save = args.disk_load_save
+    base_path = args.base_path
+    volume_subpath = args.volume_subpath
+    pointcloud_subpath = args.pointcloud_subpath
+    maximum_distance = args.max_umbilicus_dist
+    recompute = args.recompute
+    fix_umbilicus = args.fix_umbilicus
+    start_block = tuple(args.start_block)
+    
+    # Compute the surface points
+    compute(disk_load_save, base_path, volume_subpath, pointcloud_subpath, maximum_distance, recompute, fix_umbilicus, start_block, args.num_threads, args.gpus)
+
+if __name__ == "__main__":
+    main()

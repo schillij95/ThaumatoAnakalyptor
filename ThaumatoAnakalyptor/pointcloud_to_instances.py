@@ -526,6 +526,13 @@ def subvolume_instances_multithreaded(path="/media/julian/FastSSD/scroll3_surfac
     for i in tqdm(range(num_tasks)):
         results = subvolume_computation_function((start_list[i], size, path, folder, dest, main_drive, alternative_drives, fix_umbilicus, umbilicus_points, umbilicus_points_old, score_threshold))
 
+def compute(path, folder, dest, main_drive, alternative_ply_drives, umbilicus_points_path, umbilicus_distance_threshold, fix_umbilicus, score_threshold):
+    import sys
+    # Remove command-line arguments for later internal calls to Mask3D
+    sys.argv = [sys.argv[0]]
+
+    # Multithreaded computation
+    subvolume_instances_multithreaded(path=path, folder=folder, dest=dest, main_drive=main_drive, alternative_drives=alternative_ply_drives, fix_umbilicus=fix_umbilicus, umbilicus_points_path=umbilicus_points_path, start=[0, 0, 0], stop=[100, 100, 100], size = [3, 3, 3], umbilicus_distance_threshold=umbilicus_distance_threshold, score_threshold=score_threshold)
 
 def main():
     side = "_verso" # actually recto
@@ -565,12 +572,9 @@ def main():
     fix_umbilicus = args.fix_umbilicus
     score_threshold = args.score_threshold
 
-    import sys
-    # Remove command-line arguments for later internal calls to Mask3D
-    sys.argv = [sys.argv[0]]
+    # Compute the surface patches
+    compute(path, folder, dest, main_drive, alternative_ply_drives, umbilicus_points_path, umbilicus_distance_threshold, fix_umbilicus, score_threshold)
 
-    # Multithreaded computation
-    subvolume_instances_multithreaded(path=path, folder=folder, dest=dest, main_drive=main_drive, alternative_drives=alternative_ply_drives, fix_umbilicus=fix_umbilicus, umbilicus_points_path=umbilicus_points_path, start=[0, 0, 0], stop=[100, 100, 100], size = [3, 3, 3], umbilicus_distance_threshold=umbilicus_distance_threshold, score_threshold=score_threshold)
-
+    
 if __name__ == "__main__":
     main()
