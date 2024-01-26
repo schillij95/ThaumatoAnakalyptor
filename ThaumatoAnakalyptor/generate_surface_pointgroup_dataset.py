@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import open3d as o3d
 import os
-from mask3d.utils.point_cloud_utils import write_point_cloud_in_ply
+from .mask3d.utils.point_cloud_utils import write_point_cloud_in_ply
 from pathlib import Path
 from multiprocessing import Pool, cpu_count, current_process
 

@@ -16,7 +16,7 @@ from tqdm import tqdm
 import glob
 import tarfile
 import tempfile
-from surface_fitting_utilities import get_vector_mean, rotation_matrix_to_align_z_with_v, fit_surface_to_points_n_regularized, distance_from_surface, distance_from_surface_clipped
+from .surface_fitting_utilities import get_vector_mean, rotation_matrix_to_align_z_with_v, fit_surface_to_points_n_regularized, distance_from_surface, distance_from_surface_clipped
 
 import warnings
 warnings.filterwarnings("ignore")

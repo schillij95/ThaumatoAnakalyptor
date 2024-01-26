@@ -1,6 +1,6 @@
 ### Julian Schilliger - ThaumatoAnakalyptor - Vesuvius Challenge 2023
 
-from surface_detection import surface_detection
+from .surface_detection import surface_detection
 import torch
 import numpy as np
 import tifffile
@@ -14,7 +14,7 @@ import numpy as np
 import torch
 torch.set_float32_matmul_precision('medium')
 from scipy.interpolate import interp1d
-from add_random_colors_to_pointcloud import add_random_colors
+from .add_random_colors_to_pointcloud import add_random_colors
 # import torch.multiprocessing as multiprocessing
 import multiprocessing
 import glob
@@ -280,7 +280,6 @@ def process_block(args):
     recompute = recompute or fix_umbilicus_indicator
 
     skip_computation_flag = skip_computation_block(corner_coords, grid_block_size, umbilicus_points, maximum_distance=maximum_distance)
-    # ... (most of the original code here)
     # Pick a block to process
     blocks_to_process.remove(corner_coords)
     blocks_processed[corner_coords] = True
@@ -427,7 +426,10 @@ def compute_surface_for_block_multiprocessing(corner_coords, path_template, save
 def compute(disk_load_save, base_path, volume_subpath, pointcloud_subpath, maximum_distance, recompute, fix_umbilicus, start_block, num_threads, gpus):
     # Initialize CUDA context
     # _ = torch.tensor([0.0]).cuda()
-    multiprocessing.set_start_method('spawn')
+    try:
+        multiprocessing.set_start_method('spawn')
+    except Exception as e:
+        print(f"Error setting multiprocessing start method: {e}")
 
     CFG['num_threads'] = num_threads
     CFG['GPUs'] = gpus

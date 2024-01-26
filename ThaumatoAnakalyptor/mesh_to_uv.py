@@ -5,7 +5,7 @@ import open3d as o3d
 import numpy as np
 from collections import deque
 from math import atan2, pi, sqrt
-from sheet_to_mesh import load_xyz_from_file, scale_points, shuffling_points_axis, umbilicus_xy_at_z
+from .sheet_to_mesh import load_xyz_from_file, scale_points, shuffling_points_axis, umbilicus_xy_at_z
 from scipy.interpolate import interp1d
 from copy import deepcopy
 import struct

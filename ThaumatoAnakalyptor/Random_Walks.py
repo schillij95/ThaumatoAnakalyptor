@@ -14,8 +14,8 @@ import time
 import argparse
 import yaml
 
-from instances_to_sheets import select_points, get_vector_mean, alpha_angles, adjust_angles_zero, adjust_angles_offset, add_overlapp_entries_to_patches_list, assign_points_to_tiles, compute_overlap_for_pair, overlapp_score, fit_sheet, winding_switch_sheet_score_raw_precomputed_surface, find_starting_patch, save_main_sheet, update_main_sheet
-from sheet_to_mesh import load_xyz_from_file, scale_points, umbilicus_xz_at_y
+from .instances_to_sheets import select_points, get_vector_mean, alpha_angles, adjust_angles_zero, adjust_angles_offset, add_overlapp_entries_to_patches_list, assign_points_to_tiles, compute_overlap_for_pair, overlapp_score, fit_sheet, winding_switch_sheet_score_raw_precomputed_surface, find_starting_patch, save_main_sheet, update_main_sheet
+from .sheet_to_mesh import load_xyz_from_file, scale_points, umbilicus_xz_at_y
 import sys
 ### C++ speed up. not yet fully implemented
 # sys.path.append('sheet_generation/build')

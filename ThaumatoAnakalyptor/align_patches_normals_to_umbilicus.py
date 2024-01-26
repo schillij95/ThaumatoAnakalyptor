@@ -1,9 +1,9 @@
 ### Julian Schilliger - ThaumatoAnakalyptor - Vesuvius Challenge 2023
 
 import numpy as np
-from pointcloud_to_instances import save_block_ply
-from instances_to_sheets import load_ply
-from sheet_to_mesh import load_xyz_from_file, umbilicus, umbilicus_xz_at_y, scale_points
+from .pointcloud_to_instances import save_block_ply
+from .instances_to_sheets import load_ply
+from .sheet_to_mesh import load_xyz_from_file, umbilicus, umbilicus_xz_at_y, scale_points
 
 from multiprocessing import Pool, cpu_count
 import os

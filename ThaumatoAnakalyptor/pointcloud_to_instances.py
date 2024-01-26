@@ -18,13 +18,13 @@ from multiprocessing import Pool
 # plotting
 from tqdm import tqdm
 
-from mask3d.inference import batch_inference, to_surfaces
+from .mask3d.inference import batch_inference, to_surfaces
 
 import json
 import argparse
 
-from surface_fitting_utilities import get_vector_mean, rotation_matrix_to_align_z_with_v, optimize_sheet
-from grid_to_pointcloud import load_xyz_from_file, umbilicus, umbilicus_xz_at_y, fix_umbilicus_recompute
+from .surface_fitting_utilities import get_vector_mean, rotation_matrix_to_align_z_with_v, optimize_sheet
+from .grid_to_pointcloud import load_xyz_from_file, umbilicus, umbilicus_xz_at_y, fix_umbilicus_recompute
 
 def load_ply(filename, main_drive="", alternative_drives=[]):
     """

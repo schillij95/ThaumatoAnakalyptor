@@ -1,6 +1,6 @@
 ### Julian Schilliger - ThaumatoAnakalyptor - Vesuvius Challenge 2023
 
-from instances_to_sheets import display_main_sheet, load_main_sheet
+from .instances_to_sheets import display_main_sheet, load_main_sheet
 import numpy as np
 
 if __name__ == '__main__':

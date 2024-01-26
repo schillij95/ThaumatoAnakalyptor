@@ -1,8 +1,8 @@
 ### Julian Schilliger - ThaumatoAnakalyptor - Vesuvius Challenge 2023
 
-from rendering_utils.interpolate_image_3d import extract_from_image_3d, insert_into_image_3d
-from rendering_utils.ppmparser import PPMParser
-from grid_to_pointcloud import load_grid
+from .rendering_utils.interpolate_image_3d import extract_from_image_3d, insert_into_image_3d
+from .rendering_utils.ppmparser import PPMParser
+from .grid_to_pointcloud import load_grid
 import argparse
 from tqdm import tqdm
 import struct
