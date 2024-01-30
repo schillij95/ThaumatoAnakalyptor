@@ -516,6 +516,9 @@ def main():
 
     args = parser.parse_args()
 
+    # Print arguments
+    print(f"Arguments: {args}")
+
     # update variables from arguments
     disk_load_save = args.disk_load_save
     base_path = args.base_path

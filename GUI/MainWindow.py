@@ -18,6 +18,7 @@ import time
 import json
 import multiprocessing
 # multiprocessing.set_start_method('spawn')
+import subprocess
 
 import signal
 
@@ -137,6 +138,7 @@ class ThaumatoAnakalyptor(QMainWindow):
 
         # Instances Area
         instancesBox = CollapsibleBox("Instances")
+        self.addInstancesArea(instancesBox)
         volumeBox.add_widget(instancesBox)
 
 
@@ -213,6 +215,7 @@ class ThaumatoAnakalyptor(QMainWindow):
         self.recomputeCheckbox = QCheckBox("Recompute")
         self.computePointcloudButton = QPushButton("Compute")
         self.stopPointcloudButton = QPushButton("Stop")
+        self.stopPointcloudButton.setEnabled(False)
 
         self.computePointcloudButton.clicked.connect(self.computePointcloud)
         self.stopPointcloudButton.clicked.connect(self.stopPointcloud)
@@ -222,49 +225,62 @@ class ThaumatoAnakalyptor(QMainWindow):
         box.add_widget(self.computePointcloudButton)
         box.add_widget(self.stopPointcloudButton)
 
-    def pointcloudComputation(self, config, recompute):
+    def computePointcloud(self):
         try:
-            # disk_load_save=["", ""], 
-            # base_path="",
-            # volume_subpath=config["downsampled_3d_grids"],
-            # pointcloud_subpath=config["pointcloud_subpath"],
-            # maximum_distance=-1,
-            # recompute=recompute,
-            # fix_umbilicus=False,
-            # start_block=(500, 500, 500),
-            # num_threads=config["num_threads"],
-            # gpus=config["gpus"]
-            args = {
-                "disk_load_save": ["", ""],
-                "base_path": "",
-                "volume_subpath": config["downsampled_3d_grids"],
-                "pointcloud_subpath": config["pointcloud_subpath"],
-                "maximum_distance": -1,
-                "recompute": recompute,
-                "fix_umbilicus": False,
-                "start_block": (500, 500, 500),
-                "num_threads": config["num_threads"],
-                "gpus": config["gpus"]
-            }
-
-            print("Computing grid cells...")
-            compute_pointcloud(**args)
+            command = ["python3", "-m" "ThaumatoAnakalyptor.grid_to_pointcloud", "--base_path", "", "--volume_subpath", self.Config["downsampled_3d_grids"], "--disk_load_save", "", "", "--pointcloud_subpath", os.path.join(self.Config["pointcloud_subpath"], "point_cloud"), "--num_threads", str(self.Config["num_threads"]), "--gpus", str(self.Config["gpus"])]
+            if self.recomputeCheckbox.isChecked():
+                command += ["--recompute"]
+            self.process = subprocess.Popen(command)
+            self.computePointcloudButton.setEnabled(False)
+            self.stopPointcloudButton.setEnabled(True)
 
             # Clean up computation after completion
             self.postComputation()
         except Exception as e:
-            print(f"Error in computation: {e}")
-
-    def computePointcloud(self):
-        self.process = multiprocessing.Process(target=self.pointcloudComputation, args=(self.Config, self.recomputeCheckbox.isChecked(),))
-        self.process.start()
-        self.computePointcloudButton.setEnabled(False)
-        self.stopPointcloudButton.setEnabled(True)
+            QMessageBox.critical(self, "Error", f"Failed to start the script: {e}")
+            self.computeGridCellsButton.setEnabled(True)
+            self.stopPointcloudButton.setEnabled(False)
 
     def stopPointcloud(self):
-        if self.process and self.process.is_alive():
-            os.kill(self.process.pid, signal.SIGTERM)
-            self.process.join()
+        if self.process and self.process.poll() is None:  # Check if process is running
+            self.process.terminate()  # or self.process.kill() for a more forceful termination
+            self.process = None
         self.computePointcloudButton.setEnabled(True)
         self.stopPointcloudButton.setEnabled(False)
         print("Computation process stopped.")
+
+    def addInstancesArea(self, box):
+        label = QLabel("Instances")
+        self.computeInstancesButton = QPushButton("Compute")
+        self.stopInstancesButton = QPushButton("Stop")
+        self.stopInstancesButton.setEnabled(False)
+
+        self.computeInstancesButton.clicked.connect(self.computeInstances)
+        self.stopInstancesButton.clicked.connect(self.stopInstances)
+
+        box.add_widget(label)
+        box.add_widget(self.computeInstancesButton)
+        box.add_widget(self.stopInstancesButton)
+
+    def computeInstances(self):
+        try:
+            command = ["python3", "-m" "ThaumatoAnakalyptor.pointcloud_to_instances", "--path", self.Config["pointcloud_subpath"], "--dest", self.Config["pointcloud_subpath"], "--umbilicus_path", self.Config["umbilicus_path"], "--main_drive", "", "--alternative_ply_drives", "", "", "--max_umbilicus_dist", "-1"]
+            self.process = subprocess.Popen(command)
+            self.computeInstancesButton.setEnabled(False)
+            self.stopInstancesButton.setEnabled(True)
+
+            # Clean up computation after completion
+            self.postComputation()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to start the script: {e}")
+            self.computeInstancesButton.setEnabled(True)
+            self.stopInstancesButton.setEnabled(False)
+
+    def stopInstances(self):
+        if self.process and self.process.poll() is None:
+            self.process.terminate()
+            self.process = None
+        self.computeInstancesButton.setEnabled(True)
+        self.stopInstancesButton.setEnabled(False)
+        print("Computation process stopped.")
+

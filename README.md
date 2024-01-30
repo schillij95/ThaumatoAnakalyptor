@@ -66,38 +66,38 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
 
     The Grid Cells used for segmentation have to be in 8um resolution. ```generate_half_sized_grid.py``` is used for 4um resolution scans to generate Grid Cells in 8um resolution. If you have acces to multiple GPU's, adjust the ```--num_threads``` and ```--gpus``` flags to speed up the process.
     ```bash
-    python3 generate_half_sized_grid.py --input_directory <scroll-path>/PHerc0332.volpkg/volumes/20231027191953 --output_directory <scroll-path>/PHerc0332.volpkg/volumes/2dtifs_8um
+    python3 -m ThaumatoAnakalyptor.generate_half_sized_grid.py --input_directory <scroll-path>/PHerc0332.volpkg/volumes/20231027191953 --output_directory <scroll-path>/PHerc0332.volpkg/volumes/2dtifs_8um
     ```
     ```bash
-    python3 grid_to_pointcloud.py --base_path "" --volume_subpath "<scroll-path>/PHerc0332.volpkg/volumes/2dtifs_8um_grids" --disk_load_save "" "" --pointcloud_subpath "<scroll-path>/scroll3_surface_points/point_cloud" --num_threads 4 --gpus 1
+    python3 -m ThaumatoAnakalyptor.grid_to_pointcloud.py --base_path "" --volume_subpath "<scroll-path>/PHerc0332.volpkg/volumes/2dtifs_8um_grids" --disk_load_save "" "" --pointcloud_subpath "<scroll-path>/scroll3_surface_points/point_cloud" --num_threads 4 --gpus 1
     ```
     ```bash
-    python3 pointcloud_to_instances.py --path "<scroll-path>/scroll3_surface_points" --dest "<scroll-path>/scroll3_surface_points" --umbilicus_path "<scroll-path>/PHerc0332.volpkg/volumes/umbilicus.txt" --main_drive "" --alternative_ply_drives "" --max_umbilicus_dist -1
+    python3 -m ThaumatoAnakalyptor.pointcloud_to_instances.py --path "<scroll-path>/scroll3_surface_points" --dest "<scroll-path>/scroll3_surface_points" --umbilicus_path "<scroll-path>/PHerc0332.volpkg/volumes/umbilicus.txt" --main_drive "" --alternative_ply_drives "" --max_umbilicus_dist -1
     ```
 
 - **Segmentation Steps:** Additional details for each segmentation step are provided in the [instructions](ThaumatoAnakalyptor/instructions.txt) document.
     First, pick a ```--starting_point```.
     The first time the script ```Random_Walks.py```  is run on a new scroll, flag ```--recompute``` should be set to 1. This will generate the overlapping graph of the scroll. For subsequent runs, flag ```--recompute``` should be set to 0 to speed up the process. Flag ```--continue_segmentation``` can be set to 1 if there already is a previous segmentation with the same starting point that you would like to continue.
     ```bash
-    python3 Random_Walks.py --path "<scroll-path>/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks" --starting_point 3113 5163 10920 --sheet_k_range -3 3 --sheet_z_range -10000 40000 --min_steps 16 --min_end_steps 4 --max_nr_walks 300000 --continue_segmentation 0 --recompute 1 --walk_aggregation_threshold 5
+    python3 -m ThaumatoAnakalyptor.Random_Walks.py --path "<scroll-path>/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks" --starting_point 3113 5163 10920 --sheet_k_range -3 3 --sheet_z_range -10000 40000 --min_steps 16 --min_end_steps 4 --max_nr_walks 300000 --continue_segmentation 0 --recompute 1 --walk_aggregation_threshold 5
     ```
 
     For subsequent continuations of a segmentation, for example:
     ```bash
-    python3 Random_Walks.py --path "<scroll-path>/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks" --starting_point 3113 5163 10920 --sheet_k_range -3 3 --sheet_z_range -10000 40000 --min_steps 16 --min_end_steps 4 --max_nr_walks 300000 --continue_segmentation 1 --recompute 0 --walk_aggregation_threshold 5
+    python3 -m ThaumatoAnakalyptor.Random_Walks.py --path "<scroll-path>/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks" --starting_point 3113 5163 10920 --sheet_k_range -3 3 --sheet_z_range -10000 40000 --min_steps 16 --min_end_steps 4 --max_nr_walks 300000 --continue_segmentation 1 --recompute 0 --walk_aggregation_threshold 5
     ```
 
 - **Meshing Steps:** 
     When you are happy with the segmentation, the next step is to generate the mesh. This can be done with the following commands:
     ```bash
-    python3 sheet_to_mesh.py --path_base <scroll-path>/scroll3_surface_points/3113_5163_10920/ --path_ta point_cloud_colorized_verso_subvolume_main_sheet_RW.ta --umbilicus_path "<scroll-path>/PHerc0332.volpkg/volumes/umbilicus.txt"
+    python3 -m ThaumatoAnakalyptor.sheet_to_mesh.py --path_base <scroll-path>/scroll3_surface_points/3113_5163_10920/ --path_ta point_cloud_colorized_verso_subvolume_main_sheet_RW.ta --umbilicus_path "<scroll-path>/PHerc0332.volpkg/volumes/umbilicus.txt"
     ```
     ```bash
-    python3 mesh_to_uv.py --path <scroll-path>/scroll3_surface_points/3113_5163_10920/point_cloud_colorized_verso_subvolume_blocks.obj --umbilicus_path "<scroll-path>/PHerc0332.volpkg/volumes/umbilicus.txt"
+    python3 -m ThaumatoAnakalyptor.mesh_to_uv.py --path <scroll-path>/scroll3_surface_points/3113_5163_10920/point_cloud_colorized_verso_subvolume_blocks.obj --umbilicus_path "<scroll-path>/PHerc0332.volpkg/volumes/umbilicus.txt"
     ```
     The ```scale_factor``` depends on the resolution of the scroll scan. For 8um resolution, the scale factor is 1.0. For 4um resolution, the scale factor is 2.0.
     ```bash
-    python3 finalize_mesh.py --input_mesh <scroll-path>/scroll3_surface_points/3113_5163_10920/point_cloud_colorized_verso_subvolume_blocks_uv.obj --cut_size 40000 --scale_factor 2.0 
+    python3 -m ThaumatoAnakalyptor.finalize_mesh.py --input_mesh <scroll-path>/scroll3_surface_points/3113_5163_10920/point_cloud_colorized_verso_subvolume_blocks_uv.obj --cut_size 40000 --scale_factor 2.0 
     ```
 
 - **Texturing Steps:** 
@@ -116,6 +116,10 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
     ```
     ```bash
     vc_layers_from_ppm -v ../ -p thaumato.ppm --output-dir layers/ -f tif -r 32 --cache-memory-limit 150G
+    ```
+    Alternatively, rendering from ppm can be done with GPU acceleration:
+    ```bash
+    python3 -m ThaumatoAnakalyptor.ppm_to_layers <path_to_ppm> <path_to_volume_grids>
     ```
 
 - **Resource Requirements:** RTX4090 or equivalent CUDA-enabled GPU with at least 24GB VRAM, 196GB RAM + 250GB swap and a multithreaded CPU with >32 threads is required. NVME SSD is recommended for faster processing. Approximately twice the storage space of the initial scroll scan is required for the intermediate data.
