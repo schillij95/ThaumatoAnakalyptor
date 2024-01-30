@@ -77,11 +77,16 @@ class UmbilicusWindow(QMainWindow):
         # Set focus to the QGraphicsView
         self.view.setFocus()
 
+        # Load the first image
+        self.loadImage(self.currentIndex)
+
     def showHelp(self):
         helpText = "ThaumatoAnakalyptor Help\n\n" \
+                   "Place the umbilicus points in the center of the scroll and when done press 'Save'.\n" \
                    "There are the following shortcuts:\n\n" \
                    "- Use 'A' and 'D' to switch between TIFF layers.\n" \
-                   "- Click on the TIFF to place a point.\n" 
+                   "- Click on the TIFF to place a point.\n" \
+                   "- Use Ctrl + Click to automatically switch to the next TIFF.\n"
         QMessageBox.information(self, "Help", helpText)
 
     def loadImage(self, index):
@@ -151,11 +156,12 @@ class UmbilicusWindow(QMainWindow):
             originalY = int((scenePos.y() / imgRect.height()) * self.image_height)
             self.points[self.currentIndex] = (originalX, originalY)
 
-            # Go to next image
-            if self.incrementing:
-                self.incrementIndex()
-            else:
-                self.decrementIndex()
+            if event.modifiers() == Qt.ControlModifier:
+                # Go to next image
+                if self.incrementing:
+                    self.incrementIndex()
+                else:
+                    self.decrementIndex()
             self.loadImage(self.currentIndex)
 
     def loadPoints(self):
@@ -175,6 +181,12 @@ class UmbilicusWindow(QMainWindow):
         umbilicus_name = "umbilicus.txt"
         try:
             umbilicus_path = os.path.join(self.imagePath, umbilicus_name)
+            print(umbilicus_path)
+            with open(umbilicus_path, "w") as file:
+                for index, (x, y) in self.points.items():
+                    file.write(f"{y + 500}, {index + 500}, {x + 500}\n")
+
+            umbilicus_path = os.path.join(self.imagePath + "_grids", umbilicus_name)
             print(umbilicus_path)
             with open(umbilicus_path, "w") as file:
                 for index, (x, y) in self.points.items():

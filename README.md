@@ -57,9 +57,18 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
     ```bash
     docker build -t thaumato_image -f DockerfileThaumato .
     ```
-    The following command might need adjustments based on how you would like to access your scroll data:
+    The following commands might need adjustments based on how you would like to access your scroll data:
     ```bash
-    docker run --gpus all -it --rm -v $(pwd)/ThaumatoAnakalyptor/:/workspace/ThaumatoAnakalyptor thaumato_image
+    xhost +local:docker
+
+    ```
+    ```bash
+    docker run --gpus all -it --rm \
+    -v <path_to_scroll>:/workspace/scroll \
+    -v $(pwd)/:/workspace \
+    -e DISPLAY=$DISPLAY \
+    -v /tmp/.X11-unix:/tmp/.X11-unix \
+    thaumato_image
     ```
 - **Precomputation Steps:**
     The precomputation step is expected to take a few days.
