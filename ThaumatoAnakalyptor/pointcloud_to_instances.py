@@ -442,8 +442,6 @@ def subvolume_surface_instance_batch(points, normals, colors, start, size, path,
     # Detect the surfaces in the subvolume
     surfaces, surfaces_normals, surfaces_colors, block_names, scores = detect_subvolume_surfaces(subvolumes_points, subvolumes_normals, subvolumes_colors, block_names)
 
-    print(f"Number of surfaces: {len(surfaces)}")
-
     # save each instance for each subvolume
     # Setting up multiprocessing
     with Pool(32) as pool:
@@ -455,8 +453,6 @@ def subvolume_computation_function(args):
     src_path = os.path.join(path, folder)
     dest_path = os.path.join(dest, folder)
     size = np.array(size) + 1 # +1 because we want to include the last subvolume for tiling operation from later calls starting at the last subvolume
-
-    print(f"Computing subvolume {start} with size {size}")
     
     res = load_plys(src_path, main_drive, alternative_drives, start, size, grid_block_size=200)
     if res is None:
@@ -525,10 +521,9 @@ def subvolume_instances_multithreaded(path="/media/julian/FastSSD/scroll3_surfac
         umbilicus_points_old = None
 
     num_tasks = len(start_list)
-    print(f"Number of tasks: {num_tasks}")
+
     # Single threaded computation
     for i in tqdm(range(num_tasks)):
-        print(f"Computing subvolume {i+1}/{num_tasks}")
         results = subvolume_computation_function((start_list[i], size, path, folder, dest, main_drive, alternative_drives, fix_umbilicus, umbilicus_points, umbilicus_points_old, score_threshold))
 
 def compute(path, folder, dest, main_drive, alternative_ply_drives, umbilicus_points_path, umbilicus_distance_threshold, fix_umbilicus, score_threshold):

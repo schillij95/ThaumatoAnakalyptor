@@ -6,8 +6,6 @@ os.environ["WANDB_MODE"] = "dryrun" # turn off annoying bugging wandb logging
 import sys
 # add current path to sys.path
 sys.path.append(os.path.dirname(os.path.realpath(__file__)))
-# add parent path to sys.path
-# sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 
 from hashlib import md5
 from uuid import uuid4

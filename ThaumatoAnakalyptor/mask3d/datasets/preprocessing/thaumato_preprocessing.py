@@ -46,11 +46,14 @@ class STPLS3DPreprocessing(BasePreprocessing):
 
         for mode in self.modes:
             filepaths = []
-            for scene_path in [
-                f.path for f in os.scandir(self.data_dir / mode)
-            ]:
-                filepaths.append(scene_path)
-            self.files[mode] = natsorted(filepaths)
+            try:
+                for scene_path in [
+                    f.path for f in os.scandir(self.data_dir / mode)
+                ]:
+                    filepaths.append(scene_path)
+                self.files[mode] = natsorted(filepaths)
+            except:
+                pass
 
     def create_label_database(self):
         label_database = dict()
