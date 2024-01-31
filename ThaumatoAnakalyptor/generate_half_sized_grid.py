@@ -162,7 +162,6 @@ def process_block(args):
     block_filename = f"cell_yxz_{by+1:03}_{bx+1:03}_{bz+1:03}.tif"
     block_path = os.path.join(block_directory, block_filename)
 
-    print(f"Processing block {block_path}")
     if os.path.exists(block_path) and os.path.getsize(block_path) == standard_size:
         print(f"'{block_filename}' already exists in the output directory. Skipping.")
         return  # Skip if file exists and size matches
