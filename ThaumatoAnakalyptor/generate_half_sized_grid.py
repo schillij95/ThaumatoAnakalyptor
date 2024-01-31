@@ -79,16 +79,20 @@ def downsample_image(args):
     return f"Downsampled and saved '{filename}'."
 
 def downsample_folder_tifs(input_directory, output_directory, downsample_factor=2):
+    if downsample_factor == 1:
+        print("Downsample factor is 1, skipping.")
+        return
+    
     if not os.path.exists(output_directory):
         os.makedirs(output_directory)
 
-    files = [f for f in os.listdir(input_directory) if f.endswith('.tif') and int(f.split('.')[0]) % 2 == 0]
+    files = [f for f in os.listdir(input_directory) if f.endswith('.tif') and int(f.split('.')[0]) % downsample_factor == 0]
     print(f"Found {len(files)} even tif files to downsample.")
 
-    # Check that all even tif from min to max are present
+    # Check that all downsample_factor-th tif from min to max are present
     min_file = min([int(f.split('.')[0]) for f in files])
     max_file = max([int(f.split('.')[0]) for f in files])
-    for i in range(min_file, max_file + 1, 2):  # Adjusted the range to step by 2 for efficiency
+    for i in range(min_file, max_file + 1, downsample_factor):  # Adjusted the range to step by downsample_factor for efficiency
         if f"{i:04}.tif" not in files:
             raise Exception(f"Missing {i:04}.tif")
 
