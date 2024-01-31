@@ -47,22 +47,24 @@ def main(transform_path, mesh_path, image_path, mtl_path, mesh_save_path, image_
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Transform mesh .obj with VC volume-volume transformation .json')
     parser.add_argument("--transform_path", type=str, default="path_to_your_json_file.json")
+    parser.add_argument("--targed_volume_id", type=str, default="Volume ID of the target volume")
     parser.add_argument("--base_path", type=str, default="path_to_your_obj_file.obj")
 
     args = parser.parse_args()
     transform_path = args.transform_path
+    target_volume_id = args.targed_volume_id
     base_path = args.base_path
 
     # Replace these paths with your actual file paths
 
-    transform_path = f"{transform_path}/*.json"
+    transform_path = f"{transform_path}/*-to-{target_volume_id}.json"
     # Find the first json file in the directory
     transform_path = glob.glob(transform_path)[0]
     mesh_path = f"{base_path}/point_cloud_colorized_verso_subvolume_blocks_uv.obj"
     image_path = f"{base_path}/point_cloud_colorized_verso_subvolume_blocks_uv_0.png"
     mtl_path = f"{base_path}/point_cloud_colorized_verso_subvolume_blocks_uv.mtl"
 
-    base_path_save = base_path + "_8um"
+    base_path_save = base_path + f"_{target_volume_id}"
     mesh_save_path = f"{base_path_save}/point_cloud_colorized_verso_subvolume_blocks_uv.obj"
     image_save_path = f"{base_path_save}/point_cloud_colorized_verso_subvolume_blocks_uv_0.png"
     mtl_save_path = f"{base_path_save}/point_cloud_colorized_verso_subvolume_blocks_uv.mtl"

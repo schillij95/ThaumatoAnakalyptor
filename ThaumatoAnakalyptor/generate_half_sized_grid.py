@@ -256,10 +256,14 @@ def main():
     parser = argparse.ArgumentParser(description="Downsample a folder of tif files and generate grid blocks. This file might contain bugs, please test if it works propperly (the blocks should have the same naming and orientation as the spelufo gridblocks).")
     parser.add_argument("--input_directory", type=str, help="Path to the input directory containing the tif files", default=input_directory)
     parser.add_argument("--output_directory", type=str, help="Path to the output directory", default=output_directory)
-    parser.add_argument("--downsample_factor", type=int, help="Downsample factor", default=downsample_factor)
+    parser.add_argument("--downsample_factor", type=int, help="Downsample factor (int)", default=downsample_factor)
 
     # Take arguments back over
     args = parser.parse_args()
+
+    # Print the arguments
+    print(f"Arguments for generating downsampled grid cells: \n{args}")
+
     input_directory = args.input_directory
     output_directory = args.output_directory
     downsample_factor = args.downsample_factor

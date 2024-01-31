@@ -495,7 +495,7 @@ def main():
     maximum_distance= -1 #1750 # maximum distance between blocks to compute and the umbilicus (speed up pointcloud generation if only interested in inner part of scrolls)
     recompute=False # whether to completely recompute all already processed blocks or continue (recompute=False). 
     fix_umbilicus = False
-    disk_load_save = ["SSD4TB", "SSD2"] # Disk that contains input data, and dist that should be used to save output data
+    disk_load_save = ["SSD4TB", "SSD2"] # Disk that contains input data, and disk that should be used to save output data
     base_path = "/media/julian/SSD4TB"
     volume_subpath = "PHerc0332.volpkg/volumes/2dtifs_8um_grids"
     pointcloud_subpath = "scroll3_surface_points/point_cloud"

@@ -228,7 +228,16 @@ class ThaumatoAnakalyptor(QMainWindow):
 
     def computePointcloud(self):
         try:
-            command = ["python3", "-m" "ThaumatoAnakalyptor.grid_to_pointcloud", "--base_path", "", "--volume_subpath", self.Config["downsampled_3d_grids"], "--disk_load_save", "", "", "--pointcloud_subpath", os.path.join(self.Config["pointcloud_subpath"], "point_cloud"), "--num_threads", str(self.Config["num_threads"]), "--gpus", str(self.Config["gpus"])]
+            command = [
+                "python3", "-m", "ThaumatoAnakalyptor.grid_to_pointcloud", 
+                "--base_path", "", 
+                "--volume_subpath", self.Config["downsampled_3d_grids"], 
+                "--disk_load_save", "", "", 
+                "--pointcloud_subpath", os.path.join(self.Config["surface_points_path"], "point_cloud"), 
+                "--num_threads", str(self.Config["num_threads"]), 
+                "--gpus", str(self.Config["gpus"])
+            ]
+            
             if self.recomputeCheckbox.isChecked():
                 command += ["--recompute"]
             self.process = subprocess.Popen(command)
@@ -265,7 +274,15 @@ class ThaumatoAnakalyptor(QMainWindow):
 
     def computeInstances(self):
         try:
-            command = ["python3", "-m" "ThaumatoAnakalyptor.pointcloud_to_instances", "--path", self.Config["pointcloud_subpath"], "--dest", self.Config["pointcloud_subpath"], "--umbilicus_path", self.Config["umbilicus_path"], "--main_drive", "", "--alternative_ply_drives", "", "", "--max_umbilicus_dist", "-1"]
+            command = [
+                "python3", "-m", "ThaumatoAnakalyptor.pointcloud_to_instances", 
+                "--path", self.Config["surface_points_path"], 
+                "--dest", self.Config["surface_points_path"], 
+                "--umbilicus_path", self.Config["umbilicus_path"], 
+                "--main_drive", "", "--alternative_ply_drives", "", "", 
+                "--max_umbilicus_dist", "-1"
+            ]
+
             self.process = subprocess.Popen(command)
             self.computeInstancesButton.setEnabled(False)
             self.stopInstancesButton.setEnabled(True)
@@ -371,7 +388,7 @@ class ThaumatoAnakalyptor(QMainWindow):
     def computeStitchSheet(self):
         try:
             # Fetching values from GUI fields
-            path = os.path.join(self.Config["pointcloud_subpath"], "point_cloud_colorized_verso_subvolume_blocks")
+            path = os.path.join(self.Config["surface_points_path"], "point_cloud_colorized_verso_subvolume_blocks")
             starting_point = f"{self.starting_point[0]} {self.starting_point[1]} {self.starting_point[2]}"
             sheet_k_range = f"{self.sheetKRangeStartField.text()} {self.sheetKRangeEndField.text()}"
             sheet_z_range = f"{self.sheetZRangeStartField.text()} {self.sheetZRangeEndField.text()}"
@@ -434,7 +451,16 @@ class ThaumatoAnakalyptor(QMainWindow):
 
     def computeMeshing(self):
         try:
-            command = ["python3", "-m" "ThaumatoAnakalyptor.meshing", "--path", self.Config["pointcloud_subpath"], "--dest", self.Config["pointcloud_subpath"], "--umbilicus_path", self.Config["umbilicus_path"], "--main_drive", "", "--alternative_ply_drives", "", "", "--max_umbilicus_dist", "-1"]
+            path_base = os.path.join(self.Config["surface_points_path"], f"{self.starting_point[0]}_{self.starting_point[1]}_{self.starting_point[2]}/")
+            print(f"path_base: {path_base}")
+
+            command = [
+                "python3", "-m", "ThaumatoAnakalyptor.sheet_to_mesh",
+                "--path_base", path_base, 
+                "--path_ta", "point_cloud_colorized_verso_subvolume_main_sheet_RW.ta", 
+                "--umbilicus_path", self.Config["umbilicus_path"]
+            ]
+            
             self.process = subprocess.Popen(command)
             self.computeMeshingButton.setEnabled(False)
             self.stopMeshingButton.setEnabled(True)
@@ -469,7 +495,14 @@ class ThaumatoAnakalyptor(QMainWindow):
 
     def computeFlattening(self):
         try:
-            command = ["python3", "-m" "ThaumatoAnakalyptor.flattening", "--path", self.Config["pointcloud_subpath"], "--dest", self.Config["pointcloud_subpath"], "--umbilicus_path", self.Config["umbilicus_path"], "--main_drive", "", "--alternative_ply_drives", "", "", "--max_umbilicus_dist", "-1"]
+            path = os.path.join(self.Config["surface_points_path"], f"{self.starting_point[0]}_{self.starting_point[1]}_{self.starting_point[2]}", "point_cloud_colorized_verso_subvolume_blocks.obj")
+
+            command = [
+                "python3", "-m", "ThaumatoAnakalyptor.mesh_to_uv", 
+                "--path", path, 
+                "--umbilicus_path", self.Config["umbilicus_path"]
+            ]
+
             self.process = subprocess.Popen(command)
             self.computeFlatteningButton.setEnabled(False)
             self.stopFlatteningButton.setEnabled(True)
@@ -504,7 +537,14 @@ class ThaumatoAnakalyptor(QMainWindow):
 
     def computeFinalize(self):
         try:
-            command = ["python3", "-m" "ThaumatoAnakalyptor.finalize", "--path", self.Config["pointcloud_subpath"], "--dest", self.Config["pointcloud_subpath"], "--umbilicus_path", self.Config["umbilicus_path"], "--main_drive", "", "--alternative_ply_drives", "", "", "--max_umbilicus_dist", "-1"]
+            input_mesh = os.path.join(self.Config["surface_points_path"], f"{self.starting_point[0]}_{self.starting_point[1]}_{self.starting_point[2]}", "point_cloud_colorized_verso_subvolume_blocks_uv.obj")
+            command = [
+                "python3", "-m", "ThaumatoAnakalyptor.finalize_mesh", 
+                "--input_mesh", input_mesh, 
+                "--cut_size", "40000", 
+                "--scale_factor", f"{self.Config['downsample_factor']:f}"
+            ]
+
             self.process = subprocess.Popen(command)
             self.computeFinalizeButton.setEnabled(False)
             self.stopFinalizeButton.setEnabled(True)
@@ -526,6 +566,8 @@ class ThaumatoAnakalyptor(QMainWindow):
 
     def addSwapVolumeArea(self, box):
         label = QLabel("Swap Volume")
+        self.targetVolumeIdField = QLineEdit()
+        self.targetVolumeIdField.setPlaceholderText("Target Volume ID")
         self.computeSwapVolumeButton = QPushButton("Compute")
         self.stopSwapVolumeButton = QPushButton("Stop")
         self.stopSwapVolumeButton.setEnabled(False)
@@ -534,12 +576,21 @@ class ThaumatoAnakalyptor(QMainWindow):
         self.stopSwapVolumeButton.clicked.connect(self.stopSwapVolume)
 
         box.add_widget(label)
+        box.add_widget(self.targetVolumeIdField)
         box.add_widget(self.computeSwapVolumeButton)
         box.add_widget(self.stopSwapVolumeButton)
 
     def computeSwapVolume(self):
         try:
-            command = ["python3", "-m" "ThaumatoAnakalyptor.swap_volume", "--path", self.Config["pointcloud_subpath"], "--dest", self.Config["pointcloud_subpath"], "--umbilicus_path", self.Config["umbilicus_path"], "--main_drive", "", "--alternative_ply_drives", "", "", "--max_umbilicus_dist", "-1"]
+            target_volume_id = self.targetVolumeIdField.text()
+
+            command = [
+                "python3", "-m", "ThaumatoAnakalyptor.mesh_transform", 
+                "--transform_path", self.Config["surface_points_path"], 
+                "--targed_volume_id", target_volume_id,
+                "--base_path", self.Config["surface_points_path"]
+            ]
+
             self.process = subprocess.Popen(command)
             self.computeSwapVolumeButton.setEnabled(False)
             self.stopSwapVolumeButton.setEnabled(True)

@@ -15,11 +15,11 @@ class ConfigWindow(QDialog):
         self.layout = QVBoxLayout(self)
 
         # Adding specific configuration fields
-        self.original_2d_tiffs_field = self.addPathConfigField("Original 2D TIFFs", "Enter the path to the folder containing original 2D TIFF files", self.parent.Config.get('original_2d_tiffs', ''))
-        self.downsample_factor = self.addIntegerField("Downsample Factor", "Enter the downsample factor (natural number)", str(self.parent.Config.get('downsample_factor', '')))
+        self.original_2d_tiffs_field = self.addPathConfigField("Canonical 2D TIFFs", "Enter the path to the folder containing Canonical original 2D TIFF files for the volume", self.parent.Config.get('original_2d_tiffs', ''))
+        self.downsample_factor = self.addIntegerField("Downsample Factor", "Enter the downsample factor (natural number) to achieve close to 8um resolution", str(self.parent.Config.get('downsample_factor', '')))
         self.downsampled_2d_tiffs_field = self.addPathConfigField("Downsampled 2D TIFFs", "Enter the path to the folder containing downsampled 2D TIFF files", self.parent.Config.get('downsampled_2d_tiffs', ''))
         self.downsampled_3d_grids_field = self.addPathConfigField("Downsampled 3D Grid Cells", "Enter the path to the folder containing downsampled 3D Grid Cells", self.parent.Config.get('downsampled_3d_grids', ''))
-        self.pointcloud_subpath_field = self.addPathConfigField("Pointcloud Subpath", "Enter the pointcloud subpath", self.parent.Config.get('pointcloud_subpath', ''))
+        self.surface_points_path_field = self.addPathConfigField("Surface Points Path", "Enter the surface points path", self.parent.Config.get('surface_points_path', ''))
         self.addIntegerField("Num Threads", "Enter the number of threads for processing", str(self.parent.Config.get('num_threads', '4')))
         self.addIntegerField("GPUs", "Enter the number of GPUs to use", str(self.parent.Config.get('gpus', '1')))
 
@@ -164,7 +164,7 @@ class ConfigWindow(QDialog):
             "downsample_factor": int(self.downsample_factor_field.text()) if self.downsample_factor_field.text() and self.downsample_factor_field.text() != 'None' else None,
             "downsampled_2d_tiffs": self.downsampled_2d_tiffs_field.text(),
             "downsampled_3d_grids": self.downsampled_3d_grids_field.text(),
-            "pointcloud_subpath": self.pointcloud_subpath_field.text(),
+            "surface_points_path": self.surface_points_path_field.text(),
             "num_threads": int(self.num_threads_field.text()) if self.num_threads_field.text() and self.num_threads_field.text() != 'None' else None,
             "gpus": int(self.gpus_field.text()) if self.gpus_field.text() and self.gpus_field.text() != 'None' else None,
         }

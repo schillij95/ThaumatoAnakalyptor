@@ -6,6 +6,9 @@ os.environ["WANDB_MODE"] = "dryrun" # turn off annoying bugging wandb logging
 import sys
 # add current path to sys.path
 sys.path.append(os.path.dirname(os.path.realpath(__file__)))
+# add parent path to sys.path
+# sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+
 from hashlib import md5
 from uuid import uuid4
 import hydra
@@ -55,7 +58,7 @@ def get_parameters(cfg: DictConfig):
     else:
         cfg["trainer"][
             "resume_from_checkpoint"
-        ] = f"mask3d/{cfg.general.save_dir}/last-epoch.ckpt"
+        ] = f"ThaumatoAnakalyptor/mask3d/{cfg.general.save_dir}/last-epoch.ckpt"
 
     for log in cfg.logging:
         print(log)
@@ -91,7 +94,7 @@ def init(cfg: DictConfig):
 
     # Manually load the specific config that "stpls3d" points to.
     os.chdir(hydra.utils.get_original_cwd())
-    stpls3d_config = OmegaConf.load("mask3d/conf/data/datasets/stpls3d.yaml")
+    stpls3d_config = OmegaConf.load("ThaumatoAnakalyptor/mask3d/conf/data/datasets/stpls3d.yaml")
 
     OmegaConf.set_struct(cfg, False)
     cfg.general.experiment_name = f'validation_query_{CURR_QUERY}_topk_{CURR_TOPK}_dbscan_{CURR_DBSCAN}_size_{CURR_SIZE}'
@@ -108,7 +111,7 @@ def init(cfg: DictConfig):
     cfg.general.on_crops = False # Initially was True
     cfg.model.config.backbone._target_ = "models.Res16UNet18B"
     cfg.general.train_mode = False
-    cfg.general.checkpoint = "mask3d/saved/train/last-epoch.ckpt"
+    cfg.general.checkpoint = "ThaumatoAnakalyptor/mask3d/saved/train/last-epoch.ckpt"
     cfg.data.crop_length = CURR_SIZE
     cfg.general.eval_inner_core = 50.0
     cfg.general.topk_per_image = CURR_TOPK
@@ -121,14 +124,14 @@ def init(cfg: DictConfig):
     res = get_parameters(cfg)
     global model
     model = res[1]
-    model = nn.DataParallel(model)
+    # model = nn.DataParallel(model)
     model.to("cuda")
     #print("dataset config", cfg.data.datasets)
     model.prepare_data()
 
     # thaumato_preprocessing.py for preprocessed npy loading to npy saving format (containing points object)
     global preprocessing_thaumato
-    preprocessing_thaumato = STPLS3DPreprocessing(data_dir='mask3d/data/raw/thaumatoanakalyptor', save_dir='mask3d/data/processed/thaumatoanakalyptor')
+    preprocessing_thaumato = STPLS3DPreprocessing(data_dir='ThaumatoAnakalyptor/mask3d/data/raw/thaumatoanakalyptor', save_dir='ThaumatoAnakalyptor/mask3d/data/processed/thaumatoanakalyptor')
     print("preprocessing_thaumato initialized")
     # thaumato_dataset.py for loading data in pytorch format
     global inference_preprocessing 

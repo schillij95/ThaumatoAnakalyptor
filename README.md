@@ -45,7 +45,7 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
         To generate an ```umbilicus.txt``` for a scroll, make sure to transform the umbilicus coordinates from scroll coordinates ```x, y, z``` - where ```x,y``` is the tif 2D coordinates and ```z``` the tif layer number - into umbilicus coordinates ```uc``` with this formula: ```uc = y + 500, z + 500, x + 500```.
 
 - **Checkpoint and Training Data:**
-    Checkpoint and training data can be downloaded from the private Vesuvius Challenge SFTP server under ```GrandPrizeSubmission-31-12-2023/Codebase/automatic segmentation/ThaumatoAnakalyptor```. The checkpoint ```last-epoch.ckpt``` can also be downloaded from the [Google Drive](https://drive.google.com/file/d/1gO8Nf4sCaA7r4dO6ePtt0SE0E5ePXSid/view?usp=sharing).
+    Checkpoint and training data can be downloaded from the private Vesuvius Challenge SFTP server under ```GrandPrizeSubmission-31-12-2023/Codebase/automatic segmentation/ThaumatoAnakalyptor```. The checkpoint ```last-epoch.ckpt``` can also be downloaded from [Google Drive](https://drive.google.com/file/d/1gO8Nf4sCaA7r4dO6ePtt0SE0E5ePXSid/view?usp=sharing).
 
 - **Segmentations:**
     The provided segmentations can be downloaded from the private Vesuvius Challenge SFTP server under ```julian_uploads/finished_segments/``` and ```julian_uploads/scroll3_segments/```.
@@ -64,7 +64,8 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
     ```
     ```bash
     docker run --gpus all -it --rm \
-    -v <path_to_scroll>:/workspace/scroll \
+    -v <path_to_scroll>:/scroll.volpkg \
+    -v <optional_alternative_path_to_scroll>:/scroll_alternative.volpkg \
     -v $(pwd)/:/workspace \
     -v /tmp/.X11-unix:/tmp/.X11-unix \
     -e DISPLAY=$DISPLAY \
@@ -74,7 +75,7 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
 - **Precomputation Steps:**
     The precomputation step is expected to take a few days.
 
-    The Grid Cells used for segmentation have to be in 8um resolution. ```generate_half_sized_grid.py``` is used for 4um resolution scans to generate Grid Cells in 8um resolution. If you have acces to multiple GPU's, adjust the ```--num_threads``` and ```--gpus``` flags to speed up the process.
+    The Grid Cells used for segmentation have to be in 8um resolution. ```generate_half_sized_grid.py``` is used for 4um resolution scans to generate Grid Cells in 8um resolution. If you have access to multiple GPU's, adjust the ```--num_threads``` and ```--gpus``` flags to speed up the process.
     ```bash
     python3 -m ThaumatoAnakalyptor.generate_half_sized_grid --input_directory <scroll-path>/PHerc0332.volpkg/volumes/20231027191953 --output_directory <scroll-path>/PHerc0332.volpkg/volumes/2dtifs_8um
     ```
