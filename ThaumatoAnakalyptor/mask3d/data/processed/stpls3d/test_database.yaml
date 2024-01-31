@@ -1,0 +1,240 @@
+- color_mean:
+  - 0.001962502021342516
+  - 0.0019674592185765505
+  - 0.0019561985973268747
+  color_std:
+  - 5.1320284910616465e-06
+  - 5.151277036929969e-06
+  - 5.102962404635036e-06
+  file_len: 37710
+  filepath: data/processed/stpls3d/test/point_cloud_100.npy
+  filepath_crop:
+  - data/processed/stpls3d/test/point_cloud_100_0.npy
+  instance_gt_filepath: []
+  raw_filepath: data/raw/thaumatoanakalyptor/test/point_cloud_100.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_100.txt
+- color_mean:
+  - 0.0019579576328396797
+  - 0.0019575748592615128
+  - 0.001957463566213846
+  color_std:
+  - 5.118357876199298e-06
+  - 5.111586688144598e-06
+  - 5.112815870234044e-06
+  file_len: 70472
+  filepath: data/processed/stpls3d/test/point_cloud_101.npy
+  filepath_crop:
+  - data/processed/stpls3d/test/point_cloud_101_0.npy
+  instance_gt_filepath: []
+  raw_filepath: data/raw/thaumatoanakalyptor/test/point_cloud_101.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_101.txt
+- color_mean:
+  - 0.0019554828759282827
+  - 0.0019638673402369022
+  - 0.0019593825563788414
+  color_std:
+  - 5.098296696814941e-06
+  - 5.137709649716271e-06
+  - 5.120619789522607e-06
+  file_len: 71256
+  filepath: data/processed/stpls3d/test/point_cloud_102.npy
+  filepath_crop:
+  - data/processed/stpls3d/test/point_cloud_102_0.npy
+  instance_gt_filepath: []
+  raw_filepath: data/raw/thaumatoanakalyptor/test/point_cloud_102.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_102.txt
+- color_mean:
+  - 0.0019509755074977875
+  - 0.001960327383130789
+  - 0.0019546833354979753
+  color_std:
+  - 5.089391379442532e-06
+  - 5.12346832692856e-06
+  - 5.103936473460635e-06
+  file_len: 88010
+  filepath: data/processed/stpls3d/test/point_cloud_103.npy
+  filepath_crop:
+  - data/processed/stpls3d/test/point_cloud_103_0.npy
+  instance_gt_filepath: []
+  raw_filepath: data/raw/thaumatoanakalyptor/test/point_cloud_103.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_103.txt
+- color_mean:
+  - 0.0019642855040729046
+  - 0.001958467299118638
+  - 0.0019623024854809046
+  color_std:
+  - 5.14027397002792e-06
+  - 5.123179107613396e-06
+  - 5.131365924171405e-06
+  file_len: 148138
+  filepath: data/processed/stpls3d/test/point_cloud_104.npy
+  filepath_crop:
+  - data/processed/stpls3d/test/point_cloud_104_0.npy
+  instance_gt_filepath: []
+  raw_filepath: data/raw/thaumatoanakalyptor/test/point_cloud_104.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_104.txt
+- color_mean:
+  - 0.001960612367838621
+  - 0.0019594626501202583
+  - 0.001962673384696245
+  color_std:
+  - 5.1272463679197244e-06
+  - 5.123462869960349e-06
+  - 5.133439117344096e-06
+  file_len: 131943
+  filepath: data/processed/stpls3d/test/point_cloud_105.npy
+  filepath_crop:
+  - data/processed/stpls3d/test/point_cloud_105_0.npy
+  instance_gt_filepath: []
+  raw_filepath: data/raw/thaumatoanakalyptor/test/point_cloud_105.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_105.txt
+- color_mean:
+  - 0.001959556248039007
+  - 0.0019622049294412136
+  - 0.0019655348733067513
+  color_std:
+  - 5.118048193253344e-06
+  - 5.131369562150212e-06
+  - 5.13918666911195e-06
+  file_len: 45431
+  filepath: data/processed/stpls3d/test/point_cloud_106.npy
+  filepath_crop:
+  - data/processed/stpls3d/test/point_cloud_106_0.npy
+  instance_gt_filepath: []
+  raw_filepath: data/raw/thaumatoanakalyptor/test/point_cloud_106.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_106.txt
+- color_mean:
+  - 0.001960596302524209
+  - 0.0019545492250472307
+  - 0.0019587266724556684
+  color_std:
+  - 5.123333721712697e-06
+  - 5.101762781123398e-06
+  - 5.116406100569293e-06
+  file_len: 75559
+  filepath: data/processed/stpls3d/test/point_cloud_107.npy
+  filepath_crop:
+  - data/processed/stpls3d/test/point_cloud_107_0.npy
+  instance_gt_filepath: []
+  raw_filepath: data/raw/thaumatoanakalyptor/test/point_cloud_107.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_107.txt
+- color_mean:
+  - 0.0019585469271987677
+  - 0.001963757909834385
+  - 0.0019588791765272617
+  color_std:
+  - 5.115575277159223e-06
+  - 5.146766397956526e-06
+  - 5.120017249282682e-06
+  file_len: 89751
+  filepath: data/processed/stpls3d/test/point_cloud_108.npy
+  filepath_crop:
+  - data/processed/stpls3d/test/point_cloud_108_0.npy
+  instance_gt_filepath: []
+  raw_filepath: data/raw/thaumatoanakalyptor/test/point_cloud_108.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_108.txt
+- color_mean:
+  - 0.001956341788172722
+  - 0.001974739134311676
+  - 0.0019533266313374043
+  color_std:
+  - 5.117636192153441e-06
+  - 5.180778316571377e-06
+  - 5.103324383526342e-06
+  file_len: 33446
+  filepath: data/processed/stpls3d/test/point_cloud_109.npy
+  filepath_crop:
+  - data/processed/stpls3d/test/point_cloud_109_0.npy
+  instance_gt_filepath: []
+  raw_filepath: data/raw/thaumatoanakalyptor/test/point_cloud_109.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_109.txt
+- color_mean:
+  - 0.0019611050374805927
+  - 0.0019628526642918587
+  - 0.001964526018127799
+  color_std:
+  - 5.124639756104443e-06
+  - 5.134254934091587e-06
+  - 5.137634616403375e-06
+  file_len: 90907
+  filepath: data/processed/stpls3d/test/point_cloud_110.npy
+  filepath_crop:
+  - data/processed/stpls3d/test/point_cloud_110_0.npy
+  instance_gt_filepath: []
+  raw_filepath: data/raw/thaumatoanakalyptor/test/point_cloud_110.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_110.txt
+- color_mean:
+  - 0.001964213792234659
+  - 0.001960434252396226
+  - 0.001971469260752201
+  color_std:
+  - 5.145184786670143e-06
+  - 5.125024017615942e-06
+  - 5.1694660214707255e-06
+  file_len: 67637
+  filepath: data/processed/stpls3d/test/point_cloud_111.npy
+  filepath_crop:
+  - data/processed/stpls3d/test/point_cloud_111_0.npy
+  instance_gt_filepath: []
+  raw_filepath: data/raw/thaumatoanakalyptor/test/point_cloud_111.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_111.txt
+- color_mean:
+  - 0.0019615625496953726
+  - 0.0019571431912481785
+  - 0.001960659632459283
+  color_std:
+  - 5.125080861034803e-06
+  - 5.111980044603115e-06
+  - 5.123532446305035e-06
+  file_len: 85024
+  filepath: data/processed/stpls3d/test/point_cloud_112.npy
+  filepath_crop:
+  - data/processed/stpls3d/test/point_cloud_112_0.npy
+  instance_gt_filepath: []
+  raw_filepath: data/raw/thaumatoanakalyptor/test/point_cloud_112.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_112.txt
+- color_mean:
+  - 0.001961570465937257
+  - 0.001962590729817748
+  - 0.0019587716087698936
+  color_std:
+  - 5.135940682521323e-06
+  - 5.131664693180937e-06
+  - 5.121547928865766e-06
+  file_len: 65379
+  filepath: data/processed/stpls3d/test/point_cloud_113.npy
+  filepath_crop:
+  - data/processed/stpls3d/test/point_cloud_113_0.npy
+  instance_gt_filepath: []
+  raw_filepath: data/raw/thaumatoanakalyptor/test/point_cloud_113.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_113.txt
+- color_mean:
+  - 0.001956755528226495
+  - 0.001964085502550006
+  - 0.0019573273602873087
+  color_std:
+  - 5.110986421641428e-06
+  - 5.137567313795444e-06
+  - 5.116285137773957e-06
+  file_len: 81293
+  filepath: data/processed/stpls3d/test/point_cloud_114.npy
+  filepath_crop:
+  - data/processed/stpls3d/test/point_cloud_114_0.npy
+  instance_gt_filepath: []
+  raw_filepath: data/raw/thaumatoanakalyptor/test/point_cloud_114.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_114.txt

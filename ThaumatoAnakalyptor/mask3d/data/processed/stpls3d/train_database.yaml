@@ -1,0 +1,2093 @@
+- color_mean:
+  - 0.0019549450371414423
+  - 0.00196336698718369
+  - 0.0019603916443884373
+  color_std:
+  - 5.10508289153222e-06
+  - 5.136596882948652e-06
+  - 5.127616077515995e-06
+  file_len: 39188
+  filepath: data/processed/stpls3d/train/cell_yxz_017_011_011.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_017_011_011.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_017_011_011.txt
+- color_mean:
+  - 0.0019597348291426897
+  - 0.0019546938128769398
+  - 0.0019583881366997957
+  color_std:
+  - 5.1179745241825e-06
+  - 5.099432200950105e-06
+  - 5.114058694744017e-06
+  file_len: 50283
+  filepath: data/processed/stpls3d/train/cell_yxz_017_011_015.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_017_011_015.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_017_011_015.txt
+- color_mean:
+  - 0.0019576065242290497
+  - 0.001957939239218831
+  - 0.001957901054993272
+  color_std:
+  - 5.110809979669284e-06
+  - 5.106952357891714e-06
+  - 5.1112047003698535e-06
+  file_len: 51304
+  filepath: data/processed/stpls3d/train/cell_yxz_017_011_019.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_017_011_019.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_017_011_019.txt
+- color_mean:
+  - 0.0019498772453516722
+  - 0.0019702326972037554
+  - 0.001955264015123248
+  color_std:
+  - 5.086350029159803e-06
+  - 5.168151801626664e-06
+  - 5.104504907649243e-06
+  file_len: 30576
+  filepath: data/processed/stpls3d/train/cell_yxz_017_012_008.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_017_012_008.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_017_012_008.txt
+- color_mean:
+  - 0.001958337379619479
+  - 0.0019551266450434923
+  - 0.0019592896569520235
+  color_std:
+  - 5.11031521455152e-06
+  - 5.100512680655811e-06
+  - 5.118508397572441e-06
+  file_len: 45028
+  filepath: data/processed/stpls3d/train/cell_yxz_017_013_013.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_017_013_013.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_017_013_013.txt
+- color_mean:
+  - 0.001953244674950838
+  - 0.0019675889052450657
+  - 0.0019590856973081827
+  color_std:
+  - 5.099282589071663e-06
+  - 5.154584414412966e-06
+  - 5.120835339766927e-06
+  file_len: 38355
+  filepath: data/processed/stpls3d/train/cell_yxz_017_014_005(1).npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_017_014_005(1).txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_017_014_005(1).txt
+- color_mean:
+  - 0.001962378853932023
+  - 0.001957694534212351
+  - 0.0019601560197770596
+  color_std:
+  - 5.118588887853548e-06
+  - 5.105752734380076e-06
+  - 5.125384632265195e-06
+  file_len: 38355
+  filepath: data/processed/stpls3d/train/cell_yxz_017_014_005.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_017_014_005.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_017_014_005.txt
+- color_mean:
+  - 0.00196020002476871
+  - 0.001956406282261014
+  - 0.0019589499570429325
+  color_std:
+  - 5.119276465848088e-06
+  - 5.105310265207663e-06
+  - 5.12323777002166e-06
+  file_len: 44504
+  filepath: data/processed/stpls3d/train/cell_yxz_018_010_006.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_018_010_006.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_018_010_006.txt
+- color_mean:
+  - 0.001949712517671287
+  - 0.001970409881323576
+  - 0.001955539919435978
+  color_std:
+  - 5.085856628284091e-06
+  - 5.167566541786073e-06
+  - 5.106070602778345e-06
+  file_len: 30922
+  filepath: data/processed/stpls3d/train/cell_yxz_018_012_007.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_018_012_007.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_018_012_007.txt
+- color_mean:
+  - 0.001964482245966792
+  - 0.001961883855983615
+  - 0.001966331386938691
+  color_std:
+  - 5.150439392309636e-06
+  - 5.128666089149192e-06
+  - 5.1508213800843805e-06
+  file_len: 48098
+  filepath: data/processed/stpls3d/train/cell_yxz_019_011_015.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_019_011_015.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_019_011_015.txt
+- color_mean:
+  - 0.0019559692591428757
+  - 0.001953811850398779
+  - 0.0019605227280408144
+  color_std:
+  - 5.104242518427782e-06
+  - 5.096183940622723e-06
+  - 5.125349616719177e-06
+  file_len: 42399
+  filepath: data/processed/stpls3d/train/cell_yxz_019_014_026.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_019_014_026.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_019_014_026.txt
+- color_mean:
+  - 0.0019579927902668715
+  - 0.0019528839038684964
+  - 0.0019582335371524096
+  color_std:
+  - 5.114378836879041e-06
+  - 5.091300863568904e-06
+  - 5.105828677187674e-06
+  file_len: 40947
+  filepath: data/processed/stpls3d/train/cell_yxz_019_015_019.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_019_015_019.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_019_015_019.txt
+- color_mean:
+  - 0.001954748760908842
+  - 0.0019595695193856955
+  - 0.0019580188672989607
+  color_std:
+  - 5.098010660731234e-06
+  - 5.115274689160287e-06
+  - 5.114426130603533e-06
+  file_len: 32080
+  filepath: data/processed/stpls3d/train/cell_yxz_019_015_023.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_019_015_023.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_019_015_023.txt
+- color_mean:
+  - 0.0019508448895066977
+  - 0.0019713507499545813
+  - 0.0019571627490222454
+  color_std:
+  - 5.093986601423239e-06
+  - 5.175548722036183e-06
+  - 5.112558937980793e-06
+  file_len: 29205
+  filepath: data/processed/stpls3d/train/cell_yxz_019_016_003.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_019_016_003.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_019_016_003.txt
+- color_mean:
+  - 0.0019567967392504215
+  - 0.0019677607342600822
+  - 0.001969545613974333
+  color_std:
+  - 5.118339686305262e-06
+  - 5.151232471689582e-06
+  - 5.168606094230199e-06
+  file_len: 43041
+  filepath: data/processed/stpls3d/train/cell_yxz_019_016_026.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_019_016_026.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_019_016_026.txt
+- color_mean:
+  - 0.0019599387887865305
+  - 0.0019534907769411802
+  - 0.0019587459973990917
+  color_std:
+  - 5.1195133892179e-06
+  - 5.095323103887495e-06
+  - 5.116412467032205e-06
+  file_len: 56530
+  filepath: data/processed/stpls3d/train/cell_yxz_020_010_016.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_020_010_016.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_020_010_016.txt
+- color_mean:
+  - 0.0019601040985435247
+  - 0.001965794712305069
+  - 0.0019681223202496767
+  color_std:
+  - 5.1322126637387555e-06
+  - 5.1432475629553664e-06
+  - 5.160430646355962e-06
+  file_len: 45354
+  filepath: data/processed/stpls3d/train/cell_yxz_020_012_011.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_020_012_011.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_020_012_011.txt
+- color_mean:
+  - 0.0019564649555832148
+  - 0.001969077857211232
+  - 0.001968556083738804
+  color_std:
+  - 5.1191832426411565e-06
+  - 5.156151473784121e-06
+  - 5.164805770618841e-06
+  file_len: 43341
+  filepath: data/processed/stpls3d/train/cell_yxz_020_012_014.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_020_012_014.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_020_012_014.txt
+- color_mean:
+  - 0.0019581581000238657
+  - 0.001959285233169794
+  - 0.0019619353115558624
+  color_std:
+  - 5.112600319989724e-06
+  - 5.11568623551284e-06
+  - 5.127183612785302e-06
+  file_len: 45549
+  filepath: data/processed/stpls3d/train/cell_yxz_020_012_018.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_020_012_018.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_020_012_018.txt
+- color_mean:
+  - 0.001948157325387001
+  - 0.001968077616766095
+  - 0.0019561266526579857
+  color_std:
+  - 5.081202743895119e-06
+  - 5.15869032824412e-06
+  - 5.1078200158372056e-06
+  file_len: 32006
+  filepath: data/processed/stpls3d/train/cell_yxz_020_013_023.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_020_013_023.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_020_013_023.txt
+- color_mean:
+  - 0.0019613527692854404
+  - 0.001964863855391741
+  - 0.0019690426997840405
+  color_std:
+  - 5.137143944011768e-06
+  - 5.137878815730801e-06
+  - 5.162516117707128e-06
+  file_len: 45870
+  filepath: data/processed/stpls3d/train/cell_yxz_020_015_011.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_020_015_011.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_020_015_011.txt
+- color_mean:
+  - 0.0019620293751358986
+  - 0.0019537503831088543
+  - 0.001962779089808464
+  color_std:
+  - 5.129682904225774e-06
+  - 5.0961207307409495e-06
+  - 5.135747869644547e-06
+  file_len: 47301
+  filepath: data/processed/stpls3d/train/cell_yxz_020_016_016.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_020_016_016.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_020_016_016.txt
+- color_mean:
+  - 0.0019511943683028221
+  - 0.0019684976432472467
+  - 0.0019586600828915834
+  color_std:
+  - 5.0963731155206915e-06
+  - 5.161797616892727e-06
+  - 5.118592525832355e-06
+  file_len: 33886
+  filepath: data/processed/stpls3d/train/cell_yxz_021_010_010.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_021_010_010.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_021_010_010.txt
+- color_mean:
+  - 0.0019561471417546272
+  - 0.0019693770445883274
+  - 0.0019673279020935297
+  color_std:
+  - 5.117291038914118e-06
+  - 5.157894065632718e-06
+  - 5.159042757441057e-06
+  file_len: 43755
+  filepath: data/processed/stpls3d/train/cell_yxz_021_011_011.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_021_011_011.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_021_011_011.txt
+- color_mean:
+  - 0.0019590528681874275
+  - 0.001957156229764223
+  - 0.001960212364792824
+  color_std:
+  - 5.125053121446399e-06
+  - 5.118140506965574e-06
+  - 5.114529812999535e-06
+  file_len: 23665
+  filepath: data/processed/stpls3d/train/cell_yxz_021_012_002.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_021_012_002.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_021_012_002.txt
+- color_mean:
+  - 0.0019565229304134846
+  - 0.0019539992790669203
+  - 0.001959522720426321
+  color_std:
+  - 5.106375283503439e-06
+  - 5.0984158406208735e-06
+  - 5.119857632962521e-06
+  file_len: 43283
+  filepath: data/processed/stpls3d/train/cell_yxz_021_014_009.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_021_014_009.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_021_014_009.txt
+- color_mean:
+  - 0.001953401369974017
+  - 0.001965239644050598
+  - 0.001964646391570568
+  color_std:
+  - 5.100207545183366e-06
+  - 5.142503596289316e-06
+  - 5.145226623426424e-06
+  file_len: 40403
+  filepath: data/processed/stpls3d/train/cell_yxz_021_014_013.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_021_014_013.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_021_014_013.txt
+- color_mean:
+  - 0.001959791872650385
+  - 0.001955849351361394
+  - 0.001959840301424265
+  color_std:
+  - 5.118335593579104e-06
+  - 5.105371656100033e-06
+  - 5.128319116920466e-06
+  file_len: 36945
+  filepath: data/processed/stpls3d/train/cell_yxz_021_015_013.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_021_015_013.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_021_015_013.txt
+- color_mean:
+  - 0.0019569615833461285
+  - 0.0019592393655329943
+  - 0.001957203261554241
+  color_std:
+  - 5.108807727083331e-06
+  - 5.112523467687424e-06
+  - 5.111740847496549e-06
+  file_len: 42408
+  filepath: data/processed/stpls3d/train/cell_yxz_021_017_007.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_021_017_007.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_021_017_007.txt
+- color_mean:
+  - 0.0019560165237635374
+  - 0.0019561187364161015
+  - 0.0019562651868909597
+  color_std:
+  - 5.1048323257418815e-06
+  - 5.09994288222515e-06
+  - 5.1017441364820115e-06
+  file_len: 32237
+  filepath: data/processed/stpls3d/train/cell_yxz_022_010_010.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_022_010_010.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_022_010_010.txt
+- color_mean:
+  - 0.0019493253203108907
+  - 0.001968967728316784
+  - 0.0019568423740565777
+  color_std:
+  - 5.0850499064836185e-06
+  - 5.160518867342034e-06
+  - 5.1094184527755715e-06
+  file_len: 31558
+  filepath: data/processed/stpls3d/train/cell_yxz_022_011_006.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_022_011_006.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_022_011_006.txt
+- color_mean:
+  - 0.0019652675837278366
+  - 0.0019633332267403603
+  - 0.0019652475602924824
+  color_std:
+  - 5.152394805918448e-06
+  - 5.135720130056143e-06
+  - 5.145285285834689e-06
+  file_len: 48627
+  filepath: data/processed/stpls3d/train/cell_yxz_022_011_015.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_022_011_015.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_022_011_015.txt
+- color_mean:
+  - 0.001956285908818245
+  - 0.001961685484275222
+  - 0.0019595324993133545
+  color_std:
+  - 5.104790943732951e-06
+  - 5.123025857756147e-06
+  - 5.1159590839233715e-06
+  file_len: 36400
+  filepath: data/processed/stpls3d/train/cell_yxz_022_012_009.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_022_012_009.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_022_012_009.txt
+- color_mean:
+  - 0.001954873790964484
+  - 0.001965869218111038
+  - 0.001963918562978506
+  color_std:
+  - 5.107795914227609e-06
+  - 5.145630893821362e-06
+  - 5.143753696756903e-06
+  file_len: 40829
+  filepath: data/processed/stpls3d/train/cell_yxz_022_012_012.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_022_012_012.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_022_012_012.txt
+- color_mean:
+  - 0.0019529691198840737
+  - 0.001957915024831891
+  - 0.0019542837981134653
+  color_std:
+  - 5.092059836897533e-06
+  - 5.108143341203686e-06
+  - 5.091240836918587e-06
+  file_len: 22976
+  filepath: data/processed/stpls3d/train/cell_yxz_022_013_002.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_022_013_002.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_022_013_002.txt
+- color_mean:
+  - 0.0019565033726394176
+  - 0.001962827518582344
+  - 0.00196069129742682
+  color_std:
+  - 5.111155132908607e-06
+  - 5.134962066222215e-06
+  - 5.128242264618166e-06
+  file_len: 39307
+  filepath: data/processed/stpls3d/train/cell_yxz_022_013_012.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_022_013_012.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_022_013_012.txt
+- color_mean:
+  - 0.0019526290707290173
+  - 0.001958897104486823
+  - 0.001959087559953332
+  color_std:
+  - 5.08785160491243e-06
+  - 5.11406551595428e-06
+  - 5.119437446410302e-06
+  file_len: 32894
+  filepath: data/processed/stpls3d/train/cell_yxz_022_013_014.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_022_013_014.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_022_013_014.txt
+- color_mean:
+  - 0.0019505593227222562
+  - 0.001967154210433364
+  - 0.0019577043130993843
+  color_std:
+  - 5.09124765812885e-06
+  - 5.154880454938393e-06
+  - 5.116455213283189e-06
+  file_len: 36252
+  filepath: data/processed/stpls3d/train/cell_yxz_022_013_026.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_022_013_026.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_022_013_026.txt
+- color_mean:
+  - 0.00195516599342227
+  - 0.001957516185939312
+  - 0.00196204986423254
+  color_std:
+  - 5.11053076479584e-06
+  - 5.117533873999491e-06
+  - 5.1255119615234435e-06
+  file_len: 24506
+  filepath: data/processed/stpls3d/train/cell_yxz_023_010_002.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_023_010_002.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_023_010_002.txt
+- color_mean:
+  - 0.0019595669582486153
+  - 0.0019560500513762236
+  - 0.001958447275683284
+  color_std:
+  - 5.118173703522189e-06
+  - 5.1045840336882975e-06
+  - 5.111788141221041e-06
+  file_len: 51351
+  filepath: data/processed/stpls3d/train/cell_yxz_023_010_018.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_023_010_018.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_023_010_018.txt
+- color_mean:
+  - 0.00195734528824687
+  - 0.0019565285183489323
+  - 0.0019581897649914026
+  color_std:
+  - 5.109232006361708e-06
+  - 5.107655397296185e-06
+  - 5.112509370519547e-06
+  file_len: 62418
+  filepath: data/processed/stpls3d/train/cell_yxz_023_012_018.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_023_012_018.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_023_012_018.txt
+- color_mean:
+  - 0.0019541915971785784
+  - 0.001966121606528759
+  - 0.0019598440267145634
+  color_std:
+  - 5.10391328134574e-06
+  - 5.14924613526091e-06
+  - 5.125488314661197e-06
+  file_len: 38692
+  filepath: data/processed/stpls3d/train/cell_yxz_023_012_020.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_023_012_020.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_023_012_020.txt
+- color_mean:
+  - 0.0019511599093675613
+  - 0.001968890195712447
+  - 0.001958276145160198
+  color_std:
+  - 5.096601853438187e-06
+  - 5.163329205970513e-06
+  - 5.116870852361899e-06
+  file_len: 33905
+  filepath: data/processed/stpls3d/train/cell_yxz_023_013_011.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_023_013_011.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_023_013_011.txt
+- color_mean:
+  - 0.001953854225575924
+  - 0.0019667979795485735
+  - 0.0019587695132941008
+  color_std:
+  - 5.101681381347589e-06
+  - 5.150822744326433e-06
+  - 5.120260084368056e-06
+  file_len: 37941
+  filepath: data/processed/stpls3d/train/cell_yxz_023_013_014.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_023_013_014.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_023_013_014.txt
+- color_mean:
+  - 0.0019553001038730145
+  - 0.0019584675319492817
+  - 0.00195858022198081
+  color_std:
+  - 5.1011393225053325e-06
+  - 5.113841325510293e-06
+  - 5.1171846280340105e-06
+  file_len: 41879
+  filepath: data/processed/stpls3d/train/cell_yxz_023_013_019.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_023_013_019.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_023_013_019.txt
+- color_mean:
+  - 0.001954166917130351
+  - 0.0019652622286230326
+  - 0.001963699469342828
+  color_std:
+  - 5.106142452859785e-06
+  - 5.144127499079332e-06
+  - 5.1421420721453615e-06
+  file_len: 41294
+  filepath: data/processed/stpls3d/train/cell_yxz_023_016_005.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_023_016_005.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_023_016_005.txt
+- color_mean:
+  - 0.001955451676622033
+  - 0.0019549159333109856
+  - 0.001958013279363513
+  color_std:
+  - 5.100267571833683e-06
+  - 5.100516773381969e-06
+  - 5.116529791848734e-06
+  file_len: 42004
+  filepath: data/processed/stpls3d/train/cell_yxz_024_011_012.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_024_011_012.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_024_011_012.txt
+- color_mean:
+  - 0.001955982530489564
+  - 0.0019583958201110363
+  - 0.0019573504105210304
+  color_std:
+  - 5.101260285300668e-06
+  - 5.112385224492755e-06
+  - 5.1092583817080595e-06
+  file_len: 38563
+  filepath: data/processed/stpls3d/train/cell_yxz_024_013_020.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_024_013_020.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_024_013_020.txt
+- color_mean:
+  - 0.001959368586540222
+  - 0.0019561874214559793
+  - 0.001959641696885228
+  color_std:
+  - 5.117206455906853e-06
+  - 5.102395334688481e-06
+  - 5.116753982292721e-06
+  file_len: 40737
+  filepath: data/processed/stpls3d/train/cell_yxz_024_014_008.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_024_014_008.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_024_014_008.txt
+- color_mean:
+  - 0.001954268664121628
+  - 0.0019648049492388964
+  - 0.0019647160079330206
+  color_std:
+  - 5.103285730001517e-06
+  - 5.139719633007189e-06
+  - 5.145083378010895e-06
+  file_len: 40268
+  filepath: data/processed/stpls3d/train/cell_yxz_024_014_010.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_024_014_010.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_024_014_010.txt
+- color_mean:
+  - 0.0019494066946208477
+  - 0.0019689451437443495
+  - 0.0019601425155997276
+  color_std:
+  - 5.0888552323158365e-06
+  - 5.1603060455818195e-06
+  - 5.125346433487721e-06
+  file_len: 34161
+  filepath: data/processed/stpls3d/train/cell_yxz_024_014_011.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_024_014_011.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_024_014_011.txt
+- color_mean:
+  - 0.0019486529054120183
+  - 0.0019687055610120296
+  - 0.001958054956048727
+  color_std:
+  - 5.0844614634115715e-06
+  - 5.1613596951938234e-06
+  - 5.115544809086714e-06
+  file_len: 32813
+  filepath: data/processed/stpls3d/train/cell_yxz_024_015_011.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_024_015_011.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_024_015_011.txt
+- color_mean:
+  - 0.001959717832505703
+  - 0.0019559329375624657
+  - 0.0019583702087402344
+  color_std:
+  - 5.119638444739394e-06
+  - 5.10415429744171e-06
+  - 5.114820851304103e-06
+  file_len: 39531
+  filepath: data/processed/stpls3d/train/cell_yxz_024_015_021.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_024_015_021.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_024_015_021.txt
+- color_mean:
+  - 0.0019649872556328773
+  - 0.001960774650797248
+  - 0.0019624039996415377
+  color_std:
+  - 5.150994184077717e-06
+  - 5.122041784488829e-06
+  - 5.133084869157756e-06
+  file_len: 51770
+  filepath: data/processed/stpls3d/train/cell_yxz_024_016_003.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_024_016_003.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_024_016_003.txt
+- color_mean:
+  - 0.001956338295713067
+  - 0.001959143904969096
+  - 0.00195890199393034
+  color_std:
+  - 5.104262527311221e-06
+  - 5.11652251589112e-06
+  - 5.118168246553978e-06
+  file_len: 42846
+  filepath: data/processed/stpls3d/train/cell_yxz_024_016_004.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_024_016_004.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_024_016_004.txt
+- color_mean:
+  - 0.0019548521377146244
+  - 0.001963310642167926
+  - 0.001960273366421461
+  color_std:
+  - 5.104703632241581e-06
+  - 5.136242634762311e-06
+  - 5.1271022130094934e-06
+  file_len: 39180
+  filepath: data/processed/stpls3d/train/cell_yxz_024_016_025.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_024_016_025.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_024_016_025.txt
+- color_mean:
+  - 0.001968781230971217
+  - 0.0019499370828270912
+  - 0.001956975320354104
+  color_std:
+  - 5.162971774552716e-06
+  - 5.092038918519393e-06
+  - 5.103824150864966e-06
+  file_len: 21361
+  filepath: data/processed/stpls3d/train/cell_yxz_024_016_027.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_024_016_027.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_024_016_027.txt
+- color_mean:
+  - 0.00195497483946383
+  - 0.0019576929043978453
+  - 0.0019590819720178843
+  color_std:
+  - 5.097806479170686e-06
+  - 5.108430741529446e-06
+  - 5.118848093843553e-06
+  file_len: 36293
+  filepath: data/processed/stpls3d/train/cell_yxz_025_012_006.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_025_012_006.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_025_012_006.txt
+- color_mean:
+  - 0.0019542546942830086
+  - 0.001964447321370244
+  - 0.001960210734978318
+  color_std:
+  - 5.103361672809115e-06
+  - 5.140523171576206e-06
+  - 5.126950327394297e-06
+  file_len: 38958
+  filepath: data/processed/stpls3d/train/cell_yxz_025_012_023(1).npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_025_012_023(1).txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_025_012_023(1).txt
+- color_mean:
+  - 0.00196250481531024
+  - 0.0019583830144256353
+  - 0.0019571713637560606
+  color_std:
+  - 5.119754860061221e-06
+  - 5.108062850922579e-06
+  - 5.113812676427187e-06
+  file_len: 38958
+  filepath: data/processed/stpls3d/train/cell_yxz_025_012_023.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/cell_yxz_025_012_023.txt
+  raw_segmentation_filepath: ''
+  scene: cell_yxz_025_012_023.txt
+- color_mean:
+  - 0.0019641993567347527
+  - 0.0019560065120458603
+  - 0.001956599298864603
+  color_std:
+  - 5.138097094459226e-06
+  - 5.100433554616757e-06
+  - 5.110172423883341e-06
+  file_len: 44320
+  filepath: data/processed/stpls3d/train/point_cloud_0.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_0.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_0.txt
+- color_mean:
+  - 0.001954269828274846
+  - 0.0019564167596399784
+  - 0.0019567939452826977
+  color_std:
+  - 5.110414804221364e-06
+  - 5.1095307753712405e-06
+  - 5.103862349642441e-06
+  file_len: 54324
+  filepath: data/processed/stpls3d/train/point_cloud_1.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_1.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_1.txt
+- color_mean:
+  - 0.0019722124561667442
+  - 0.0019521958893164992
+  - 0.0019499302143231034
+  color_std:
+  - 5.171375960344449e-06
+  - 5.102308477944462e-06
+  - 5.081170456833206e-06
+  file_len: 19125
+  filepath: data/processed/stpls3d/train/point_cloud_2.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_2.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_2.txt
+- color_mean:
+  - 0.00196417816914618
+  - 0.0019708159379661083
+  - 0.0019704531878232956
+  color_std:
+  - 5.136857907928061e-06
+  - 5.15454030391993e-06
+  - 5.158281055628322e-06
+  file_len: 46392
+  filepath: data/processed/stpls3d/train/point_cloud_3.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_3.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_3.txt
+- color_mean:
+  - 0.0019586533308029175
+  - 0.0019529648125171661
+  - 0.001951238140463829
+  color_std:
+  - 5.1225320021330845e-06
+  - 5.085986231279094e-06
+  - 5.096035238238983e-06
+  file_len: 30774
+  filepath: data/processed/stpls3d/train/point_cloud_4.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_4.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_4.txt
+- color_mean:
+  - 0.0019639963284134865
+  - 0.0019561678636819124
+  - 0.0019665199797600508
+  color_std:
+  - 5.1346878535696305e-06
+  - 5.1125107347615995e-06
+  - 5.14166413267958e-06
+  file_len: 37578
+  filepath: data/processed/stpls3d/train/point_cloud_5.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_5.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_5.txt
+- color_mean:
+  - 0.001962856622412801
+  - 0.001957297557964921
+  - 0.0019638282246887684
+  color_std:
+  - 5.121676622366067e-06
+  - 5.117236469232012e-06
+  - 5.151183358975686e-06
+  file_len: 59477
+  filepath: data/processed/stpls3d/train/point_cloud_6.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_6.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_6.txt
+- color_mean:
+  - 0.0019555839244276285
+  - 0.0019564914982765913
+  - 0.0019605036359280348
+  color_std:
+  - 5.105559466755949e-06
+  - 5.10396466779639e-06
+  - 5.123143182572676e-06
+  file_len: 46601
+  filepath: data/processed/stpls3d/train/point_cloud_7.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_7.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_7.txt
+- color_mean:
+  - 0.001964538125321269
+  - 0.001967034302651882
+  - 0.001961290603503585
+  color_std:
+  - 5.141879228176549e-06
+  - 5.148171112523414e-06
+  - 5.126113592268666e-06
+  file_len: 60239
+  filepath: data/processed/stpls3d/train/point_cloud_8.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_8.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_8.txt
+- color_mean:
+  - 0.0019434879068285227
+  - 0.001939890906214714
+  - 0.00195693108253181
+  color_std:
+  - 5.049046649219235e-06
+  - 5.0308703976043034e-06
+  - 5.1137562877556775e-06
+  file_len: 14159
+  filepath: data/processed/stpls3d/train/point_cloud_9.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_9.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_9.txt
+- color_mean:
+  - 0.001945763360708952
+  - 0.001958221662789583
+  - 0.001970896264538169
+  color_std:
+  - 5.062927357357694e-06
+  - 5.131369562150212e-06
+  - 5.176318609301234e-06
+  file_len: 27720
+  filepath: data/processed/stpls3d/train/point_cloud_10.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_10.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_10.txt
+- color_mean:
+  - 0.001971352845430374
+  - 0.001966307871043682
+  - 0.001961207017302513
+  color_std:
+  - 5.1722781790886074e-06
+  - 5.154256996320328e-06
+  - 5.121419690112816e-06
+  file_len: 33203
+  filepath: data/processed/stpls3d/train/point_cloud_11.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_11.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_11.txt
+- color_mean:
+  - 0.001969205681234598
+  - 0.0019613998010754585
+  - 0.001962624955922365
+  color_std:
+  - 5.152061021362897e-06
+  - 5.121087269799318e-06
+  - 5.13076838615234e-06
+  file_len: 35777
+  filepath: data/processed/stpls3d/train/point_cloud_12.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_12.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_12.txt
+- color_mean:
+  - 0.0019644226413220167
+  - 0.0019540025386959314
+  - 0.001955254003405571
+  color_std:
+  - 5.130460976943141e-06
+  - 5.084772055852227e-06
+  - 5.110400252306135e-06
+  file_len: 21109
+  filepath: data/processed/stpls3d/train/point_cloud_13.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_13.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_13.txt
+- color_mean:
+  - 0.0019586351700127125
+  - 0.001956772059202194
+  - 0.001973999198526144
+  color_std:
+  - 5.118175977258943e-06
+  - 5.110491201776313e-06
+  - 5.177876573725371e-06
+  file_len: 48550
+  filepath: data/processed/stpls3d/train/point_cloud_14.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_14.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_14.txt
+- color_mean:
+  - 0.0019492447609081864
+  - 0.001979330088943243
+  - 0.001947268727235496
+  color_std:
+  - 5.072055500932038e-06
+  - 5.189477178646484e-06
+  - 5.089717888040468e-06
+  file_len: 19490
+  filepath: data/processed/stpls3d/train/point_cloud_15.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_15.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_15.txt
+- color_mean:
+  - 0.0019557711202651262
+  - 0.0019403601763769984
+  - 0.0019558388739824295
+  color_std:
+  - 5.110441634315066e-06
+  - 5.040189080318669e-06
+  - 5.10207155457465e-06
+  file_len: 21325
+  filepath: data/processed/stpls3d/train/point_cloud_16.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_16.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_16.txt
+- color_mean:
+  - 0.0019632340408861637
+  - 0.00196521426551044
+  - 0.001957001630216837
+  color_std:
+  - 5.137148491485277e-06
+  - 5.144628630660009e-06
+  - 5.1052088565484155e-06
+  file_len: 53845
+  filepath: data/processed/stpls3d/train/point_cloud_17.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_17.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_17.txt
+- color_mean:
+  - 0.001959144603461027
+  - 0.0019605327397584915
+  - 0.0019573154859244823
+  color_std:
+  - 5.1166362027288415e-06
+  - 5.12483302372857e-06
+  - 5.119671641296009e-06
+  file_len: 50287
+  filepath: data/processed/stpls3d/train/point_cloud_18.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_18.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_18.txt
+- color_mean:
+  - 0.0019623665139079094
+  - 0.0019598298240453005
+  - 0.0019589709118008614
+  color_std:
+  - 5.14113571625785e-06
+  - 5.120547484693816e-06
+  - 5.113053248351207e-06
+  file_len: 59926
+  filepath: data/processed/stpls3d/train/point_cloud_19.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_19.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_19.txt
+- color_mean:
+  - 0.0019618733786046505
+  - 0.001966979820281267
+  - 0.001967828953638673
+  color_std:
+  - 5.122255060996395e-06
+  - 5.157740361028118e-06
+  - 5.150067863723962e-06
+  file_len: 33499
+  filepath: data/processed/stpls3d/train/point_cloud_20.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_20.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_20.txt
+- color_mean:
+  - 0.0019582759123295546
+  - 0.001953973202034831
+  - 0.0019647201988846064
+  color_std:
+  - 5.1212659855082165e-06
+  - 5.100355338072404e-06
+  - 5.143101134308381e-06
+  file_len: 46646
+  filepath: data/processed/stpls3d/train/point_cloud_21.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_21.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_21.txt
+- color_mean:
+  - 0.0019591450691223145
+  - 0.001959799090400338
+  - 0.0019658375531435013
+  color_std:
+  - 5.114246505399933e-06
+  - 5.125457846588688e-06
+  - 5.147105639480287e-06
+  file_len: 40431
+  filepath: data/processed/stpls3d/train/point_cloud_22.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_22.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_22.txt
+- color_mean:
+  - 0.0019655157811939716
+  - 0.0019650531467050314
+  - 0.0019552691373974085
+  color_std:
+  - 5.1461274779285304e-06
+  - 5.1393781177466735e-06
+  - 5.098321253171889e-06
+  file_len: 30104
+  filepath: data/processed/stpls3d/train/point_cloud_23.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_23.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_23.txt
+- color_mean:
+  - 0.001959271263331175
+  - 0.0019524331437423825
+  - 0.0019510677084326744
+  color_std:
+  - 5.1232768782938365e-06
+  - 5.096049790154211e-06
+  - 5.090551894681994e-06
+  file_len: 28438
+  filepath: data/processed/stpls3d/train/point_cloud_24.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_24.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_24.txt
+- color_mean:
+  - 0.0019698129035532475
+  - 0.0019623201806098223
+  - 0.0019704282749444246
+  color_std:
+  - 5.167569270270178e-06
+  - 5.131532361701829e-06
+  - 5.1584274842753075e-06
+  file_len: 32404
+  filepath: data/processed/stpls3d/train/point_cloud_25.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_25.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_25.txt
+- color_mean:
+  - 0.0019591241143643856
+  - 0.001963208196684718
+  - 0.001970563316717744
+  color_std:
+  - 5.120219611853827e-06
+  - 5.142681857250864e-06
+  - 5.175400929147145e-06
+  file_len: 32672
+  filepath: data/processed/stpls3d/train/point_cloud_26.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_26.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_26.txt
+- color_mean:
+  - 0.001957379747182131
+  - 0.001957960892468691
+  - 0.0019652312621474266
+  color_std:
+  - 5.111849986860761e-06
+  - 5.10731933900388e-06
+  - 5.1438960326777305e-06
+  file_len: 39529
+  filepath: data/processed/stpls3d/train/point_cloud_27.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_27.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_27.txt
+- color_mean:
+  - 0.0019639702513813972
+  - 0.0019638040103018284
+  - 0.001957461703568697
+  color_std:
+  - 5.1320525926712435e-06
+  - 5.1468118726916146e-06
+  - 5.111475275043631e-06
+  file_len: 35628
+  filepath: data/processed/stpls3d/train/point_cloud_28.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_28.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_28.txt
+- color_mean:
+  - 0.0019609590526670218
+  - 0.001967506017535925
+  - 0.001966690644621849
+  color_std:
+  - 5.121887625136878e-06
+  - 5.151207005837932e-06
+  - 5.153313395567238e-06
+  file_len: 46923
+  filepath: data/processed/stpls3d/train/point_cloud_29.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_29.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_29.txt
+- color_mean:
+  - 0.0019569690339267254
+  - 0.001956080785021186
+  - 0.0019683032296597958
+  color_std:
+  - 5.109567155159311e-06
+  - 5.097125267639058e-06
+  - 5.14741486767889e-06
+  file_len: 53740
+  filepath: data/processed/stpls3d/train/point_cloud_30.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_30.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_30.txt
+- color_mean:
+  - 0.0019656687509268522
+  - 0.0019606007263064384
+  - 0.001954783219844103
+  color_std:
+  - 5.143508133187424e-06
+  - 5.13193299411796e-06
+  - 5.106615390104707e-06
+  file_len: 53195
+  filepath: data/processed/stpls3d/train/point_cloud_31.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_31.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_31.txt
+- color_mean:
+  - 0.001958326203748584
+  - 0.0019623241387307644
+  - 0.001958832610398531
+  color_std:
+  - 5.115605290484382e-06
+  - 5.133360446052393e-06
+  - 5.123270966578275e-06
+  file_len: 97619
+  filepath: data/processed/stpls3d/train/point_cloud_32.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_32.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_32.txt
+- color_mean:
+  - 0.001964885275810957
+  - 0.0019646743312478065
+  - 0.0019587210845202208
+  color_std:
+  - 5.14523480887874e-06
+  - 5.138700998941204e-06
+  - 5.121660251461435e-06
+  file_len: 159377
+  filepath: data/processed/stpls3d/train/point_cloud_33.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_33.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_33.txt
+- color_mean:
+  - 0.00196618540212512
+  - 0.00196027010679245
+  - 0.0019580910447984934
+  color_std:
+  - 5.152576704858802e-06
+  - 5.118106400914257e-06
+  - 5.1179054025851656e-06
+  file_len: 144332
+  filepath: data/processed/stpls3d/train/point_cloud_34.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_34.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_34.txt
+- color_mean:
+  - 0.001958983251824975
+  - 0.0019560481887310743
+  - 0.00196091178804636
+  color_std:
+  - 5.117645741847809e-06
+  - 5.116010470374022e-06
+  - 5.1262568376841955e-06
+  file_len: 61109
+  filepath: data/processed/stpls3d/train/point_cloud_35.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_35.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_35.txt
+- color_mean:
+  - 0.0019658240489661694
+  - 0.0019605476409196854
+  - 0.0019607485737651587
+  color_std:
+  - 5.146723196958192e-06
+  - 5.129919372848235e-06
+  - 5.124491508468054e-06
+  file_len: 87588
+  filepath: data/processed/stpls3d/train/point_cloud_36.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_36.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_36.txt
+- color_mean:
+  - 0.001966683426871896
+  - 0.0019712650682777166
+  - 0.0019496207823976874
+  color_std:
+  - 5.1493593673512805e-06
+  - 5.175088517717086e-06
+  - 5.08567154611228e-06
+  file_len: 40501
+  filepath: data/processed/stpls3d/train/point_cloud_37.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_37.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_37.txt
+- color_mean:
+  - 0.001961067086085677
+  - 0.001956124557182193
+  - 0.0019586868584156036
+  color_std:
+  - 5.123004029883305e-06
+  - 5.117859927850077e-06
+  - 5.113938641443383e-06
+  file_len: 30979
+  filepath: data/processed/stpls3d/train/point_cloud_38.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_38.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_38.txt
+- color_mean:
+  - 0.001964565832167864
+  - 0.001960937399417162
+  - 0.001970848301425576
+  color_std:
+  - 5.140057965036249e-06
+  - 5.1214383347542025e-06
+  - 5.164906724530738e-06
+  file_len: 110256
+  filepath: data/processed/stpls3d/train/point_cloud_39.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_39.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_39.txt
+- color_mean:
+  - 0.0019622212275862694
+  - 0.0019632354378700256
+  - 0.0019575427286326885
+  color_std:
+  - 5.130855242896359e-06
+  - 5.134902039571898e-06
+  - 5.117009550303919e-06
+  file_len: 66782
+  filepath: data/processed/stpls3d/train/point_cloud_40.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_40.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_40.txt
+- color_mean:
+  - 0.001955603249371052
+  - 0.0019571564625948668
+  - 0.001957865199074149
+  color_std:
+  - 5.1048446039203554e-06
+  - 5.107826382300118e-06
+  - 5.110350230097538e-06
+  file_len: 80445
+  filepath: data/processed/stpls3d/train/point_cloud_41.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_41.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_41.txt
+- color_mean:
+  - 0.0019612088799476624
+  - 0.0019615034107118845
+  - 0.0019665027502924204
+  color_std:
+  - 5.131641046318691e-06
+  - 5.124721155880252e-06
+  - 5.13656004841323e-06
+  file_len: 68344
+  filepath: data/processed/stpls3d/train/point_cloud_42.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_42.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_42.txt
+- color_mean:
+  - 0.0019600812811404467
+  - 0.0019549387507140636
+  - 0.0019643499981611967
+  color_std:
+  - 5.1264328249089886e-06
+  - 5.104004230815917e-06
+  - 5.130512363393791e-06
+  file_len: 32714
+  filepath: data/processed/stpls3d/train/point_cloud_43.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_43.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_43.txt
+- color_mean:
+  - 0.0019637474324554205
+  - 0.0019648545421659946
+  - 0.0019608200527727604
+  color_std:
+  - 5.141185738466447e-06
+  - 5.138958385941805e-06
+  - 5.125838015374029e-06
+  file_len: 101108
+  filepath: data/processed/stpls3d/train/point_cloud_44.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_44.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_44.txt
+- color_mean:
+  - 0.0019638000521808863
+  - 0.0019613744225353003
+  - 0.001960500841960311
+  color_std:
+  - 5.136476829648018e-06
+  - 5.121460617374396e-06
+  - 5.1224715207354166e-06
+  file_len: 105438
+  filepath: data/processed/stpls3d/train/point_cloud_45.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_45.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_45.txt
+- color_mean:
+  - 0.001964343013241887
+  - 0.0019617953803390265
+  - 0.0019636827055364847
+  color_std:
+  - 5.136690106155584e-06
+  - 5.127792519488139e-06
+  - 5.1413926485111006e-06
+  file_len: 84577
+  filepath: data/processed/stpls3d/train/point_cloud_46.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_46.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_46.txt
+- color_mean:
+  - 0.0019597001373767853
+  - 0.0019691933412104845
+  - 0.001964114373549819
+  color_std:
+  - 5.124844392412342e-06
+  - 5.159838565305108e-06
+  - 5.1363540478632785e-06
+  file_len: 71978
+  filepath: data/processed/stpls3d/train/point_cloud_47.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_47.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_47.txt
+- color_mean:
+  - 0.001963749760761857
+  - 0.0019576982595026493
+  - 0.001968417316675186
+  color_std:
+  - 5.14247994942707e-06
+  - 5.117762611916987e-06
+  - 5.1543097470130306e-06
+  file_len: 44334
+  filepath: data/processed/stpls3d/train/point_cloud_48.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_48.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_48.txt
+- color_mean:
+  - 0.0019592312164604664
+  - 0.001962884096428752
+  - 0.001959016313776374
+  color_std:
+  - 5.122105449117953e-06
+  - 5.132270416652318e-06
+  - 5.1188071665819734e-06
+  file_len: 98622
+  filepath: data/processed/stpls3d/train/point_cloud_49.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_49.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_49.txt
+- color_mean:
+  - 0.001963371178135276
+  - 0.00195612502284348
+  - 0.0019730152562260628
+  color_std:
+  - 5.140263056091499e-06
+  - 5.106744538352359e-06
+  - 5.178242645342834e-06
+  file_len: 71214
+  filepath: data/processed/stpls3d/train/point_cloud_50.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_50.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_50.txt
+- color_mean:
+  - 0.0019626161083579063
+  - 0.0019618638325482607
+  - 0.001963295741006732
+  color_std:
+  - 5.1334786803636234e-06
+  - 5.127409622218693e-06
+  - 5.138782853464363e-06
+  file_len: 78654
+  filepath: data/processed/stpls3d/train/point_cloud_51.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_51.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_51.txt
+- color_mean:
+  - 0.0019576679915189743
+  - 0.0019590244628489017
+  - 0.001962891314178705
+  color_std:
+  - 5.116978627484059e-06
+  - 5.1233691920060664e-06
+  - 5.137660991749726e-06
+  file_len: 101158
+  filepath: data/processed/stpls3d/train/point_cloud_52.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_52.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_52.txt
+- color_mean:
+  - 0.0019649998284876347
+  - 0.001952031860128045
+  - 0.0019654743373394012
+  color_std:
+  - 5.1438119044178165e-06
+  - 5.089530077384552e-06
+  - 5.146845069248229e-06
+  file_len: 45175
+  filepath: data/processed/stpls3d/train/point_cloud_53.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_53.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_53.txt
+- color_mean:
+  - 0.0019538989290595055
+  - 0.0019642794504761696
+  - 0.0019633392803370953
+  color_std:
+  - 5.1015072131122e-06
+  - 5.147202955413377e-06
+  - 5.137489097251091e-06
+  file_len: 94722
+  filepath: data/processed/stpls3d/train/point_cloud_54.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_54.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_54.txt
+- color_mean:
+  - 0.0019618708174675703
+  - 0.0019724227022379637
+  - 0.0019522113725543022
+  color_std:
+  - 5.129467808728805e-06
+  - 5.177426828595344e-06
+  - 5.092532319395104e-06
+  file_len: 41547
+  filepath: data/processed/stpls3d/train/point_cloud_55.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_55.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_55.txt
+- color_mean:
+  - 0.0019702021963894367
+  - 0.001963062910363078
+  - 0.0019609881564974785
+  color_std:
+  - 5.159893134987215e-06
+  - 5.137206699146191e-06
+  - 5.119546131027164e-06
+  file_len: 119249
+  filepath: data/processed/stpls3d/train/point_cloud_56.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_56.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_56.txt
+- color_mean:
+  - 0.0019561077933758497
+  - 0.0019675123039633036
+  - 0.001962139504030347
+  color_std:
+  - 5.103435341879958e-06
+  - 5.151200184627669e-06
+  - 5.1375918701523915e-06
+  file_len: 70358
+  filepath: data/processed/stpls3d/train/point_cloud_57.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_57.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_57.txt
+- color_mean:
+  - 0.0019648964516818523
+  - 0.0019480212358757854
+  - 0.0019605853594839573
+  color_std:
+  - 5.144410806678934e-06
+  - 5.082905772724189e-06
+  - 5.129523287905613e-06
+  file_len: 79448
+  filepath: data/processed/stpls3d/train/point_cloud_58.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_58.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_58.txt
+- color_mean:
+  - 0.001966335577890277
+  - 0.0019659018144011497
+  - 0.001960304332897067
+  color_std:
+  - 5.149454409547616e-06
+  - 5.145006070961244e-06
+  - 5.124338713358156e-06
+  file_len: 135661
+  filepath: data/processed/stpls3d/train/point_cloud_59.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_59.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_59.txt
+- color_mean:
+  - 0.0019619192462414503
+  - 0.0019537019543349743
+  - 0.001956523861736059
+  color_std:
+  - 5.138632786838571e-06
+  - 5.098715064377757e-06
+  - 5.108455752633745e-06
+  file_len: 111250
+  filepath: data/processed/stpls3d/train/point_cloud_60.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_60.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_60.txt
+- color_mean:
+  - 0.0019653451163321733
+  - 0.001956112449988723
+  - 0.00195510545745492
+  color_std:
+  - 5.14461407874478e-06
+  - 5.1067913773295e-06
+  - 5.105078798806062e-06
+  file_len: 55557
+  filepath: data/processed/stpls3d/train/point_cloud_61.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_61.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_61.txt
+- color_mean:
+  - 0.0019642573315650225
+  - 0.001963935326784849
+  - 0.0019556342158466578
+  color_std:
+  - 5.144159786141245e-06
+  - 5.140313533047447e-06
+  - 5.110989604872884e-06
+  file_len: 91079
+  filepath: data/processed/stpls3d/train/point_cloud_62.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_62.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_62.txt
+- color_mean:
+  - 0.001960987923666835
+  - 0.0019602382089942694
+  - 0.0019565036054700613
+  color_std:
+  - 5.133072136231931e-06
+  - 5.122265065438114e-06
+  - 5.105506716063246e-06
+  file_len: 125654
+  filepath: data/processed/stpls3d/train/point_cloud_63.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_63.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_63.txt
+- color_mean:
+  - 0.0019584917463362217
+  - 0.0019546595867723227
+  - 0.0019534507300704718
+  color_std:
+  - 5.113800852996064e-06
+  - 5.096957465866581e-06
+  - 5.09245319335605e-06
+  file_len: 30478
+  filepath: data/processed/stpls3d/train/point_cloud_64.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_64.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_64.txt
+- color_mean:
+  - 0.0019610938616096973
+  - 0.0019591401796787977
+  - 0.0019651574548333883
+  color_std:
+  - 5.127292297402164e-06
+  - 5.1141246331098955e-06
+  - 5.14418297825614e-06
+  file_len: 80904
+  filepath: data/processed/stpls3d/train/point_cloud_65.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_65.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_65.txt
+- color_mean:
+  - 0.0019593157339841127
+  - 0.001965999137610197
+  - 0.0019590258598327637
+  color_std:
+  - 5.109319317853078e-06
+  - 5.163419700693339e-06
+  - 5.1226720643171575e-06
+  file_len: 30086
+  filepath: data/processed/stpls3d/train/point_cloud_66.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_66.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_66.txt
+- color_mean:
+  - 0.0019628016743808985
+  - 0.001955074490979314
+  - 0.0019519045017659664
+  color_std:
+  - 5.14317753186333e-06
+  - 5.094668267702218e-06
+  - 5.088938451081049e-06
+  file_len: 42515
+  filepath: data/processed/stpls3d/train/point_cloud_67.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_67.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_67.txt
+- color_mean:
+  - 0.001957234460860491
+  - 0.0019663251005113125
+  - 0.001957360189408064
+  color_std:
+  - 5.109717221785104e-06
+  - 5.153892288944917e-06
+  - 5.112589860800654e-06
+  file_len: 67370
+  filepath: data/processed/stpls3d/train/point_cloud_68.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_68.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_68.txt
+- color_mean:
+  - 0.001960483379662037
+  - 0.001962129957973957
+  - 0.001959234708920121
+  color_std:
+  - 5.124372364662122e-06
+  - 5.1306706154718995e-06
+  - 5.1150700528523885e-06
+  file_len: 138316
+  filepath: data/processed/stpls3d/train/point_cloud_69.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_69.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_69.txt
+- color_mean:
+  - 0.001962382812052965
+  - 0.0019613963086158037
+  - 0.0019512941362336278
+  color_std:
+  - 5.133207196195144e-06
+  - 5.1362458179937676e-06
+  - 5.090833383292193e-06
+  file_len: 74559
+  filepath: data/processed/stpls3d/train/point_cloud_70.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_70.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_70.txt
+- color_mean:
+  - 0.001961606787517667
+  - 0.001956776948645711
+  - 0.0019627800211310387
+  color_std:
+  - 5.127293206896866e-06
+  - 5.1138804337824695e-06
+  - 5.13490795128746e-06
+  file_len: 115907
+  filepath: data/processed/stpls3d/train/point_cloud_71.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_71.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_71.txt
+- color_mean:
+  - 0.0019631606992334127
+  - 0.001970691839233041
+  - 0.00195517810061574
+  color_std:
+  - 5.135198534844676e-06
+  - 5.16417958351667e-06
+  - 5.109658104629489e-06
+  file_len: 53807
+  filepath: data/processed/stpls3d/train/point_cloud_72.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_72.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_72.txt
+- color_mean:
+  - 0.001963340677320957
+  - 0.0019592626485973597
+  - 0.0019683167338371277
+  color_std:
+  - 5.138153483130736e-06
+  - 5.1192191676818766e-06
+  - 5.158136900718091e-06
+  file_len: 165616
+  filepath: data/processed/stpls3d/train/point_cloud_73.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_73.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_73.txt
+- color_mean:
+  - 0.001957085682079196
+  - 0.001966287847608328
+  - 0.0019534400198608637
+  color_std:
+  - 5.09946585225407e-06
+  - 5.149637672730023e-06
+  - 5.102690465719206e-06
+  file_len: 39285
+  filepath: data/processed/stpls3d/train/point_cloud_74.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_74.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_74.txt
+- color_mean:
+  - 0.0019552449230104685
+  - 0.0019624526612460613
+  - 0.0019644955173134804
+  color_std:
+  - 5.106390744913369e-06
+  - 5.135330411576433e-06
+  - 5.142102509125834e-06
+  file_len: 116998
+  filepath: data/processed/stpls3d/train/point_cloud_75.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_75.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_75.txt
+- color_mean:
+  - 0.0019786530174314976
+  - 0.001965839648619294
+  - 0.001967799849808216
+  color_std:
+  - 5.196391157369362e-06
+  - 5.159918146091513e-06
+  - 5.156451607035706e-06
+  file_len: 29259
+  filepath: data/processed/stpls3d/train/point_cloud_76.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_76.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_76.txt
+- color_mean:
+  - 0.0019555180333554745
+  - 0.001965487841516733
+  - 0.0019619062077254057
+  color_std:
+  - 5.110240635985974e-06
+  - 5.138972483109683e-06
+  - 5.13195845996961e-06
+  file_len: 64173
+  filepath: data/processed/stpls3d/train/point_cloud_77.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_77.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_77.txt
+- color_mean:
+  - 0.001962254522368312
+  - 0.0019578184001147747
+  - 0.0019649213645607233
+  color_std:
+  - 5.132053047418594e-06
+  - 5.109068297315389e-06
+  - 5.144592705619289e-06
+  file_len: 110661
+  filepath: data/processed/stpls3d/train/point_cloud_78.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_78.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_78.txt
+- color_mean:
+  - 0.0019628277514129877
+  - 0.001958527835085988
+  - 0.0019615304190665483
+  color_std:
+  - 5.135950232215691e-06
+  - 5.113591214467306e-06
+  - 5.128966677148128e-06
+  file_len: 134864
+  filepath: data/processed/stpls3d/train/point_cloud_79.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_79.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_79.txt
+- color_mean:
+  - 0.001960291061550379
+  - 0.0019670757465064526
+  - 0.001964292488992214
+  color_std:
+  - 5.1240376706118695e-06
+  - 5.147114734427305e-06
+  - 5.137345851835562e-06
+  file_len: 80355
+  filepath: data/processed/stpls3d/train/point_cloud_80.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_80.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_80.txt
+- color_mean:
+  - 0.001957378350198269
+  - 0.0019578447099775076
+  - 0.001964929513633251
+  color_std:
+  - 5.112360213388456e-06
+  - 5.1176853048673365e-06
+  - 5.136254912940785e-06
+  file_len: 101320
+  filepath: data/processed/stpls3d/train/point_cloud_81.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_81.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_81.txt
+- color_mean:
+  - 0.001962026348337531
+  - 0.0019635213539004326
+  - 0.001966067822650075
+  color_std:
+  - 5.131422312842915e-06
+  - 5.1347478802199475e-06
+  - 5.146811417944264e-06
+  file_len: 102178
+  filepath: data/processed/stpls3d/train/point_cloud_82.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_82.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_82.txt
+- color_mean:
+  - 0.001957106636837125
+  - 0.0019556863699108362
+  - 0.0019614689517766237
+  color_std:
+  - 5.109955509396968e-06
+  - 5.1049005378445145e-06
+  - 5.136997970112134e-06
+  file_len: 167276
+  filepath: data/processed/stpls3d/train/point_cloud_83.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_83.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_83.txt
+- color_mean:
+  - 0.001963670365512371
+  - 0.001962206093594432
+  - 0.0019571937154978514
+  color_std:
+  - 5.136256277182838e-06
+  - 5.129717010277091e-06
+  - 5.111503924126737e-06
+  file_len: 128990
+  filepath: data/processed/stpls3d/train/point_cloud_84.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_84.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_84.txt
+- color_mean:
+  - 0.001961128320544958
+  - 0.0019607609137892723
+  - 0.0019611981697380543
+  color_std:
+  - 5.121571120980661e-06
+  - 5.126059477333911e-06
+  - 5.127296390128322e-06
+  file_len: 95098
+  filepath: data/processed/stpls3d/train/point_cloud_85.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_85.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_85.txt
+- color_mean:
+  - 0.00195945892482996
+  - 0.0019618128426373005
+  - 0.001963983755558729
+  color_std:
+  - 5.1154065658920445e-06
+  - 5.12892665938125e-06
+  - 5.141994279256323e-06
+  file_len: 148198
+  filepath: data/processed/stpls3d/train/point_cloud_86.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_86.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_86.txt
+- color_mean:
+  - 0.001960255205631256
+  - 0.001961122965440154
+  - 0.0019560069777071476
+  color_std:
+  - 5.118904937262414e-06
+  - 5.129252258484485e-06
+  - 5.106303433421999e-06
+  file_len: 91264
+  filepath: data/processed/stpls3d/train/point_cloud_87.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_87.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_87.txt
+- color_mean:
+  - 0.0019644172862172127
+  - 0.0019559862557798624
+  - 0.0019536716863512993
+  color_std:
+  - 5.146289822732797e-06
+  - 5.105299351271242e-06
+  - 5.094664629723411e-06
+  file_len: 42264
+  filepath: data/processed/stpls3d/train/point_cloud_88.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_88.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_88.txt
+- color_mean:
+  - 0.0019669197499752045
+  - 0.0019657353404909372
+  - 0.0019570286385715008
+  color_std:
+  - 5.157441137271235e-06
+  - 5.145648628968047e-06
+  - 5.11054122398491e-06
+  file_len: 92935
+  filepath: data/processed/stpls3d/train/point_cloud_89.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_89.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_89.txt
+- color_mean:
+  - 0.0019571513403207064
+  - 0.001967695541679859
+  - 0.001957688247784972
+  color_std:
+  - 5.10826339450432e-06
+  - 5.15617148266756e-06
+  - 5.118335593579104e-06
+  file_len: 127097
+  filepath: data/processed/stpls3d/train/point_cloud_90.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_90.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_90.txt
+- color_mean:
+  - 0.0019558463245630264
+  - 0.0019660138059407473
+  - 0.001963425660505891
+  color_std:
+  - 5.108485765958903e-06
+  - 5.153800429980038e-06
+  - 5.1362540034460835e-06
+  file_len: 87320
+  filepath: data/processed/stpls3d/train/point_cloud_91.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_91.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_91.txt
+- color_mean:
+  - 0.0019664389546960592
+  - 0.0019608149304986
+  - 0.0019604985136538744
+  color_std:
+  - 5.144173428561771e-06
+  - 5.127871645527193e-06
+  - 5.134080765856197e-06
+  file_len: 49446
+  filepath: data/processed/stpls3d/train/point_cloud_92.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_92.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_92.txt
+- color_mean:
+  - 0.001959726447239518
+  - 0.001955390442162752
+  - 0.0019612975884228945
+  color_std:
+  - 5.1190713747928385e-06
+  - 5.1045681175310165e-06
+  - 5.1314518714207225e-06
+  file_len: 170196
+  filepath: data/processed/stpls3d/train/point_cloud_93.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_93.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_93.txt
+- color_mean:
+  - 0.0019602335523813963
+  - 0.001959462184458971
+  - 0.0019588940776884556
+  color_std:
+  - 5.130216777615715e-06
+  - 5.119426987221232e-06
+  - 5.116053216625005e-06
+  file_len: 110503
+  filepath: data/processed/stpls3d/train/point_cloud_94.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_94.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_94.txt
+- color_mean:
+  - 0.0019545427057892084
+  - 0.001959779765456915
+  - 0.0019629369489848614
+  color_std:
+  - 5.1078882279398385e-06
+  - 5.123969003761886e-06
+  - 5.137830612511607e-06
+  file_len: 100229
+  filepath: data/processed/stpls3d/train/point_cloud_95.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_95.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_95.txt
+- color_mean:
+  - 0.0019633423071354628
+  - 0.0019615949131548405
+  - 0.0019526074174791574
+  color_std:
+  - 5.131561010784935e-06
+  - 5.127012173034018e-06
+  - 5.093681011203444e-06
+  file_len: 134965
+  filepath: data/processed/stpls3d/train/point_cloud_96.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_96.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_96.txt
+- color_mean:
+  - 0.001957809552550316
+  - 0.0019496885361149907
+  - 0.0019488957477733493
+  color_std:
+  - 5.113980932947015e-06
+  - 5.081758899905253e-06
+  - 5.0802077566913795e-06
+  file_len: 43244
+  filepath: data/processed/stpls3d/train/point_cloud_97.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_97.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_97.txt
+- color_mean:
+  - 0.001960412133485079
+  - 0.0019587860442698
+  - 0.001962466863915324
+  color_std:
+  - 5.127034455654211e-06
+  - 5.129276360094082e-06
+  - 5.127571967022959e-06
+  file_len: 46467
+  filepath: data/processed/stpls3d/train/point_cloud_98.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_98.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_98.txt
+- color_mean:
+  - 0.001965316478163004
+  - 0.0019491043640300632
+  - 0.0019629511516541243
+  color_std:
+  - 5.143786438566167e-06
+  - 5.077241439721547e-06
+  - 5.138459073350532e-06
+  file_len: 51135
+  filepath: data/processed/stpls3d/train/point_cloud_99.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/point_cloud_99.txt
+  raw_segmentation_filepath: ''
+  scene: point_cloud_99.txt
+- color_mean:
+  - 0.001961341593414545
+  - 0.0019581157248467207
+  - 0.001960083143785596
+  color_std:
+  - 5.116246938996483e-06
+  - 5.1060737860098016e-06
+  - 5.126062660565367e-06
+  file_len: 38135
+  filepath: data/processed/stpls3d/train/surface_points.npy
+  raw_filepath: data/raw/thaumatoanakalyptor/train/surface_points.txt
+  raw_segmentation_filepath: ''
+  scene: surface_points.txt
