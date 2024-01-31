@@ -207,7 +207,8 @@ def generate_grid_blocks(directory_path, block_size):
              for bz in range(blocks_in_z) for by in range(blocks_in_y) for bx in range(blocks_in_x)]
 
     # multiprocessing
-    with Pool(processes=cpu_count()) as pool:
+    num_pools = max(1, cpu_count() // 3)
+    with Pool(processes=num_pools) as pool:
         for _ in tqdm(pool.imap_unordered(process_block, tasks), total=len(tasks)):
             pass
 
