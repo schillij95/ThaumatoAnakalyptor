@@ -107,53 +107,116 @@ def downsample_folder_tifs(input_directory, output_directory, downsample_factor=
 
     print('Downsampling complete.')
 
+# def generate_grid_blocks(directory_path, block_size):
+#     block_directory = directory_path + '_grids'
+#     os.makedirs(block_directory, exist_ok=True)
+
+#     # Get all the .tif files sorted by name (assuming this sorts them by the z-axis correctly)
+#     tif_files = sorted([f for f in os.listdir(directory_path) if f.endswith('.tif')])
+
+#     # Calculate how many blocks will fit along each axis
+#     # This assumes all tif files are the same shape.
+#     sample_image = tifffile.imread(os.path.join(directory_path, tif_files[0]))
+#     nz = len(tif_files)
+#     ny, nx = sample_image.shape
+#     blocks_in_x = int(np.ceil(nx / block_size))
+#     blocks_in_y = int(np.ceil(ny / block_size))
+#     blocks_in_z = int(np.ceil(nz / block_size))
+
+#     # Initialize an empty array to store one block of the 3D data
+#     block = np.zeros((block_size, block_size, block_size), dtype=sample_image.dtype)
+
+#     # Iterate through each block in z, y, x order
+#     for bz in tqdm(range(blocks_in_z)):
+#         print()
+#         for by in tqdm(range(blocks_in_y)):
+#             print()
+#             for bx in tqdm(range(blocks_in_x)):
+#                 # Construct each block
+#                 block.fill(0) # Reset the block to all zeros
+#                 for z in range(block_size):
+#                     z_index = bz * block_size + z
+#                     if z_index >= nz:
+#                         break
+#                     image_path = os.path.join(directory_path, tif_files[z_index])
+#                     image_slice = tifffile.imread(image_path)
+#                     # The y and x indices need to be offset by the block index times the block size
+#                     y_slice = slice(by * block_size, min((by + 1) * block_size, image_slice.shape[0]))
+#                     x_slice = slice(bx * block_size, min((bx + 1) * block_size, image_slice.shape[1]))
+#                     block_y_slice = slice(0, y_slice.stop - y_slice.start)
+#                     block_x_slice = slice(0, x_slice.stop - x_slice.start)
+#                     block[z, block_y_slice, block_x_slice] = image_slice[y_slice, x_slice]
+
+#                 # Save the block to a 3D tif file
+#                 # The filename indicates the block indices, which are 1-indexed for Julia
+#                 block_filename = f"cell_yxz_{by+1:03}_{bx+1:03}_{bz+1:03}.tif"
+#                 block_path = os.path.join(block_directory, block_filename)
+#                 tifffile.imwrite(block_path, block)
+
+#     print('Grid blocks have been generated.')
+
+def process_block(args):
+    bz, by, bx, directory_path, block_size, nz, ny, nx, tif_files, standard_size = args
+    block_directory = directory_path + '_grids'
+    block = np.zeros((block_size, block_size, block_size), dtype=np.uint16)
+    block_filename = f"cell_yxz_{by+1:03}_{bx+1:03}_{bz+1:03}.tif"
+    block_path = os.path.join(block_directory, block_filename)
+
+    print(f"Processing block {block_path}")
+    if os.path.exists(block_path) and os.path.getsize(block_path) == standard_size:
+        print(f"'{block_filename}' already exists in the output directory. Skipping.")
+        return  # Skip if file exists and size matches
+    elif os.path.exists(block_path):
+        print(f"Warning: '{block_filename}' exists but has the wrong size. Overwriting. {os.path.getsize(block_path)} != {block_size**3 * np.uint16().itemsize}")
+
+    for z in range(block_size):
+        z_index = bz * block_size + z
+        if z_index >= nz:
+            break
+        image_path = os.path.join(directory_path, tif_files[z_index])
+        image_slice = tifffile.imread(image_path)
+        y_slice, x_slice = (slice(b * block_size, min((b + 1) * block_size, d)) for b, d in ((by, ny), (bx, nx)))
+        block[z, :y_slice.stop - y_slice.start, :x_slice.stop - x_slice.start] = image_slice[y_slice, x_slice]
+
+    tifffile.imwrite(block_path, block)
+
 def generate_grid_blocks(directory_path, block_size):
     block_directory = directory_path + '_grids'
     os.makedirs(block_directory, exist_ok=True)
-
-    # Get all the .tif files sorted by name (assuming this sorts them by the z-axis correctly)
     tif_files = sorted([f for f in os.listdir(directory_path) if f.endswith('.tif')])
 
-    # Calculate how many blocks will fit along each axis
-    # This assumes all tif files are the same shape.
     sample_image = tifffile.imread(os.path.join(directory_path, tif_files[0]))
-    nz = len(tif_files)
-    ny, nx = sample_image.shape
-    blocks_in_x = int(np.ceil(nx / block_size))
-    blocks_in_y = int(np.ceil(ny / block_size))
-    blocks_in_z = int(np.ceil(nz / block_size))
+    nz, ny, nx = len(tif_files), *sample_image.shape
+    blocks_in_x, blocks_in_y, blocks_in_z = (int(np.ceil(d / block_size)) for d in (nx, ny, nz))
 
-    # Initialize an empty array to store one block of the 3D data
-    block = np.zeros((block_size, block_size, block_size), dtype=sample_image.dtype)
+    # Get standard_size. is -1 if not at least two cells exist and first two not having the same size
+    standard_size = -1
+    # get grid cells
+    grid_cells = [f for f in os.listdir(directory_path + '_grids') if f.endswith('.tif') and f.startswith('cell_yxz_')]
+    if len(grid_cells) >= 2:
+        # get first two grid cells
+        grid_cell_1 = tifffile.imread(os.path.join(directory_path + '_grids', grid_cells[0]))
+        grid_cell_1_size = os.path.getsize(os.path.join(directory_path + '_grids', grid_cells[0]))
+        grid_cell_2 = tifffile.imread(os.path.join(directory_path + '_grids', grid_cells[1]))
+        grid_cell_2_size = os.path.getsize(os.path.join(directory_path + '_grids', grid_cells[1]))
+        if grid_cell_1.shape == grid_cell_2.shape and grid_cell_1_size == grid_cell_2_size:
+            standard_size = grid_cell_1_size
+            print(f"Found standard size: {standard_size}")
 
-    # Iterate through each block in z, y, x order
-    for bz in tqdm(range(blocks_in_z)):
-        print()
-        for by in tqdm(range(blocks_in_y)):
-            print()
-            for bx in tqdm(range(blocks_in_x)):
-                # Construct each block
-                block.fill(0) # Reset the block to all zeros
-                for z in range(block_size):
-                    z_index = bz * block_size + z
-                    if z_index >= nz:
-                        break
-                    image_path = os.path.join(directory_path, tif_files[z_index])
-                    image_slice = tifffile.imread(image_path)
-                    # The y and x indices need to be offset by the block index times the block size
-                    y_slice = slice(by * block_size, min((by + 1) * block_size, image_slice.shape[0]))
-                    x_slice = slice(bx * block_size, min((bx + 1) * block_size, image_slice.shape[1]))
-                    block_y_slice = slice(0, y_slice.stop - y_slice.start)
-                    block_x_slice = slice(0, x_slice.stop - x_slice.start)
-                    block[z, block_y_slice, block_x_slice] = image_slice[y_slice, x_slice]
+    tasks = [(bz, by, bx, directory_path, block_size, nz, ny, nx, tif_files, standard_size) 
+             for bz in range(blocks_in_z) for by in range(blocks_in_y) for bx in range(blocks_in_x)]
 
-                # Save the block to a 3D tif file
-                # The filename indicates the block indices, which are 1-indexed for Julia
-                block_filename = f"cell_yxz_{by+1:03}_{bx+1:03}_{bz+1:03}.tif"
-                block_path = os.path.join(block_directory, block_filename)
-                tifffile.imwrite(block_path, block)
+    # multiprocessing
+    with Pool(processes=cpu_count()) as pool:
+        for _ in tqdm(pool.imap_unordered(process_block, tasks), total=len(tasks)):
+            pass
 
-    print('Grid blocks have been generated.')   
+    # # singlethreaded
+    # print("going singlethreaded")
+    # for task in tqdm(tasks):
+    #     process_block(task)
+
+    print('Grid blocks have been generated.')
 
 def fix_zyx(original_directory, new_directory):
     # Create new directory if it does not exist

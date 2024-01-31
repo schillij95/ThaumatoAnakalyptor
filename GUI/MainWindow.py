@@ -197,17 +197,33 @@ class ThaumatoAnakalyptor(QMainWindow):
         print("Computation completed.")
 
     def computeGridCells(self):
-        self.process = multiprocessing.Process(target=self.gridCellsComputation, args=(self.Config,))
-        self.process.start()
+        command = [
+                "python3", "-m", "ThaumatoAnakalyptor.generate_half_sized_grid", 
+                "--input_directory", str(self.Config["original_2d_tiffs"]), 
+                "--output_directory", str(self.Config["downsampled_2d_tiffs"]), 
+                "--downsample_factor", str(self.Config["downsample_factor"])
+            ]
+
+        self.process = subprocess.Popen(command)
+
+        # self.process = multiprocessing.Process(target=self.gridCellsComputation, args=(self.Config,))
+        # self.process.start()
         self.computeGridCellsButton.setEnabled(False)
         self.stopGridCellsButton.setEnabled(True)
 
     def stopGridCells(self):
-        if self.process and self.process.is_alive():
-            os.kill(self.process.pid, signal.SIGTERM)
-            self.process.join()
+        if self.process and self.process.poll() is None:  # Check if process is running
+            self.process.terminate()  # or self.process.kill() for a more forceful termination
+            self.process = None
+
+        # if self.process and self.process.is_alive():
+        #     os.kill(self.process.pid, signal.SIGTERM)
+        #     self.process.join()
         self.computeGridCellsButton.setEnabled(True)
         self.stopGridCellsButton.setEnabled(False)
+
+        # Clean up computation after completion
+        self.postComputation()
         print("Computation process stopped.")
 
     def addPointcloudArea(self, box):
