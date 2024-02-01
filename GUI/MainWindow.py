@@ -521,7 +521,8 @@ class ThaumatoAnakalyptor(QMainWindow):
 
     def computeMeshing(self):
         try:
-            path_base = os.path.join(self.Config["surface_points_path"], f"{self.starting_point[0]}_{self.starting_point[1]}_{self.starting_point[2]}/")
+            starting_point = [self.xField.text(), self.yField.text(), self.zField.text()]
+            path_base = os.path.join(self.Config["surface_points_path"], f"{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/")
             print(f"path_base: {path_base}")
 
             command = [
@@ -565,7 +566,8 @@ class ThaumatoAnakalyptor(QMainWindow):
 
     def computeFlattening(self):
         try:
-            path = os.path.join(self.Config["surface_points_path"], f"{self.starting_point[0]}_{self.starting_point[1]}_{self.starting_point[2]}", "point_cloud_colorized_verso_subvolume_blocks.obj")
+            starting_point = [self.xField.text(), self.yField.text(), self.zField.text()]
+            path = os.path.join(self.Config["surface_points_path"], f"{starting_point[0]}_{starting_point[1]}_{starting_point[2]}", "point_cloud_colorized_verso_subvolume_blocks.obj")
 
             command = [
                 "python3", "-m", "ThaumatoAnakalyptor.mesh_to_uv", 
@@ -607,7 +609,8 @@ class ThaumatoAnakalyptor(QMainWindow):
 
     def computeFinalize(self):
         try:
-            input_mesh = os.path.join(self.Config["surface_points_path"], f"{self.starting_point[0]}_{self.starting_point[1]}_{self.starting_point[2]}", "point_cloud_colorized_verso_subvolume_blocks_uv.obj")
+            starting_point = [self.xField.text(), self.yField.text(), self.zField.text()]
+            input_mesh = os.path.join(self.Config["surface_points_path"], f"{starting_point[0]}_{starting_point[1]}_{starting_point[2]}", "point_cloud_colorized_verso_subvolume_blocks_uv.obj")
             command = [
                 "python3", "-m", "ThaumatoAnakalyptor.finalize_mesh", 
                 "--input_mesh", input_mesh, 
