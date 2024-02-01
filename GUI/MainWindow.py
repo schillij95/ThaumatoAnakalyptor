@@ -2,9 +2,11 @@
 
 from PyQt5.QtWidgets import (QMainWindow, QAction, QSplitter, QVBoxLayout, 
                              QWidget, QPushButton, QLabel, QFrame,
-                             QFileDialog, QLineEdit, QCheckBox, QMessageBox, QStyle, QVBoxLayout, QScrollArea, QHBoxLayout)
+                             QFileDialog, QLineEdit, QCheckBox, QMessageBox, QStyle, QVBoxLayout, QScrollArea, QHBoxLayout, QGraphicsScene, QGraphicsView)
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QPixmap
+from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen, QBrush
+
+from PIL import Image
 
 # Custom GUI Elements
 from .CollapsibleBox import CollapsibleBox
@@ -27,12 +29,28 @@ import signal
 from ThaumatoAnakalyptor.generate_half_sized_grid import compute as compute_grid_cells
 from ThaumatoAnakalyptor.grid_to_pointcloud import compute as compute_pointcloud
 
+class GraphicsView(QGraphicsView):
+    def __init__(self, scene, parent=None):
+        super().__init__(scene, parent)
+
+    def wheelEvent(self, event):
+        if not event.modifiers() == Qt.ControlModifier:
+            # send to parent if Ctrl is not pressed
+            super().wheelEvent(event)
+            return
+        # Ctrl + Wheel to zoom
+        factor = 1.1  # Zoom factor
+        if event.angleDelta().y() > 0:
+            self.scale(factor, factor)
+        else:
+            self.scale(1 / factor, 1 / factor)
+
 
 class ThaumatoAnakalyptor(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.initUI()
         self.loadConfig()
+        self.initUI()
         self.process = None
         self.isSelectingStartingPoint = False
 
@@ -54,9 +72,28 @@ class ThaumatoAnakalyptor(QMainWindow):
         # Left Panel for Image
         left_panel = QLabel()
         left_panel.setFrameStyle(QFrame.StyledPanel)
-        pixmap = QPixmap(400, 400)
-        pixmap.fill(Qt.white)  # White background
-        left_panel.setPixmap(pixmap)
+        # pixmap = QPixmap(400, 400)
+        # pixmap.fill(Qt.white)  # White background
+        # left_panel.setPixmap(pixmap)
+
+        # Check and load TIFF files
+        self.tifImages = self.loadTifImages(self.Config.get("downsampled_2d_tiffs", ""))
+        self.currentTifIndex = 0
+
+        # Setup left panel with QGraphicsView
+        self.tifScene = QGraphicsScene(self)
+        self.tifView = GraphicsView(self.tifScene)
+        self.tifView.setRenderHint(QPainter.Antialiasing)
+        # self.tifView.mousePressEvent = self.onTifMousePress
+
+        left_panel_layout = QVBoxLayout()
+        left_panel_layout.addWidget(self.tifView)
+        self.setupTifNavigation(left_panel_layout)
+
+        left_panel.setLayout(left_panel_layout)
+
+        # Load the first TIFF image
+        self.loadTifImage(self.currentTifIndex)
 
         # Right Panel setup with a Scroll Area
         right_panel_scroll_area = QScrollArea()  # Create a QScrollArea
@@ -79,6 +116,86 @@ class ThaumatoAnakalyptor(QMainWindow):
 
         # Trigger click on Config
         config.triggered.connect(self.openConfigWindow)
+
+
+    def loadTifImages(self, path):
+        if path and os.path.exists(path):
+            return sorted([f for f in os.listdir(path) if f.endswith('.tif')])
+        return []
+
+    def setupTifNavigation(self, layout):
+        navigationLayout = QHBoxLayout()
+
+        # Add stretch to align content to the right
+        navigationLayout.addStretch()
+
+        # Step Size
+        navigationLayout.addWidget(QLabel("Step Size:"))
+        self.stepSizeBox = QLineEdit("100")
+        self.stepSizeBox.setFixedWidth(50)  # Adjust width as needed
+        navigationLayout.addWidget(self.stepSizeBox)
+
+        # Index
+        navigationLayout.addWidget(QLabel("Index:"))
+        self.indexBox = QLineEdit("0")
+        self.indexBox.setFixedWidth(50)  # Adjust width as needed
+        self.indexBox.returnPressed.connect(self.jumpToTifIndex)
+        navigationLayout.addWidget(self.indexBox)
+
+        # Add the navigation layout to the main layout
+        layout.addLayout(navigationLayout)
+
+    def loadTifImage(self, index):
+        if 0 <= index < len(self.tifImages):
+            imagePath = os.path.join(self.Config.get("downsampled_2d_tiffs", ""), self.tifImages[index])
+            # self.fileNameLabel.setText("File: " + self.tifImages[index])
+            image = Image.open(imagePath)
+
+            self.image_width = image.size[0]
+            self.image_height = image.size[1]
+
+            # Convert to 8-bit grayscale
+            image8bit = image.point(lambda i: i * (1./256)).convert('L')
+            qimage = QImage(image8bit.tobytes(), image8bit.size[0], image8bit.size[1], QImage.Format_Grayscale8)
+            pixmap = QPixmap.fromImage(qimage)
+
+            # Clear the previous items in the scene
+            self.tifScene.clear()
+
+            # Add new pixmap item to the scene
+            self.tifScene.addPixmap(pixmap)
+            # self.view.fitInView(self.scene.itemsBoundingRect(), Qt.KeepAspectRatio)
+
+            # Set the index box text
+            self.indexBox.setText(str(index))
+
+            # Draw a red point if it exists for this image
+            # if index in self.points:
+            #     x, y = self.points[index]
+            #     # Convert to scene coordinates
+            #     sceneX = x / self.image_width * self.image_width
+            #     sceneY = y / self.image_height * self.image_height
+            #     # Size of point unchanged in display no matter the zoom
+            #     size_display = 10
+            #     # Size of point in image coordinates
+            #     size_image = size_display / self.view.transform().m11()
+            #     self.tifScene.addEllipse(sceneX, sceneY, size_image, size_image, QPen(Qt.red), QBrush(Qt.red))
+        else:
+            print(f"Index {index} out of range")
+            # white placeholder image
+            pixmap = QPixmap(400, 400)
+            pixmap.fill(Qt.white)  # White background
+            self.tifScene.clear()
+            self.tifScene.addPixmap(pixmap)
+
+
+    def jumpToTifIndex(self):
+        index = int(self.indexBox.text())
+        self.loadTifImage(index)
+
+    def onTifMousePress(self, event):
+        scenePos = self.tifView.mapToScene(event.pos())
+        print(f"Clicked position in image coordinates: ({int(scenePos.x())}, {int(scenePos.y())})")
 
     def openConfigWindow(self):
         self.configWindow = ConfigWindow(self)

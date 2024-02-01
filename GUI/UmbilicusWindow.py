@@ -13,6 +13,11 @@ class GraphicsView(QGraphicsView):
         super().__init__(scene, parent)
 
     def wheelEvent(self, event):
+        if not event.modifiers() == Qt.ControlModifier:
+            # send to parent if Ctrl is not pressed
+            super().wheelEvent(event)
+            return
+        # Ctrl + Wheel to zoom
         factor = 1.1  # Zoom factor
         if event.angleDelta().y() > 0:
             self.scale(factor, factor)
