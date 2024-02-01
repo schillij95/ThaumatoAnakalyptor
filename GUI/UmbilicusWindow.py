@@ -82,7 +82,8 @@ class UmbilicusWindow(QMainWindow):
 
     def showHelp(self):
         helpText = "ThaumatoAnakalyptor Help\n\n" \
-                   "Place the umbilicus points in the center of the scroll and when done press 'Save'.\n" \
+                   "If you already have an umbilicus generated, load it with 'Load'. \n" \
+                   "Place the umbilicus points in the center of the scroll and when done press 'Save' before closing the window.\n\n" \
                    "There are the following shortcuts:\n\n" \
                    "- Use 'A' and 'D' to switch between TIFF layers.\n" \
                    "- Click on the TIFF to place a point.\n" \
@@ -119,7 +120,11 @@ class UmbilicusWindow(QMainWindow):
                 # Convert to scene coordinates
                 sceneX = x / self.image_width * self.image_width
                 sceneY = y / self.image_height * self.image_height
-                self.scene.addEllipse(sceneX, sceneY, 10, 10, QPen(Qt.red), QBrush(Qt.red))
+                # Size of point unchanged in display no matter the zoom
+                size_display = 10
+                # Size of point in image coordinates
+                size_image = size_display / self.view.transform().m11()
+                self.scene.addEllipse(sceneX, sceneY, size_image, size_image, QPen(Qt.red), QBrush(Qt.red))
 
     def jumpToIndex(self):
         index = int(self.indexBox.text())

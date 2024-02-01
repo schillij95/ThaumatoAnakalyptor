@@ -2,7 +2,7 @@
 
 from PyQt5.QtWidgets import (QMainWindow, QAction, QSplitter, QVBoxLayout, 
                              QWidget, QPushButton, QLabel, QFrame,
-                             QFileDialog, QLineEdit, QCheckBox, QMessageBox, QStyle, QVBoxLayout)
+                             QFileDialog, QLineEdit, QCheckBox, QMessageBox, QStyle, QVBoxLayout, QScrollArea, QHBoxLayout)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap
 
@@ -57,10 +57,13 @@ class ThaumatoAnakalyptor(QMainWindow):
         pixmap.fill(Qt.white)  # White background
         left_panel.setPixmap(pixmap)
 
-        # Right Panel with sections
-        right_panel = QWidget()
-        right_layout = QVBoxLayout()
+        # Right Panel setup with a Scroll Area
+        right_panel_scroll_area = QScrollArea()  # Create a QScrollArea
+        right_panel_scroll_area.setWidgetResizable(True)  # Make the scroll area resizable
+        right_panel = QWidget()  # This will be the scrollable content
+        right_layout = QVBoxLayout(right_panel)  # Use right_panel as the parent for the layout
         right_layout.setAlignment(Qt.AlignTop)  # Align sections at the top
+        right_panel_scroll_area.setWidget(right_panel)  # Set the widget you want to scroll
 
         # Collapsible Sections
         self.addVolumeProcessing(right_layout)
@@ -71,7 +74,7 @@ class ThaumatoAnakalyptor(QMainWindow):
 
         # Add widgets to splitter
         splitter.addWidget(left_panel)
-        splitter.addWidget(right_panel)
+        splitter.addWidget(right_panel_scroll_area)
 
         # Trigger click on Config
         config.triggered.connect(self.openConfigWindow)
@@ -160,11 +163,12 @@ class ThaumatoAnakalyptor(QMainWindow):
 
     def showUmbilicusInfo(self):
         QMessageBox.information(self, "Umbilicus Information",
-                                "Make sure to have the appropriate paths set in the Config. Place the umbilicus in the center of the scroll.")
+                                "If you already have an umbilicus generated, load it with 'Load'. Place the umbilicus points in the center of the scroll. Save your work with 'Save' before closing. Make sure to have the appropriate paths set in the Config.")
 
     def openUmbilicusWindow(self):
         if self.Config.get("downsampled_2d_tiffs", None) and os.path.exists(self.Config["downsampled_2d_tiffs"]):
             self.umbilicusWindow = UmbilicusWindow(self.Config["downsampled_2d_tiffs"])
+            self.umbilicusWindow.resize(self.width(), self.height())  # Adjust width and height as needed
             self.umbilicusWindow.show()
 
     def addGenerateGridCellsArea(self, box):
@@ -349,33 +353,47 @@ class ThaumatoAnakalyptor(QMainWindow):
 
         layout.addWidget(volumeBox)
 
+    def addFieldWithLabel(self, box, labelText, placeholderText, fieldAttribute):
+        # Create a widget to hold the label and field, ensuring proper layout within the collapsible box
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        
+        # Create and add the label
+        label = QLabel(labelText)
+        layout.addWidget(label)
+        
+        # Create, configure, and add the field
+        field = QLineEdit()
+        field.setPlaceholderText(placeholderText)
+        layout.addWidget(field)
+        
+        # Add the composite widget to the box
+        box.add_widget(widget)
+        
+        # Store a reference to the field using setattr for future access
+        setattr(self, fieldAttribute, field)
+
     def addStitchSheetArea(self, box):
         label = QLabel("Stitch Sheet")
         # Starting Point button
         self.startingPointField = QPushButton("Select Starting Point")
         self.startingPointField.clicked.connect(lambda: self.selectPath(self.startingPointField)) # TODO
         self.starting_point = [0, 0, 0]
-        # Sheet k range fields
-        self.sheetKRangeStartField = QLineEdit()
-        self.sheetKRangeStartField.setPlaceholderText("Sheet K Range Start")
-        self.sheetKRangeEndField = QLineEdit()
-        self.sheetKRangeEndField.setPlaceholderText("Sheet K Range End")
 
-        # Sheet z range fields
-        self.sheetZRangeStartField = QLineEdit()
-        self.sheetZRangeStartField.setPlaceholderText("Sheet Z Range Start")
-        self.sheetZRangeEndField = QLineEdit()
-        self.sheetZRangeEndField.setPlaceholderText("Sheet Z Range End")
+        # Sheet K range fields
+        self.addFieldWithLabel(box, "Sheet K Range Start:", "Enter start for K range", "sheetKRangeStartField")
+        self.addFieldWithLabel(box, "Sheet K Range End:", "Enter end for K range", "sheetKRangeEndField")
+
+        # Sheet Z range fields
+        self.addFieldWithLabel(box, "Sheet Z Range Start:", "Enter start for Z range", "sheetZRangeStartField")
+        self.addFieldWithLabel(box, "Sheet Z Range End:", "Enter end for Z range", "sheetZRangeEndField")
 
         # Other parameter fields
-        self.minStepsField = QLineEdit()
-        self.minStepsField.setPlaceholderText("Min Steps")
-        self.minEndStepsField = QLineEdit()
-        self.minEndStepsField.setPlaceholderText("Min End Steps")
-        self.maxNrWalksField = QLineEdit()
-        self.maxNrWalksField.setPlaceholderText("Max Nr Walks")
-        self.walkAggregationThresholdField = QLineEdit()
-        self.walkAggregationThresholdField.setPlaceholderText("Walk Aggregation Threshold")
+        self.addFieldWithLabel(box, "Min Steps:", "Enter minimum steps", "minStepsField")
+        self.addFieldWithLabel(box, "Min End Steps:", "Enter minimum end steps", "minEndStepsField")
+        self.addFieldWithLabel(box, "Max Nr Walks:", "Enter maximum number of walks", "maxNrWalksField")
+        self.addFieldWithLabel(box, "Walk Aggregation Threshold:", "Enter walk aggregation threshold", "walkAggregationThresholdField")
+
 
         self.recomputeStitchSheetCheckbox = QCheckBox("Recompute")
         self.continueSegmentationCheckbox = QCheckBox("Continue Segmentation")
@@ -388,14 +406,6 @@ class ThaumatoAnakalyptor(QMainWindow):
 
         box.add_widget(label)
         box.add_widget(self.startingPointField)
-        box.add_widget(self.sheetKRangeStartField)
-        box.add_widget(self.sheetKRangeEndField)
-        box.add_widget(self.sheetZRangeStartField)
-        box.add_widget(self.sheetZRangeEndField)
-        box.add_widget(self.minStepsField)
-        box.add_widget(self.minEndStepsField)
-        box.add_widget(self.maxNrWalksField)
-        box.add_widget(self.walkAggregationThresholdField)
         box.add_widget(self.recomputeStitchSheetCheckbox)
         box.add_widget(self.continueSegmentationCheckbox)
         box.add_widget(self.computeStitchSheetButton)

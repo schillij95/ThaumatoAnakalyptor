@@ -80,6 +80,12 @@ ENV LIBGL_ALWAYS_INDIRECT=1
 # Install Python 3, PyQt5
 RUN apt-get update && apt-get install -y python3-pyqt5
 
+# Set the XDG_RUNTIME_DIR environment variable for the 'qtuser'
+ENV XDG_RUNTIME_DIR=/workspace
+
+# Set the user to 'qtuser'
+USER qtuser
+
 # Set working directory
 WORKDIR /workspace/
 
