@@ -8,6 +8,17 @@ from PyQt5.QtGui import QImage, QPixmap, QKeyEvent, QPainter, QPen, QBrush
 from PIL import Image
 import os
 
+class GraphicsView(QGraphicsView):
+    def __init__(self, scene, parent=None):
+        super().__init__(scene, parent)
+
+    def wheelEvent(self, event):
+        factor = 1.1  # Zoom factor
+        if event.angleDelta().y() > 0:
+            self.scale(factor, factor)
+        else:
+            self.scale(1 / factor, 1 / factor)
+
 class UmbilicusWindow(QMainWindow):
     def __init__(self, imagePath, parent=None):
         super().__init__(parent)
@@ -33,7 +44,7 @@ class UmbilicusWindow(QMainWindow):
 
         # Graphics View for Image Display
         self.scene = QGraphicsScene(self)
-        self.view = QGraphicsView(self.scene)
+        self.view = GraphicsView(self.scene)
         self.view.setRenderHint(QPainter.Antialiasing)
 
         # Set the focus policy to accept key events
@@ -110,7 +121,7 @@ class UmbilicusWindow(QMainWindow):
 
             # Add new pixmap item to the scene
             self.scene.addPixmap(pixmap)
-            self.view.fitInView(self.scene.itemsBoundingRect(), Qt.KeepAspectRatio)
+            # self.view.fitInView(self.scene.itemsBoundingRect(), Qt.KeepAspectRatio)
 
             # Set the index box text
             self.indexBox.setText(str(index))
