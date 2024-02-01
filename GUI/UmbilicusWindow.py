@@ -96,6 +96,7 @@ class UmbilicusWindow(QMainWindow):
                    "If you already have an umbilicus generated, load it with 'Load'. \n" \
                    "Place the umbilicus points in the center of the scroll and when done press 'Save' before closing the window.\n\n" \
                    "There are the following shortcuts:\n\n" \
+                   "- Use Mouse Wheel to zoom in and out.\n" \
                    "- Use 'A' and 'D' to switch between TIFF layers.\n" \
                    "- Use 'Ctrl + A' and 'Ctrl + D' to switch between TIFF layers with umbilicus points.\n" \
                    "- Click on the TIFF to place a point.\n" \
