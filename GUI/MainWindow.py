@@ -34,6 +34,7 @@ class ThaumatoAnakalyptor(QMainWindow):
         self.initUI()
         self.loadConfig()
         self.process = None
+        self.isSelectingStartingPoint = False
 
     def initUI(self):
         self.setWindowTitle('ThaumatoAnakalyptor')
@@ -373,12 +374,57 @@ class ThaumatoAnakalyptor(QMainWindow):
         # Store a reference to the field using setattr for future access
         setattr(self, fieldAttribute, field)
 
-    def addStitchSheetArea(self, box):
-        label = QLabel("Stitch Sheet")
+    def toggleStartingPointSelection(self):
+        self.isSelectingStartingPoint = not self.isSelectingStartingPoint
+        if self.isSelectingStartingPoint:
+            self.setCursor(Qt.CrossCursor)  # Change cursor to crosshair
+        else:
+            self.setCursor(Qt.ArrowCursor)  # Reset cursor to default
+
+    def addStartingPointArea(self, box):
         # Starting Point button
         self.startingPointField = QPushButton("Select Starting Point")
-        self.startingPointField.clicked.connect(lambda: self.selectPath(self.startingPointField)) # TODO
-        self.starting_point = [0, 0, 0]
+        self.startingPointField.clicked.connect(self.toggleStartingPointSelection)
+        box.add_widget(self.startingPointField)
+
+        # Title for the starting point section
+        title_label = QLabel("Starting Point:")
+        box.add_widget(title_label)
+
+
+        # Horizontal layout to hold the x, y, and z fields
+        starting_point_layout = QHBoxLayout()
+
+        # X coordinate field
+        self.xField = QLineEdit()
+        self.xField.setPlaceholderText("x")
+        starting_point_layout.addWidget(QLabel("x:"))
+        starting_point_layout.addWidget(self.xField)
+
+        # Y coordinate field
+        self.yField = QLineEdit()
+        self.yField.setPlaceholderText("y")
+        starting_point_layout.addWidget(QLabel("y:"))
+        starting_point_layout.addWidget(self.yField)
+
+        # Z coordinate field
+        self.zField = QLineEdit()
+        self.zField.setPlaceholderText("z")
+        starting_point_layout.addWidget(QLabel("z:"))
+        starting_point_layout.addWidget(self.zField)
+
+        # Create a container widget to add the layout to
+        starting_point_widget = QWidget()
+        starting_point_widget.setLayout(starting_point_layout)
+
+        # Add the starting point widget to the box
+        box.add_widget(starting_point_widget)
+
+    def addStitchSheetArea(self, box):
+        label = QLabel("Stitch Sheet")
+        box.add_widget(label)
+
+        self.addStartingPointArea(box)
 
         # Sheet K range fields
         self.addFieldWithLabel(box, "Sheet K Range Start:", "Enter start for K range", "sheetKRangeStartField")
@@ -404,8 +450,6 @@ class ThaumatoAnakalyptor(QMainWindow):
         self.computeStitchSheetButton.clicked.connect(self.computeStitchSheet)
         self.stopStitchSheetButton.clicked.connect(self.stopStitchSheet)
 
-        box.add_widget(label)
-        box.add_widget(self.startingPointField)
         box.add_widget(self.recomputeStitchSheetCheckbox)
         box.add_widget(self.continueSegmentationCheckbox)
         box.add_widget(self.computeStitchSheetButton)
@@ -415,7 +459,7 @@ class ThaumatoAnakalyptor(QMainWindow):
         try:
             # Fetching values from GUI fields
             path = os.path.join(self.Config["surface_points_path"], "point_cloud_colorized_verso_subvolume_blocks")
-            starting_point = f"{self.starting_point[0]} {self.starting_point[1]} {self.starting_point[2]}"
+            starting_point = f"{self.xField.text()} {self.yField.text()} {self.zField.text()}"
             sheet_k_range = f"{self.sheetKRangeStartField.text()} {self.sheetKRangeEndField.text()}"
             sheet_z_range = f"{self.sheetZRangeStartField.text()} {self.sheetZRangeEndField.text()}"
             min_steps = self.minStepsField.text()

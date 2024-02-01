@@ -69,7 +69,6 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
     -v $(pwd)/:/workspace \
     -v /tmp/.X11-unix:/tmp/.X11-unix \
     -e DISPLAY=$DISPLAY \
-    -u qtuser \
     thaumato_image
     ```
 - **Precomputation Steps:**
