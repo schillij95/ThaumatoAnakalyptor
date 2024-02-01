@@ -54,7 +54,7 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
 - **Setup:**
     Download the git repository:
     ```bash
-    git clone --recurse-submodules  https://github.com/schillij95/ThaumatoAnakalyptor
+    git clone --recurse-submodules https://github.com/schillij95/ThaumatoAnakalyptor
     ```
     Download the checkpoint ```last-epoch.ckpt``` for the instance segmentation model and place it into ```ThaumatoAnakalyptor/mask3d/saved/train/last-epoch.ckpt```. 
     
