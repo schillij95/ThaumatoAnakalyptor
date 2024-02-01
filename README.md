@@ -52,7 +52,13 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
 
 ### Execute the Pipeline
 - **Setup:**
-    Download the checkpoint ```last-epoch.ckpt``` for the instance segmentation model and place it into ```ThaumatoAnakalyptor/mask3d/saved/train/last-epoch.ckpt```. Build and start the Docker Container:
+    Download the git repository:
+    ```bash
+    git clone git clone --recurse-submodules  https://github.com/schillij95/ThaumatoAnakalyptor
+    ```
+    Download the checkpoint ```last-epoch.ckpt``` for the instance segmentation model and place it into ```ThaumatoAnakalyptor/mask3d/saved/train/last-epoch.ckpt```. 
+    
+    Build and start the Docker Container:
 
     ```bash
     docker build -t thaumato_image -f DockerfileThaumato .
