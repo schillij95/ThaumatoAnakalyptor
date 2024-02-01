@@ -86,6 +86,7 @@ class UmbilicusWindow(QMainWindow):
                    "Place the umbilicus points in the center of the scroll and when done press 'Save' before closing the window.\n\n" \
                    "There are the following shortcuts:\n\n" \
                    "- Use 'A' and 'D' to switch between TIFF layers.\n" \
+                   "- Use 'Ctrl + A' and 'Ctrl + D' to switch between TIFF layers with umbilicus points.\n" \
                    "- Click on the TIFF to place a point.\n" \
                    "- Use Ctrl + Click to automatically switch to the next TIFF.\n"
         QMessageBox.information(self, "Help", helpText)
@@ -147,9 +148,27 @@ class UmbilicusWindow(QMainWindow):
     def keyPressEvent(self, event: QKeyEvent):
         # "A" "D" keys for navigation
         if event.key() == Qt.Key_D:
-            self.incrementIndex()
+            if event.modifiers() == Qt.ControlModifier:
+                # find next image with umbilicus
+                next_index = None
+                for key in self.points.keys():
+                    if key > self.currentIndex and (next_index is None or key < next_index):
+                        next_index = key
+                if next_index is not None:
+                    self.currentIndex = next_index
+            else:
+                self.incrementIndex()
         elif event.key() == Qt.Key_A:
-            self.decrementIndex()
+            if event.modifiers() == Qt.ControlModifier:
+                # find previous image with umbilicus
+                prev_index = None
+                for key in self.points.keys():
+                    if key < self.currentIndex and (prev_index is None or key > prev_index):
+                        prev_index = key
+                if prev_index is not None:
+                    self.currentIndex = prev_index
+            else:
+                self.decrementIndex()
         self.loadImage(self.currentIndex)
 
     def viewMousePressEvent(self, event):
