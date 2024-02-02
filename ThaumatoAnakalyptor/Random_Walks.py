@@ -1317,14 +1317,80 @@ class WalkToSheet():
     def save(self, main_sheet):
         save_main_sheet(main_sheet, {}, self.save_path.replace("blocks", "main_sheet_RW") + ".ta")
 
+def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_translation=False):
+
+    umbilicus_path = os.path.dirname(path) + "/umbilicus.txt"
+    start_block, patch_id = find_starting_patch([start_point], path)
+
+    save_path = os.path.dirname(path) + f"/{start_point[0]}_{start_point[1]}_{start_point[2]}/" + path.split("/")[-1]
+    if not os.path.exists(os.path.dirname(save_path)):
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+
+    print(f"Configs: {overlapp_threshold}")
+    
+    # Build graph
+    if recompute:
+        scroll_graph = ScrollGraph(7, overlapp_threshold, limit_stickiness=0.6)
+        start_block, patch_id = scroll_graph.build_graph(path, num_processes=30, start_point=start_point, distance=-1)
+        print("Saving built graph...")
+        scroll_graph.save_graph(path.replace("blocks", "graph_raw") + ".pkl")
+
+    if recompute and compute_cpp_translation:
+        scroll_graph = load_graph(path.replace("blocks", "graph_raw") + ".pkl")
+        solver = RandomWalkSolver(scroll_graph, umbilicus_path)
+        print("Computing cpp translation...")
+        res = solver.translate_data_to_cpp(recompute_translation=True)
+        # Save data to graph object
+        solver.graph.cpp_translation = path
+        solver.graph.save_graph(path.replace("blocks", "graph_raw") + ".pkl")
+        for i in range(1, len(res)):
+            # save np
+            np.save(path.replace("blocks", "graph_RW") + "_nodes_cpp_" + str(i) + ".npy", res[i])
+        print("Saved cpp translation.")
+        
+    solve_graph = True
+    if solve_graph:
+        scroll_graph = load_graph(path.replace("blocks", "graph_raw") + ".pkl")
+        if overlapp_threshold["continue_walks"]:
+            nodes = np.load(save_path.replace("blocks", "graph_RW") + "_nodes.npy")
+            ks = np.load(save_path.replace("blocks", "graph_RW") + "_ks.npy")
+            # scroll_graph = load_graph(save_path.replace("blocks", "graph_RW_solved") + ".pkl")
+        else:
+            nodes = None
+            ks = None
+        scroll_graph.set_overlapp_threshold(overlapp_threshold)
+        scroll_graph.start_block, scroll_graph.patch_id = start_block, patch_id
+        # start_block, patch_id = scroll_graph.start_block, scroll_graph.patch_id
+        starting_node = tuple((*start_block, patch_id))
+
+        solver = RandomWalkSolver(scroll_graph, umbilicus_path)
+        solver.save_overlapp_threshold()
+        nodes, ks = solver.solve_(path=save_path, starting_node=starting_node, max_nr_walks=overlapp_threshold["max_nr_walks"], max_unchanged_walks=overlapp_threshold["max_unchanged_walks"], max_steps=overlapp_threshold["max_steps"], max_tries=overlapp_threshold["max_tries"], min_steps=overlapp_threshold["min_steps"], min_end_steps=overlapp_threshold["min_end_steps"], continue_walks=overlapp_threshold["continue_walks"], nodes=nodes, ks=ks)
+        # save graph ks and nodes
+        np.save(save_path.replace("blocks", "graph_RW") + "_ks.npy", ks)
+        np.save(save_path.replace("blocks", "graph_RW") + "_nodes.npy", nodes)
+        scroll_graph.save_graph(save_path.replace("blocks", "graph_RW_solved") + ".pkl")
+    else:
+        ks = np.load(path.replace("blocks", "graph_RW") + "_ks.npy")
+        nodes = np.load(path.replace("blocks", "graph_RW") + "_nodes.npy")
+        scroll_graph = load_graph(path.replace("blocks", "graph_RW_solved") + ".pkl")
+        scroll_graph.overlapp_threshold = overlapp_threshold
+    
+    if True:
+        print("Creating sheet...")
+        w2s = WalkToSheet(scroll_graph, nodes, ks, path, save_path, overlapp_threshold)
+        main_sheet = w2s.create_sheet()
+        print("Saving sheet...")
+        w2s.save(main_sheet)
+
 def random_walks():
     path = "/media/julian/SSD4TB/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks"
-    sample_ratio_score = 0.03 # 0.1
+    # sample_ratio_score = 0.03 # 0.1
     start_point=[1650, 3300, 5000] # seg 1
     start_point=[1450, 3500, 5000] # seg 2
     start_point=[1350, 3600, 5000] # seg 3
     continue_segmentation = 0
-    overlapp_threshold = {"sample_ratio_score": sample_ratio_score, "display": False, "print_scores": True, "picked_scores_similarity": 0.7, "final_score_max": 1.5, "final_score_min": 0.0005, "score_threshold": 0.005, "fit_sheet": False, "cost_threshold": 17, "cost_percentile": 75, "cost_percentile_threshold": 14, 
+    overlapp_threshold = {"sample_ratio_score": 0.03, "display": False, "print_scores": True, "picked_scores_similarity": 0.7, "final_score_max": 1.5, "final_score_min": 0.0005, "score_threshold": 0.005, "fit_sheet": False, "cost_threshold": 17, "cost_percentile": 75, "cost_percentile_threshold": 14, 
                           "cost_sheet_distance_threshold": 4.0, "rounddown_best_score": 0.005,
                           "cost_threshold_prediction": 2.5, "min_prediction_threshold": 0.15, "nr_points_min": 200.0, "nr_points_max": 4000.0, "min_patch_points": 300.0, 
                           "winding_angle_range": None, "multiple_instances_per_batch_factor": 1.0,
@@ -1382,6 +1448,8 @@ def random_walks():
 
     # Take arguments back over
     args = parser.parse_args()
+    print(f"Args: {args}")
+
     path = args.path
     recompute = bool(int(args.recompute))
     overlapp_threshold["print_scores"] = args.print_scores
@@ -1419,71 +1487,8 @@ def random_walks():
     overlapp_threshold["min_end_steps"] = min_end_steps
 
 
-    umbilicus_path = os.path.dirname(path) + "/umbilicus.txt"
-    start_block, patch_id = find_starting_patch([start_point], path)
-
-    save_path = os.path.dirname(path) + f"/{start_point[0]}_{start_point[1]}_{start_point[2]}/" + path.split("/")[-1]
-    if not os.path.exists(os.path.dirname(save_path)):
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-
-    print(f"Configs: {overlapp_threshold}")
-    print(f"Args: {args}")
-    
-    # Build graph
-    if recompute:
-        scroll_graph = ScrollGraph(7, overlapp_threshold, limit_stickiness=0.6)
-        start_block, patch_id = scroll_graph.build_graph(path, num_processes=30, start_point=start_point, distance=-1)
-        print("Saving built graph...")
-        scroll_graph.save_graph(path.replace("blocks", "graph_raw") + ".pkl")
-
-    if recompute and compute_cpp_translation:
-        scroll_graph = load_graph(path.replace("blocks", "graph_raw") + ".pkl")
-        solver = RandomWalkSolver(scroll_graph, umbilicus_path)
-        print("Computing cpp translation...")
-        res = solver.translate_data_to_cpp(recompute_translation=True)
-        # Save data to graph object
-        solver.graph.cpp_translation = path
-        solver.graph.save_graph(path.replace("blocks", "graph_raw") + ".pkl")
-        for i in range(1, len(res)):
-            # save np
-            np.save(path.replace("blocks", "graph_RW") + "_nodes_cpp_" + str(i) + ".npy", res[i])
-        print("Saved cpp translation.")
-        
-    solve_graph = True
-    if solve_graph:
-        scroll_graph = load_graph(path.replace("blocks", "graph_raw") + ".pkl")
-        if continue_segmentation:
-            nodes = np.load(save_path.replace("blocks", "graph_RW") + "_nodes.npy")
-            ks = np.load(save_path.replace("blocks", "graph_RW") + "_ks.npy")
-            # scroll_graph = load_graph(save_path.replace("blocks", "graph_RW_solved") + ".pkl")
-        else:
-            nodes = None
-            ks = None
-        scroll_graph.set_overlapp_threshold(overlapp_threshold)
-        scroll_graph.start_block, scroll_graph.patch_id = start_block, patch_id
-        # start_block, patch_id = scroll_graph.start_block, scroll_graph.patch_id
-        starting_node = tuple((*start_block, patch_id))
-
-        solver = RandomWalkSolver(scroll_graph, umbilicus_path)
-        solver.save_overlapp_threshold()
-        nodes, ks = solver.solve_(path=save_path, starting_node=starting_node, max_nr_walks=max_nr_walks, max_unchanged_walks=max_unchanged_walks, max_steps=max_steps, max_tries=max_tries, min_steps=min_steps, min_end_steps=min_end_steps, continue_walks=continue_segmentation, nodes=nodes, ks=ks)
-        # save graph ks and nodes
-        np.save(save_path.replace("blocks", "graph_RW") + "_ks.npy", ks)
-        np.save(save_path.replace("blocks", "graph_RW") + "_nodes.npy", nodes)
-        scroll_graph.save_graph(save_path.replace("blocks", "graph_RW_solved") + ".pkl")
-    else:
-        ks = np.load(path.replace("blocks", "graph_RW") + "_ks.npy")
-        nodes = np.load(path.replace("blocks", "graph_RW") + "_nodes.npy")
-        scroll_graph = load_graph(path.replace("blocks", "graph_RW_solved") + ".pkl")
-        scroll_graph.overlapp_threshold = overlapp_threshold
-    
-    if True:
-        print("Creating sheet...")
-        w2s = WalkToSheet(scroll_graph, nodes, ks, path, save_path, overlapp_threshold)
-        main_sheet = w2s.create_sheet()
-        print("Saving sheet...")
-        w2s.save(main_sheet)
-
+    # Compute
+    compute(overlapp_threshold=overlapp_threshold, start_point=start_point, path=path, recompute=recompute, compute_cpp_translation=compute_cpp_translation)
 
 if __name__ == '__main__':
     random_walks()

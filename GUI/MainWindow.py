@@ -31,6 +31,7 @@ from ThaumatoAnakalyptor.sheet_to_mesh import umbilicus_xy_at_z
 # import computation functions
 from ThaumatoAnakalyptor.generate_half_sized_grid import compute as compute_grid_cells
 from ThaumatoAnakalyptor.grid_to_pointcloud import compute as compute_pointcloud
+from ThaumatoAnakalyptor.Random_Walks import compute as compute_stitch_sheet
 
 class GraphicsView(QGraphicsView):
     def __init__(self, scene, parent=None):
@@ -622,6 +623,16 @@ class ThaumatoAnakalyptor(QMainWindow):
         # Add the starting point widget to the box
         box.add_widget(starting_point_widget)
 
+    def setStitchSheetDefaultValues(self):
+        self.sheetKRangeStartField.setText("-1")
+        self.sheetKRangeEndField.setText("1")
+        self.sheetZRangeStartField.setText("0")
+        self.sheetZRangeEndField.setText("40000")
+        self.minStepsField.setText("16")
+        self.minEndStepsField.setText("4")
+        self.maxNrWalksField.setText("30000")
+        self.walkAggregationThresholdField.setText("5")
+
     def addStitchSheetArea(self, box):
         label = QLabel("Stitch Sheet")
         box.add_widget(label)
@@ -649,6 +660,9 @@ class ThaumatoAnakalyptor(QMainWindow):
         self.stopStitchSheetButton = QPushButton("Stop")
         self.stopStitchSheetButton.setEnabled(False)
 
+        self.defaultValuesButton = QPushButton("Default Values")
+        self.defaultValuesButton.clicked.connect(self.setStitchSheetDefaultValues)
+
         self.computeStitchSheetButton.clicked.connect(self.computeStitchSheet)
         self.stopStitchSheetButton.clicked.connect(self.stopStitchSheet)
 
@@ -656,56 +670,127 @@ class ThaumatoAnakalyptor(QMainWindow):
         box.add_widget(self.continueSegmentationCheckbox)
         box.add_widget(self.computeStitchSheetButton)
         box.add_widget(self.stopStitchSheetButton)
+        box.add_widget(self.defaultValuesButton)
+
+    # def computeStitchSheet(self):
+    #     try:
+    #         # Fetching values from GUI fields
+    #         path = os.path.join(self.Config["surface_points_path"], "point_cloud_colorized_verso_subvolume_blocks")
+    #         starting_point = f"{self.xField.text()} {self.yField.text()} {self.zField.text()}"
+    #         sheet_k_range = f"{self.sheetKRangeStartField.text()} {self.sheetKRangeEndField.text()}"
+    #         sheet_z_range = f"{self.sheetZRangeStartField.text()} {self.sheetZRangeEndField.text()}"
+    #         min_steps = self.minStepsField.text()
+    #         min_end_steps = self.minEndStepsField.text()
+    #         max_nr_walks = self.maxNrWalksField.text()
+    #         continue_segmentation = '1' if self.continueSegmentationCheckbox.isChecked() else '0'
+    #         recompute = '1' if self.recomputeStitchSheetCheckbox.isChecked() else '0'
+    #         walk_aggregation_threshold = self.walkAggregationThresholdField.text()
+
+    #         # Construct the command
+    #         command = [
+    #             "python3", "-m", "ThaumatoAnakalyptor.Random_Walks",
+    #             "--path", path,
+    #             "--starting_point", self.xField.text(), self.yField.text(), self.zField.text(),
+    #             "--sheet_k_range", self.sheetKRangeStartField.text(), self.sheetKRangeEndField.text(),
+    #             "--sheet_z_range", self.sheetZRangeStartField.text(), self.sheetZRangeEndField.text(),
+    #             "--min_steps", min_steps,
+    #             "--min_end_steps", min_end_steps,
+    #             "--max_nr_walks", max_nr_walks,
+    #             "--continue_segmentation", continue_segmentation,
+    #             "--recompute", recompute,
+    #             "--walk_aggregation_threshold", walk_aggregation_threshold
+    #         ]
+
+    #         print(f"Command: {command}")
+
+    #         # Starting the process
+    #         self.process = subprocess.Popen(command)
+    #         self.computeStitchSheetButton.setEnabled(False)
+    #         self.stopStitchSheetButton.setEnabled(True)
+
+    #         # Create a thread to monitor the completion of the process
+    #         # self.monitorThread = threading.Thread(target=self.monitorProcess)
+    #         # self.monitorThread.start()
+
+    #     except Exception as e:
+    #         QMessageBox.critical(self, "Error", f"Failed to start the script: {e}")
+    #         self.computeStitchSheetButton.setEnabled(True)
+    #         self.stopStitchSheetButton.setEnabled(False)
+
+    def stitchSheetComputation(self, overlapp_threshold, start_point, path, recompute):
+        try:
+            # Compute
+            compute_stitch_sheet(overlapp_threshold, start_point=start_point, path=path, recompute=recompute)
+
+            # Clean up computation after completion
+            self.postComputation()
+        except Exception as e:
+            print(f"Error in computation: {e}")
 
     def computeStitchSheet(self):
         try:
             # Fetching values from GUI fields
             path = os.path.join(self.Config["surface_points_path"], "point_cloud_colorized_verso_subvolume_blocks")
-            starting_point = f"{self.xField.text()} {self.yField.text()} {self.zField.text()}"
-            sheet_k_range = f"{self.sheetKRangeStartField.text()} {self.sheetKRangeEndField.text()}"
-            sheet_z_range = f"{self.sheetZRangeStartField.text()} {self.sheetZRangeEndField.text()}"
-            min_steps = self.minStepsField.text()
-            min_end_steps = self.minEndStepsField.text()
-            max_nr_walks = self.maxNrWalksField.text()
-            continue_segmentation = '1' if self.continueSegmentationCheckbox.isChecked() else '0'
-            recompute = '1' if self.recomputeStitchSheetCheckbox.isChecked() else '0'
-            walk_aggregation_threshold = self.walkAggregationThresholdField.text()
+            start_point = [int(self.xField.text()), int(self.yField.text()), int(self.zField.text())]
+            sheet_k_range = (int(self.sheetKRangeStartField.text()), int(self.sheetKRangeEndField.text()))
+            sheet_z_range = (int(self.sheetZRangeStartField.text()), int(self.sheetZRangeEndField.text()))
+            min_steps = int(self.minStepsField.text())
+            min_end_steps = int(self.minEndStepsField.text())
+            max_nr_walks = int(self.maxNrWalksField.text())
+            continue_segmentation = self.continueSegmentationCheckbox.isChecked()
+            recompute = self.recomputeStitchSheetCheckbox.isChecked()
+            walk_aggregation_threshold = int(self.walkAggregationThresholdField.text())
 
-            # Construct the command
-            command = [
-                "python3", "-m", "ThaumatoAnakalyptor.Random_Walks",
-                "--path", path,
-                "--starting_point", self.xField.text(), self.yField.text(), self.zField.text(),
-                "--sheet_k_range", self.sheetKRangeStartField.text(), self.sheetKRangeEndField.text(),
-                "--sheet_z_range", self.sheetZRangeStartField.text(), self.sheetZRangeEndField.text(),
-                "--min_steps", min_steps,
-                "--min_end_steps", min_end_steps,
-                "--max_nr_walks", max_nr_walks,
-                "--continue_segmentation", continue_segmentation,
-                "--recompute", recompute,
-                "--walk_aggregation_threshold", walk_aggregation_threshold
-            ]
 
-            print(f"Command: {command}")
+            overlapp_threshold = {"sample_ratio_score": 0.03, "display": False, "print_scores": True, "picked_scores_similarity": 0.7, "final_score_max": 1.5, "final_score_min": 0.0005, "score_threshold": 0.005, "fit_sheet": False, "cost_threshold": 17, "cost_percentile": 75, "cost_percentile_threshold": 14, 
+                          "cost_sheet_distance_threshold": 4.0, "rounddown_best_score": 0.005,
+                          "cost_threshold_prediction": 2.5, "min_prediction_threshold": 0.15, "nr_points_min": 200.0, "nr_points_max": 4000.0, "min_patch_points": 300.0, 
+                          "winding_angle_range": None, "multiple_instances_per_batch_factor": 1.0,
+                          "epsilon": 1e-5, "angle_tolerance": 85, "max_threads": 30,
+                          "min_points_winding_switch": 3800, "min_winding_switch_sheet_distance": 9, "max_winding_switch_sheet_distance": 20, "winding_switch_sheet_score_factor": 1.5, "winding_direction": -1.0, "enable_winding_switch": False, "enable_winding_switch_postprocessing": False,
+                          "surrounding_patches_size": 3, "max_sheet_clip_distance": 60, "sheet_z_range": (-5000, 400000), "sheet_k_range": (-1, 2), "volume_min_certainty_total_percentage": 0.0, "max_umbilicus_difference": 30,
+                          "walk_aggregation_threshold": 100, "walk_aggregation_max_current": -1
+                          }
 
-            # Starting the process
-            self.process = subprocess.Popen(command)
+            # max_nr_walks = 10000
+            max_steps = 101
+            # min_steps = 16
+            max_tries = 6
+            # min_end_steps = 4
+            max_unchanged_walks = 30 * max_nr_walks
+
+            overlapp_threshold["sheet_z_range"] = [z_range_ /(200.0 / 50.0) for z_range_ in sheet_z_range]
+            overlapp_threshold["sheet_k_range"] = sheet_k_range
+            overlapp_threshold["walk_aggregation_threshold"] = walk_aggregation_threshold
+            overlapp_threshold["max_nr_walks"] = max_nr_walks
+            overlapp_threshold["max_unchanged_walks"] = max_unchanged_walks
+            overlapp_threshold["continue_walks"] = continue_segmentation
+            overlapp_threshold["max_steps"] = max_steps
+            overlapp_threshold["max_tries"] = max_tries
+            overlapp_threshold["min_steps"] = min_steps
+            overlapp_threshold["min_end_steps"] = min_end_steps
+
+            self.process = multiprocessing.Process(target=self.stitchSheetComputation, args=(overlapp_threshold, start_point, path, recompute,))
+            self.process.start()
+
             self.computeStitchSheetButton.setEnabled(False)
             self.stopStitchSheetButton.setEnabled(True)
-
-            # Create a thread to monitor the completion of the process
-            # self.monitorThread = threading.Thread(target=self.monitorProcess)
-            # self.monitorThread.start()
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to start the script: {e}")
             self.computeStitchSheetButton.setEnabled(True)
             self.stopStitchSheetButton.setEnabled(False)
 
+
     def stopStitchSheet(self):
-        if self.process and self.process.poll() is None:
-            self.process.terminate()
-            self.process = None
+        # if self.process and self.process.poll() is None:
+        #     self.process.terminate()
+        #     self.process = None
+
+        if self.process and self.process.is_alive():
+            os.kill(self.process.pid, signal.SIGTERM)
+            self.process.join()
+
         self.computeStitchSheetButton.setEnabled(True)
         self.stopStitchSheetButton.setEnabled(False)
         print("Computation process stopped.")

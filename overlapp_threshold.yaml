@@ -18,7 +18,7 @@ max_steps: 101
 max_threads: 30
 max_tries: 6
 max_umbilicus_difference: 30
-max_unchanged_walks: 300000
+max_unchanged_walks: 900000
 max_winding_switch_sheet_distance: 20
 min_end_steps: 4
 min_patch_points: 300.0
@@ -34,7 +34,7 @@ print_scores: true
 rounddown_best_score: 0.005
 sample_ratio_score: 0.03
 score_threshold: 0.005
-sheet_k_range:
+sheet_k_range: !!python/tuple
 - -1
 - 1
 sheet_z_range:
