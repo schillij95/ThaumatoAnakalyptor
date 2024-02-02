@@ -717,10 +717,10 @@ class ThaumatoAnakalyptor(QMainWindow):
     #         self.computeStitchSheetButton.setEnabled(True)
     #         self.stopStitchSheetButton.setEnabled(False)
 
-    def stitchSheetComputation(self, overlapp_threshold, start_point, path, recompute):
+    def stitchSheetComputation(self, overlapp_threshold, start_point, path, recompute, stop_event):
         try:
             # Compute
-            compute_stitch_sheet(overlapp_threshold, start_point=start_point, path=path, recompute=recompute)
+            compute_stitch_sheet(overlapp_threshold, start_point=start_point, path=path, recompute=recompute, stop_event=stop_event)
 
             # Clean up computation after completion
             self.postComputation()
@@ -770,8 +770,15 @@ class ThaumatoAnakalyptor(QMainWindow):
             overlapp_threshold["min_steps"] = min_steps
             overlapp_threshold["min_end_steps"] = min_end_steps
 
-            self.process = multiprocessing.Process(target=self.stitchSheetComputation, args=(overlapp_threshold, start_point, path, recompute,))
+            # Creating an Event object
+            self.stop_event = threading.Event()
+
+            # start self.stitchSheetComputation in a new thread
+            self.process = threading.Thread(target=self.stitchSheetComputation, args=(overlapp_threshold, start_point, path, recompute, self.stop_event))
             self.process.start()
+
+            # self.process = multiprocessing.Process(target=self.stitchSheetComputation, args=(overlapp_threshold, start_point, path, recompute,))
+            # self.process.start()
 
             self.computeStitchSheetButton.setEnabled(False)
             self.stopStitchSheetButton.setEnabled(True)
@@ -787,9 +794,13 @@ class ThaumatoAnakalyptor(QMainWindow):
         #     self.process.terminate()
         #     self.process = None
 
-        if self.process and self.process.is_alive():
-            os.kill(self.process.pid, signal.SIGTERM)
-            self.process.join()
+        # if self.process and self.process.is_alive():
+        #     os.kill(self.process.pid, signal.SIGTERM)
+        #     self.process.join()
+
+        # Kill the thread
+        self.stop_event.set()
+        self.process.join()
 
         self.computeStitchSheetButton.setEnabled(True)
         self.stopStitchSheetButton.setEnabled(False)

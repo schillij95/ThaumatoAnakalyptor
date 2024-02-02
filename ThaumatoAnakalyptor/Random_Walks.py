@@ -765,7 +765,7 @@ class RandomWalkSolver:
         overlapp_threshold["sheet_k_range"] = (k_min, k_max)
         return nodes, ks
 
-    def solve_(self, path, starting_node, max_nr_walks=100, max_unchanged_walks=10000, max_steps=100, max_tries=6, min_steps=10, min_end_steps=4, continue_walks=False, nodes=None, ks=None):
+    def solve_(self, path, starting_node, max_nr_walks=100, max_unchanged_walks=10000, max_steps=100, max_tries=6, min_steps=10, min_end_steps=4, continue_walks=False, nodes=None, ks=None, stop_event=None):
         walk_aggregation_threshold = self.graph.overlapp_threshold["walk_aggregation_threshold"]
         min_steps_start = min_steps
         if not continue_walks:
@@ -823,7 +823,7 @@ class RandomWalkSolver:
         nr_unchanged_walks = 0
         raw_sucessful_walks = 0
         # while nr_walks < max_nr_walks or max_nr_walks < 0:
-        while max_nr_walks > 0:
+        while max_nr_walks > 0 and (stop_event is None or not stop_event.is_set()):
             time_start = time.time()
             sn, sk = self.pick_start_node(nodes, nodes_neighbours_count, ks, picked_nrs, pick_prob)
             time_pick += time.time() - time_start
@@ -1317,7 +1317,7 @@ class WalkToSheet():
     def save(self, main_sheet):
         save_main_sheet(main_sheet, {}, self.save_path.replace("blocks", "main_sheet_RW") + ".ta")
 
-def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_translation=False):
+def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_translation=False, stop_event=None):
 
     umbilicus_path = os.path.dirname(path) + "/umbilicus.txt"
     start_block, patch_id = find_starting_patch([start_point], path)
@@ -1365,7 +1365,7 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
 
         solver = RandomWalkSolver(scroll_graph, umbilicus_path)
         solver.save_overlapp_threshold()
-        nodes, ks = solver.solve_(path=save_path, starting_node=starting_node, max_nr_walks=overlapp_threshold["max_nr_walks"], max_unchanged_walks=overlapp_threshold["max_unchanged_walks"], max_steps=overlapp_threshold["max_steps"], max_tries=overlapp_threshold["max_tries"], min_steps=overlapp_threshold["min_steps"], min_end_steps=overlapp_threshold["min_end_steps"], continue_walks=overlapp_threshold["continue_walks"], nodes=nodes, ks=ks)
+        nodes, ks = solver.solve_(path=save_path, starting_node=starting_node, max_nr_walks=overlapp_threshold["max_nr_walks"], max_unchanged_walks=overlapp_threshold["max_unchanged_walks"], max_steps=overlapp_threshold["max_steps"], max_tries=overlapp_threshold["max_tries"], min_steps=overlapp_threshold["min_steps"], min_end_steps=overlapp_threshold["min_end_steps"], continue_walks=overlapp_threshold["continue_walks"], nodes=nodes, ks=ks, stop_event=stop_event)
         # save graph ks and nodes
         np.save(save_path.replace("blocks", "graph_RW") + "_ks.npy", ks)
         np.save(save_path.replace("blocks", "graph_RW") + "_nodes.npy", nodes)
