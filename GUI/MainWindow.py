@@ -4,9 +4,9 @@ from PyQt5.QtWidgets import (QMainWindow, QAction, QSplitter, QVBoxLayout,
                              QWidget, QPushButton, QLabel, QFrame,
                              QFileDialog, QLineEdit, QCheckBox, QMessageBox, QStyle, QVBoxLayout, QScrollArea, QHBoxLayout, QGraphicsScene, QGraphicsView)
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen, QBrush
+from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen, QBrush, QKeyEvent, QIcon
 
-from PIL import Image
+import tifffile
 
 # Custom GUI Elements
 from .CollapsibleBox import CollapsibleBox
@@ -24,6 +24,9 @@ import multiprocessing
 import subprocess
 
 import signal
+import numpy as np
+
+from ThaumatoAnakalyptor.sheet_to_mesh import umbilicus_xy_at_z
 
 # import computation functions
 from ThaumatoAnakalyptor.generate_half_sized_grid import compute as compute_grid_cells
@@ -53,6 +56,12 @@ class ThaumatoAnakalyptor(QMainWindow):
         self.initUI()
         self.process = None
         self.isSelectingStartingPoint = False
+        self.points = []
+        # set icon
+        icon = QIcon("GUI/ThaumatoAnakalyptor.png")
+        self.setWindowIcon(icon)
+        # Set minimum window size
+        self.setMinimumSize(800, 600)
 
     def initUI(self):
         self.setWindowTitle('ThaumatoAnakalyptor')
@@ -72,9 +81,6 @@ class ThaumatoAnakalyptor(QMainWindow):
         # Left Panel for Image
         left_panel = QLabel()
         left_panel.setFrameStyle(QFrame.StyledPanel)
-        # pixmap = QPixmap(400, 400)
-        # pixmap.fill(Qt.white)  # White background
-        # left_panel.setPixmap(pixmap)
 
         # Check and load TIFF files
         self.tifImages = self.loadTifImages(self.Config.get("downsampled_2d_tiffs", ""))
@@ -84,7 +90,7 @@ class ThaumatoAnakalyptor(QMainWindow):
         self.tifScene = QGraphicsScene(self)
         self.tifView = GraphicsView(self.tifScene)
         self.tifView.setRenderHint(QPainter.Antialiasing)
-        # self.tifView.mousePressEvent = self.onTifMousePress
+        self.tifView.mousePressEvent = self.onTifMousePress
 
         left_panel_layout = QVBoxLayout()
         left_panel_layout.addWidget(self.tifView)
@@ -94,6 +100,7 @@ class ThaumatoAnakalyptor(QMainWindow):
 
         # Load the first TIFF image
         self.loadTifImage(self.currentTifIndex)
+        self.tifView.fitInView(self.tifScene.itemsBoundingRect(), Qt.KeepAspectRatio)
 
         # Right Panel setup with a Scroll Area
         right_panel_scroll_area = QScrollArea()  # Create a QScrollArea
@@ -113,6 +120,8 @@ class ThaumatoAnakalyptor(QMainWindow):
         # Add widgets to splitter
         splitter.addWidget(left_panel)
         splitter.addWidget(right_panel_scroll_area)
+        # Set splitter ratio
+        splitter.setSizes([400, 200])
 
         # Trigger click on Config
         config.triggered.connect(self.openConfigWindow)
@@ -146,17 +155,36 @@ class ThaumatoAnakalyptor(QMainWindow):
         layout.addLayout(navigationLayout)
 
     def loadTifImage(self, index):
+        umbilicus_path = os.path.join(self.Config.get("downsampled_2d_tiffs", ""), "umbilicus.txt")
+        if os.path.exists(umbilicus_path):
+            self.points = []
+            if os.path.exists(umbilicus_path):
+                with open(umbilicus_path, "r") as file:
+                    for line in file:
+                        y, z, x = map(int, line.strip().split(', '))
+                        self.points.append((x-500, y-500, z-500))
+
+                self.points = np.array(self.points)
+
         if 0 <= index < len(self.tifImages):
             imagePath = os.path.join(self.Config.get("downsampled_2d_tiffs", ""), self.tifImages[index])
-            # self.fileNameLabel.setText("File: " + self.tifImages[index])
-            image = Image.open(imagePath)
 
-            self.image_width = image.size[0]
-            self.image_height = image.size[1]
+            # Use tifffile to read the TIFF image
+            with tifffile.TiffFile(imagePath) as tif:
+                image_array = tif.asarray()
 
-            # Convert to 8-bit grayscale
-            image8bit = image.point(lambda i: i * (1./256)).convert('L')
-            qimage = QImage(image8bit.tobytes(), image8bit.size[0], image8bit.size[1], QImage.Format_Grayscale8)
+            # print(f"Loaded image {imagePath} at index {index} with shape {image_array.shape} and dtype {image_array.dtype}")
+
+            if image_array.dtype == np.uint16:
+                image_array = (image_array / 256).astype(np.uint8)
+
+            # Assuming the image is grayscale, prepare it for display
+            image_height, image_width = image_array.shape
+
+            self.image_width = image_width
+            self.image_height = image_height
+
+            qimage = QImage(image_array.data, image_width, image_height, image_width, QImage.Format_Grayscale8)
             pixmap = QPixmap.fromImage(qimage)
 
             # Clear the previous items in the scene
@@ -170,16 +198,47 @@ class ThaumatoAnakalyptor(QMainWindow):
             self.indexBox.setText(str(index))
 
             # Draw a red point if it exists for this image
-            # if index in self.points:
-            #     x, y = self.points[index]
-            #     # Convert to scene coordinates
-            #     sceneX = x / self.image_width * self.image_width
-            #     sceneY = y / self.image_height * self.image_height
-            #     # Size of point unchanged in display no matter the zoom
-            #     size_display = 10
-            #     # Size of point in image coordinates
-            #     size_image = size_display / self.view.transform().m11()
-            #     self.tifScene.addEllipse(sceneX, sceneY, size_image, size_image, QPen(Qt.red), QBrush(Qt.red))
+            if len(self.points) > 0:
+                point_np = umbilicus_xy_at_z(self.points, np.array([index]))
+                x, y = point_np[0][0], point_np[0][1]
+                # Convert to scene coordinates
+                sceneX = x / self.image_width * self.image_width
+                sceneY = y / self.image_height * self.image_height
+                # Size of point unchanged in display no matter the zoom
+                size_display = 10
+                # Size of point in image coordinates
+                size_image = size_display / self.tifView.transform().m11()
+                sceneX -= size_image / 2
+                sceneY -= size_image / 2
+                self.tifScene.addEllipse(sceneX, sceneY, size_image, size_image, QPen(Qt.red), QBrush(Qt.red))
+
+                # Draw a cone from the point to the bottom of the image with cone angle 45 degrees
+                # calculate bottom x point (just bottom of the image)
+                cone_line_left_y = self.image_height
+                cone_line_right_y = self.image_height
+                # calculate 45 degree angle line between scene xy and cone line x to get cone line y
+                cone_line_left_x = sceneX + (cone_line_left_y - sceneY) * np.tan(np.deg2rad(45))
+                cone_line_right_x = sceneX - (cone_line_right_y - sceneY) * np.tan(np.deg2rad(45))
+                # Draw the lines
+                self.tifScene.addLine(sceneX, sceneY, cone_line_left_x, cone_line_left_y, QPen(Qt.green))
+                self.tifScene.addLine(sceneX, sceneY, cone_line_right_x, cone_line_right_y, QPen(Qt.green))
+                self.tifScene.addLine(cone_line_left_x, cone_line_left_y, cone_line_right_x, cone_line_right_y, QPen(Qt.green))
+
+            # Draw green starting point on the z index image
+            if hasattr(self, "xField") and hasattr(self, "yField") and hasattr(self, "zField") and self.zField.text() == str(index):
+                x = int(self.xField.text())
+                y = int(self.yField.text())
+                # Convert to scene coordinates
+                sceneX = x / self.image_width * self.image_width
+                sceneY = y / self.image_height * self.image_height
+                # Size of point unchanged in display no matter the zoom
+                size_display = 10
+                # Size of point in image coordinates
+                size_image = size_display / self.tifView.transform().m11()
+                sceneX -= size_image / 2
+                sceneY -= size_image / 2
+                self.tifScene.addEllipse(sceneX, sceneY, size_image, size_image, QPen(Qt.green), QBrush(Qt.green))
+            
         else:
             print(f"Index {index} out of range")
             # white placeholder image
@@ -194,8 +253,34 @@ class ThaumatoAnakalyptor(QMainWindow):
         self.loadTifImage(index)
 
     def onTifMousePress(self, event):
-        scenePos = self.tifView.mapToScene(event.pos())
-        print(f"Clicked position in image coordinates: ({int(scenePos.x())}, {int(scenePos.y())})")
+        # print(f"Clicked position in image coordinates: ({int(scenePos.x())}, {int(scenePos.y())}, {self.currentTifIndex})")
+        # Set starting point if in selection mode
+        if self.isSelectingStartingPoint:
+            scenePos = self.tifView.mapToScene(event.pos())
+            
+            self.xField.setText(str(int(scenePos.x())))
+            self.yField.setText(str(int(scenePos.y())))
+            self.zField.setText(str(self.currentTifIndex))
+
+            self.loadTifImage(self.currentTifIndex)
+
+    def incrementIndex(self):
+        self.incrementing = True
+        step_size = int(self.stepSizeBox.text())
+        self.currentTifIndex = min((self.currentTifIndex + step_size), len(self.tifImages) - 1)
+
+    def decrementIndex(self):
+        self.incrementing = False
+        step_size = int(self.stepSizeBox.text())
+        self.currentTifIndex = max((self.currentTifIndex - step_size), 0)
+
+    def keyPressEvent(self, event: QKeyEvent):
+        # "A" "D" keys for navigation
+        if event.key() == Qt.Key_D:
+            self.incrementIndex()
+        elif event.key() == Qt.Key_A:
+            self.decrementIndex()
+        self.loadTifImage(self.currentTifIndex)
 
     def openConfigWindow(self):
         self.configWindow = ConfigWindow(self)
@@ -583,16 +668,16 @@ class ThaumatoAnakalyptor(QMainWindow):
             min_end_steps = self.minEndStepsField.text()
             max_nr_walks = self.maxNrWalksField.text()
             continue_segmentation = '1' if self.continueSegmentationCheckbox.isChecked() else '0'
-            recompute = '1' if self.recomputeCheckbox.isChecked() else '0'
+            recompute = '1' if self.recomputeStitchSheetCheckbox.isChecked() else '0'
             walk_aggregation_threshold = self.walkAggregationThresholdField.text()
 
             # Construct the command
             command = [
                 "python3", "-m", "ThaumatoAnakalyptor.Random_Walks",
                 "--path", path,
-                "--starting_point", starting_point,
-                "--sheet_k_range", sheet_k_range,
-                "--sheet_z_range", sheet_z_range,
+                "--starting_point", self.xField.text(), self.yField.text(), self.zField.text(),
+                "--sheet_k_range", self.sheetKRangeStartField.text(), self.sheetKRangeEndField.text(),
+                "--sheet_z_range", self.sheetZRangeStartField.text(), self.sheetZRangeEndField.text(),
                 "--min_steps", min_steps,
                 "--min_end_steps", min_end_steps,
                 "--max_nr_walks", max_nr_walks,
@@ -601,14 +686,16 @@ class ThaumatoAnakalyptor(QMainWindow):
                 "--walk_aggregation_threshold", walk_aggregation_threshold
             ]
 
+            print(f"Command: {command}")
+
             # Starting the process
             self.process = subprocess.Popen(command)
             self.computeStitchSheetButton.setEnabled(False)
             self.stopStitchSheetButton.setEnabled(True)
 
             # Create a thread to monitor the completion of the process
-            self.monitorThread = threading.Thread(target=self.monitorProcess)
-            self.monitorThread.start()
+            # self.monitorThread = threading.Thread(target=self.monitorProcess)
+            # self.monitorThread.start()
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to start the script: {e}")

@@ -1427,6 +1427,7 @@ def random_walks():
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
 
     print(f"Configs: {overlapp_threshold}")
+    print(f"Args: {args}")
     
     # Build graph
     if recompute:

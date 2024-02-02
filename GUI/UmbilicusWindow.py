@@ -4,8 +4,9 @@ from PyQt5.QtWidgets import (QMainWindow, QAction, QVBoxLayout,
                              QWidget, QPushButton, QLabel, QHBoxLayout,
                              QLineEdit, QGraphicsView, QGraphicsScene, QMessageBox)
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QImage, QPixmap, QKeyEvent, QPainter, QPen, QBrush
-from PIL import Image
+from PyQt5.QtGui import QImage, QPixmap, QKeyEvent, QPainter, QPen, QBrush, QIcon
+import tifffile
+import numpy as np
 import os
 
 class GraphicsView(QGraphicsView):
@@ -33,6 +34,9 @@ class UmbilicusWindow(QMainWindow):
         self.images = sorted([f for f in os.listdir(self.imagePath) if f.endswith('.tif')])
         self.points = {}  # Dictionary to store points as {index: (x, y)}
         self.initUI()
+        # set icon
+        icon = QIcon("GUI/ThaumatoAnakalyptor.png")
+        self.setWindowIcon(icon)
 
     def initUI(self):
         self.setWindowTitle("Generate Umbilicus")
@@ -111,15 +115,23 @@ class UmbilicusWindow(QMainWindow):
     def loadImage(self, index):
         if 0 <= index < len(self.images):
             imagePath = os.path.join(self.imagePath, self.images[index])
-            self.fileNameLabel.setText("File: " + self.images[index])
-            image = Image.open(imagePath)
 
-            self.image_width = image.size[0]
-            self.image_height = image.size[1]
+            # Use tifffile to read the TIFF image
+            with tifffile.TiffFile(imagePath) as tif:
+                image_array = tif.asarray()
 
-            # Convert to 8-bit grayscale
-            image8bit = image.point(lambda i: i * (1./256)).convert('L')
-            qimage = QImage(image8bit.tobytes(), image8bit.size[0], image8bit.size[1], QImage.Format_Grayscale8)
+            # print(f"Loaded image {imagePath} at index {index} with shape {image_array.shape} and dtype {image_array.dtype}")
+
+            if image_array.dtype == np.uint16:
+                image_array = (image_array / 256).astype(np.uint8)
+
+            # Assuming the image is grayscale, prepare it for display
+            image_height, image_width = image_array.shape
+
+            self.image_width = image_width
+            self.image_height = image_height
+
+            qimage = QImage(image_array.data, image_width, image_height, image_width, QImage.Format_Grayscale8)
             pixmap = QPixmap.fromImage(qimage)
 
             # Clear the previous items in the scene
@@ -142,6 +154,8 @@ class UmbilicusWindow(QMainWindow):
                 size_display = 10
                 # Size of point in image coordinates
                 size_image = size_display / self.view.transform().m11()
+                sceneX -= size_image / 2
+                sceneY -= size_image / 2
                 self.scene.addEllipse(sceneX, sceneY, size_image, size_image, QPen(Qt.red), QBrush(Qt.red))
 
     def jumpToIndex(self):
