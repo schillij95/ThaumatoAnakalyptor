@@ -4,7 +4,20 @@
 *0.5 meter long segmentation of scroll 3.*
 
 ## Overview
-**ThaumatoAnakalyptor** is an advanced automatic segmentation pipeline designed for high-precision extraction of segmentations from ct scans of ancient scrolls with minimal human intervention.
+**ThaumatoAnakalyptor** is an advanced automatic segmentation pipeline designed for high-precision extraction of segmentations from CT scans of ancient scrolls with minimal human intervention.
+
+### Vesuvius Challenge 2023 Grand Prize
+
+This Repository is part of the **First Place Grand Prize Submission** to the [Vesuvius Challenge 2023](https://www.scrollprize.org/) from Youssef Nader, Luke Farritor and Julian Schilliger.
+
+Check out the **Ink Detection** of our winning Grand Prize submission in Youssef Nader's [Vesuvius Grand Prize Repository](https://github.com/younader/Vesuvius-Grandprize-Winner).
+
+### Secondary Repositories of Julian Schilliger
+
+This fork of [**Volume Cartographer**](https://github.com/schillij95/volume-cartographer-papyrus) introduces the Optical Flow Segmentation algorithms and important productivity improvements that enabled the generation of the manual segmentations used in the Grand Prize submission.
+
+Ink labeling and segment inspection can be done with the [**Crackle Viewer**](https://github.com/schillij95/Crackle-Viewer).
+
 
 ### Concept
 The core principle of ThaumatoAnakalyptor involves extracting 3D points on papyrus surfaces and grouping them into sheets. These sheets are then used to calculate a mesh that can be used for texturing the sheet's surface.
