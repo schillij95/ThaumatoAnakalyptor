@@ -7,13 +7,13 @@
 
 ## <img align="center" width="60" height="60" src="pictures/logo.png"> Vesuvius Challenge 2023 Grand Prize
 
-This Repository is part of the **First Place Grand Prize Submission** to the [Vesuvius Challenge 2023](https://www.scrollprize.org/) from Youssef Nader, Luke Farritor and Julian Schilliger.
+This repository is part of the **First Place Grand Prize Submission** to the [Vesuvius Challenge 2023](https://www.scrollprize.org/) from Youssef Nader, Luke Farritor and Julian Schilliger.
 
-Check out the **Ink Detection** of our winning Grand Prize submission in Youssef Nader's [Vesuvius Grand Prize Repository](https://github.com/younader/Vesuvius-Grandprize-Winner). He combines multiple Machine Learning techniques, like domain adaptation and TimeSformer to predict ink with the highest precision.
+Check out the **Ink Detection** of our winning Grand Prize submission in Youssef Nader's [Vesuvius Grand Prize Repository](https://github.com/younader/Vesuvius-Grandprize-Winner). He combines multiple Machine Learning techniques, like Domain Adaptation and TimeSformer to predict ink with the highest precision.
 
 ### Secondary Repositories of Julian Schilliger
 
-This fork of [Volume Cartographer](https://github.com/schillij95/volume-cartographer-papyrus) introduces the **Optical Flow Segmentation** algorithms and important productivity improvements that enabled the generation of the manual scroll sheet segmentations used in the Grand Prize submission.
+This [fork](https://github.com/schillij95/volume-cartographer-papyrus) of **Volume Cartographer** introduces the **Optical Flow Segmentation** algorithms and important productivity improvements that enabled the generation of the manual scroll sheet segmentations used in the Grand Prize submission.
 
 Ink labeling and segment inspection can efficiently be done with a purpose built tool named [Crackle Viewer](https://github.com/schillij95/Crackle-Viewer).
 
