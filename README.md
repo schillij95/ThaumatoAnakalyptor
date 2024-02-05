@@ -2,8 +2,10 @@
 
 **ThaumatoAnakalyptor** is an advanced automatic segmentation pipeline designed for high-precision extraction of papyrus sheet segmentations from CT scans of ancient scrolls with minimal human intervention.
 
-![0.5 meter long segmentation of scroll 3](pictures/thaumato_0-5m_scroll3.png)
-*0.5 meter long automatic segmentation of scroll 3.*
+<figure>
+  <img src="pictures/thaumato_0-5m_scroll3.png" alt="0.5 meter long segmentation of scroll 3" width="100%">
+  <figcaption><i>0.5 meter long automatic segmentation of scroll 3.</i></figcaption>
+</figure>
 
 ---
 
@@ -96,6 +98,11 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
     python3 ThaumatoAnakalyptor.py
     ```
 
+<figure>
+  <img src="pictures/ThaumatoAnakalyptorGP.png" alt="ThaumatoAnakalyptor GUI" width="100%">
+  <figcaption><i>ThaumatoAnakalyptor GUI</i></figcaption>
+</figure>
+
 - **Precomputation Steps:**
     These are the instructions to use ThaumatoAnakalyptor from the command line.
     The precomputation step is expected to take a few days.
@@ -110,6 +117,8 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
     ```bash
     python3 -m ThaumatoAnakalyptor.pointcloud_to_instances --path "<scroll-path>/scroll3_surface_points" --dest "<scroll-path>/scroll3_surface_points" --umbilicus_path "<scroll-path>/PHerc0332.volpkg/volumes/umbilicus.txt" --main_drive "" --alternative_ply_drives "" --max_umbilicus_dist -1
     ```
+
+
 
 #### Command Line Segmentation
 - **Segmentation Steps:** Additional details for each segmentation step are provided in the [instructions](ThaumatoAnakalyptor/instructions.txt) document.
