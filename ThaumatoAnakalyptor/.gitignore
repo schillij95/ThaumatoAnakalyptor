@@ -2,7 +2,7 @@
 .ply
 /saved
 /__pycache__
-*/__pycache__
+/*/__pycache__
 /old_pys
 /old_pys2
 /3d_instance_segmentation_training_data
