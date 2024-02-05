@@ -67,7 +67,7 @@ class UmbilicusWindow(QMainWindow):
         stepSizeLayout = QHBoxLayout()
         self.fileNameLabel = QLabel("File: " + self.images[self.currentIndex])
         stepSizeLabel = QLabel("Step Size:")
-        self.stepSizeBox = QLineEdit("333")  # Set default value
+        self.stepSizeBox = QLineEdit("100")  # Set default value
         self.stepSizeBox.setFixedWidth(100)  # Adjust width as appropriate
         self.stepSizeBox.returnPressed.connect(lambda: self.view.setFocus())  # Unfocus on Enter
 
