@@ -27,7 +27,7 @@ Ink labeling and segment inspection can efficiently be done with a purpose built
 <p>
     <img src="pictures/pointcloud_slice_scroll3.png" width="55%" >
     <img src="pictures/thaumato_mesh_sample.png" alt="Mesh Formation" width="38%">
-    <figcaption><i>Slice view of the PointCloud volume of scroll 3 (left) and Sample mesh (right).</i></figcaption>
+    <figcaption><i>Slice view trough the PointCloud volume of scroll 3 (left) and Sample mesh (right).</i></figcaption>
     </p>
     <img src="pictures/bending.png" width="93%">
     <figcaption><i>Stitched sheet PointCloud during the segmentation process. One half winding.</i></figcaption>
@@ -87,7 +87,17 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
     -e DISPLAY=$DISPLAY \
     thaumato_image
     ```
+
+- **GUI**
+    ThaumatoAnakalyptor can be used eighter from command line or as a GUI.
+    The GUI explains its usage in the help tab.
+    After starting the docker image, The GUI can be started with the following command:
+    ```bash
+    python3 ThaumatoAnakalyptor.py
+    ```
+
 - **Precomputation Steps:**
+    These are the instructions to use ThaumatoAnakalyptor from the command line.
     The precomputation step is expected to take a few days.
 
     The Grid Cells used for segmentation have to be in 8um resolution. ```generate_half_sized_grid.py``` is used for 4um resolution scans to generate Grid Cells in 8um resolution. If you have access to multiple GPU's, adjust the ```--num_threads``` and ```--gpus``` flags to speed up the process.
