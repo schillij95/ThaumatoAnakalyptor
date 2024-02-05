@@ -98,10 +98,10 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
     python3 ThaumatoAnakalyptor.py
     ```
 
-<figure>
-  <img src="pictures/ThaumatoAnakalyptorGP.png" alt="ThaumatoAnakalyptor GUI" width="100%">
-  <figcaption><i>ThaumatoAnakalyptor GUI</i></figcaption>
-</figure>
+    <figure>
+        <img src="pictures/ThaumatoAnakalyptorGP.png" alt="ThaumatoAnakalyptor GUI" width="100%">
+        <figcaption><i>ThaumatoAnakalyptor GUI</i></figcaption>
+    </figure>
 
 - **Precomputation Steps:**
     These are the instructions to use ThaumatoAnakalyptor from the command line.
