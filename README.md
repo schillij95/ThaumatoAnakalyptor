@@ -1,11 +1,11 @@
-# ThaumatoAnakalyptor <img align="middle" width="50" height="50" src="GUI/ThaumatoAnakalyptor.png">
+# ThaumatoAnakalyptor <img align="right" width="40" height="40" src="GUI/ThaumatoAnakalyptor.png">
 ![0.5 meter long segmentation of scroll 3](pictures/thaumato_0-5m_scroll3.png)
 
 *0.5 meter long automatic segmentation of scroll 3.*
 
 ---
 
-## Vesuvius Challenge 2023 Grand Prize <img align="middle" width="50" height="50" src="pictures/logo.png">
+## Vesuvius Challenge 2023 Grand Prize <img align="right" width="40" height="40" src="pictures/logo.png">
 
 This Repository is part of the **First Place Grand Prize Submission** to the [Vesuvius Challenge 2023](https://www.scrollprize.org/) from Youssef Nader, Luke Farritor and Julian Schilliger.
 
@@ -19,7 +19,7 @@ Ink labeling and segment inspection can be done with the [Crackle Viewer](https:
 
 ---
 
-## Overview <img align="middle" width="50" height="50" src="GUI/ThaumatoAnakalyptor.png">
+## Overview <img align="right" width="40" height="40" src="GUI/ThaumatoAnakalyptor.png">
 **ThaumatoAnakalyptor** is an advanced automatic segmentation pipeline designed for high-precision extraction of papyrus sheet segmentations from CT scans of ancient scrolls with minimal human intervention.
 
 ### Concept
