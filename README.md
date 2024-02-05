@@ -1,11 +1,13 @@
 # <img align="center" width="60" height="60" src="GUI/ThaumatoAnakalyptor.png"> ThaumatoAnakalyptor
-![0.5 meter long segmentation of scroll 3](pictures/thaumato_0-5m_scroll3.png)
 
+**ThaumatoAnakalyptor** is an advanced automatic segmentation pipeline designed for high-precision extraction of papyrus sheet segmentations from CT scans of ancient scrolls with minimal human intervention.
+
+![0.5 meter long segmentation of scroll 3](pictures/thaumato_0-5m_scroll3.png)
 *0.5 meter long automatic segmentation of scroll 3.*
 
 ---
 
-## <img align="center" width="60" height="60" src="pictures/logo.png"> Vesuvius Challenge 2023 Grand Prize
+# <img align="center" width="60" height="60" src="pictures/logo.png"> Vesuvius Challenge 2023 Grand Prize
 
 This repository is part of the **First Place Grand Prize Submission** to the [Vesuvius Challenge 2023](https://www.scrollprize.org/) from Youssef Nader, Luke Farritor and Julian Schilliger.
 
@@ -19,36 +21,28 @@ Ink labeling and segment inspection can efficiently be done with a purpose built
 
 ---
 
-## <img align="center" width="60" height="60" src="GUI/ThaumatoAnakalyptor.png"> Overview
-**ThaumatoAnakalyptor** is an advanced automatic segmentation pipeline designed for high-precision extraction of papyrus sheet segmentations from CT scans of ancient scrolls with minimal human intervention.
 
-### Concept
+## <img align="center" width="60" height="60" src="GUI/ThaumatoAnakalyptor.png"> Overview
+
+<p>
+    <img src="pictures/pointcloud_slice_scroll3.png" width="55%" >
+    <img src="pictures/thaumato_mesh_sample.png" alt="Mesh Formation" width="38%">
+    <figcaption><i>Slice view of the PointCloud volume of scroll 3 (left) and Sample mesh (right).</i></figcaption>
+    </p>
+    <img src="pictures/bending.png" width="93%">
+    <figcaption><i>Stitched sheet PointCloud during the segmentation process. One half winding.</i></figcaption>
+</p>
+
 The core principle of ThaumatoAnakalyptor involves extracting 3D points on papyrus surfaces and grouping them into sheets. These sheets are then used to calculate a mesh that can be used for texturing the sheet's surface.
 
 ### Process
 - **3D Derivative Analysis:** The method employs 3D derivatives of volume brightness intensity to detect papyrus sheet surfaces in CT scans. An intuitive explanation is that the side view of a sheet exhibits a bell curve in voxel intensities, allowing for precise detection of the sheet's back and front.
 - **PointCloud Generation:** Local sheet normals are calculated from 3D gradients analysis of the scroll scan. By thresholding on the first and second 1D derrivative in sheet normal direction, the process identifies surface voxels/points, resulting in a detailed surface PointCloud volume of the scroll.
 
-    ![PointCloud Volume Visualization](pictures/pointcloud_slice_scroll3.png)
-
-    *Slice view of the PointCloud volume of scroll 3.*
-
 - **Segmentation and Mesh Formation:** The PointCloud volume is split into subvolumes, and a 3D instance segmentation algorithm clusters the surface points to instances of sheet patches. A Random Walk procedure is employed to stitch patches together into a sheet of points containing the 3D position and their respective winding number. Using Poisson surface reconstruction, the sheet points are then transformed into a mesh.
 
-    ![Sheet Point Cloud during Segmentation Process](pictures/bending.png)
+- **Texturing:** The mesh is unrolled to generate UV coordinates. Sub-meshes are created for easier texturing. Volume Cartographer's render pipeline textures the sheet's surface.
 
-    *Stitched sheet PointCloud during the segmentation process. One half winding.*
-
-    ![Mesh Formation](pictures/thaumato_mesh_sample.png)
-
-    *Sample mesh.*
-
-## Implementation
-
-### Mesh Processing
-- The mesh is unrolled to generate UV coordinates.
-- Sub-meshes are created for easier texturing.
-- VC’s render pipeline textures the sheet's surface.
 
 ## Running the Code
 This example shows how to do segmentation on scroll 3 (PHerc0332).
