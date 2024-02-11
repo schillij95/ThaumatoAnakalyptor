@@ -53,11 +53,11 @@ class GraphicsView(QGraphicsView):
 class ThaumatoAnakalyptor(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.loadConfig()
-        self.initUI()
         self.process = None
         self.isSelectingStartingPoint = False
         self.points = []
+        self.loadConfig()
+        self.initUI()
         # set icon
         icon = QIcon("GUI/ThaumatoAnakalyptor.png")
         self.setWindowIcon(icon)
@@ -299,7 +299,8 @@ class ThaumatoAnakalyptor(QMainWindow):
         helpText = "ThaumatoAnakalyptor Help\n\n" \
                    "There are the following shortcuts:\n\n" \
                    "- Use 'A' and 'D' to switch between TIFF layers.\n" \
-                   "- Click on the TIFF to place a point.\n" 
+                   "- Click on the TIFF to place a point.\n" \
+                   "If you run into out-of-memory issues on your GPU, try to reduce the number of threads and the batch size." 
         QMessageBox.information(self, "Help", helpText)
 
     def addCollapsibleSection(self, layout, title):
@@ -393,7 +394,7 @@ class ThaumatoAnakalyptor(QMainWindow):
         try:
             compute_grid_cells(input_directory=config["original_2d_tiffs"], 
                                output_directory=config["downsampled_2d_tiffs"], 
-                               downsample_factor=config["downsample_factor"])
+                               downsample_factor=abs(config["downsample_factor"]))
 
             # Clean up computation after completion
             self.postComputation()
@@ -409,7 +410,7 @@ class ThaumatoAnakalyptor(QMainWindow):
                 "python3", "-m", "ThaumatoAnakalyptor.generate_half_sized_grid", 
                 "--input_directory", str(self.Config["original_2d_tiffs"]), 
                 "--output_directory", str(self.Config["downsampled_2d_tiffs"]), 
-                "--downsample_factor", str(self.Config["downsample_factor"])
+                "--downsample_factor", str(abs(self.Config["downsample_factor"]))
             ]
 
         self.process = subprocess.Popen(command)
@@ -485,6 +486,7 @@ class ThaumatoAnakalyptor(QMainWindow):
 
     def addInstancesArea(self, box):
         label = QLabel("Instances")
+        # self.addFieldWithLabel(box, "Batch Size:", "Enter Batch Size", "batchSizeField", value=4)
         self.computeInstancesButton = QPushButton("Compute")
         self.stopInstancesButton = QPushButton("Stop")
         self.stopInstancesButton.setEnabled(False)
@@ -498,6 +500,8 @@ class ThaumatoAnakalyptor(QMainWindow):
 
     def computeInstances(self):
         try:
+            batch_size = int(self.Config["batch_size"])
+
             command = [
                 "python3", "-m", "ThaumatoAnakalyptor.pointcloud_to_instances", 
                 "--path", self.Config["surface_points_path"], 
@@ -505,6 +509,7 @@ class ThaumatoAnakalyptor(QMainWindow):
                 "--umbilicus_path", self.Config["umbilicus_path"], 
                 "--main_drive", "", "--alternative_ply_drives", "", "", 
                 "--max_umbilicus_dist", "-1"
+                "--batch_size", str(batch_size),
             ]
 
             self.process = subprocess.Popen(command)
@@ -545,6 +550,11 @@ class ThaumatoAnakalyptor(QMainWindow):
         self.addFlatteningArea(flatteningBox)
         volumeBox.add_widget(flatteningBox)
 
+        # Slim UV Area
+        slimUVBox = CollapsibleBox("Slim UV")
+        self.addSlimArea(slimUVBox)
+        volumeBox.add_widget(slimUVBox)
+
         # Finalize Area
         finalizeBox = CollapsibleBox("Finalize")
         self.addFinalizeArea(finalizeBox)
@@ -557,7 +567,7 @@ class ThaumatoAnakalyptor(QMainWindow):
 
         layout.addWidget(volumeBox)
 
-    def addFieldWithLabel(self, box, labelText, placeholderText, fieldAttribute):
+    def addFieldWithLabel(self, box, labelText, placeholderText, fieldAttribute, value=None):
         # Create a widget to hold the label and field, ensuring proper layout within the collapsible box
         widget = QWidget()
         layout = QHBoxLayout(widget)
@@ -569,6 +579,8 @@ class ThaumatoAnakalyptor(QMainWindow):
         # Create, configure, and add the field
         field = QLineEdit()
         field.setPlaceholderText(placeholderText)
+        if value:
+            field.setText(str(value))
         layout.addWidget(field)
         
         # Add the composite widget to the box
@@ -869,11 +881,19 @@ class ThaumatoAnakalyptor(QMainWindow):
             starting_point = [self.xField.text(), self.yField.text(), self.zField.text()]
             path = os.path.join(self.Config["surface_points_path"], f"{starting_point[0]}_{starting_point[1]}_{starting_point[2]}", "point_cloud_colorized_verso_subvolume_blocks.obj")
 
-            command = [
+            command_cylindricalFlattening = [
                 "python3", "-m", "ThaumatoAnakalyptor.mesh_to_uv", 
                 "--path", path, 
                 "--umbilicus_path", self.Config["umbilicus_path"]
             ]
+
+            command_slimFlattening = [
+                "python3", "-m", "ThaumatoAnakalyptor.slim_uv",
+                "--path", path,
+                "--iter", "20"
+            ]
+
+            command = command_cylindricalFlattening
 
             self.process = subprocess.Popen(command)
             self.computeFlatteningButton.setEnabled(False)
@@ -894,6 +914,51 @@ class ThaumatoAnakalyptor(QMainWindow):
         self.stopFlatteningButton.setEnabled(False)
         print("Computation process stopped.")
 
+    def addSlimArea(self, box):
+        label = QLabel("Slim")
+        self.computeSlimButton = QPushButton("Compute")
+        self.stopSlimButton = QPushButton("Stop")
+        self.stopSlimButton.setEnabled(False)
+
+        self.computeSlimButton.clicked.connect(self.computeSlim)
+        self.stopSlimButton.clicked.connect(self.stopSlim)
+
+        box.add_widget(label)
+        box.add_widget(self.computeSlimButton)
+        box.add_widget(self.stopSlimButton)
+
+    def computeSlim(self):
+        try:
+            starting_point = [self.xField.text(), self.yField.text(), self.zField.text()]
+            path = os.path.join(self.Config["surface_points_path"], f"{starting_point[0]}_{starting_point[1]}_{starting_point[2]}", "point_cloud_colorized_verso_subvolume_blocks_uv.obj")
+
+            command_slimFlattening = [
+                "python3", "-m", "ThaumatoAnakalyptor.slim_uv",
+                "--path", path,
+                "--iter", "20"
+            ]
+
+            command = command_slimFlattening
+
+            self.process = subprocess.Popen(command)
+            self.computeSlimButton.setEnabled(False)
+            self.stopSlimButton.setEnabled(True)
+
+            # Clean up computation after completion
+            self.postComputation()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to start the script: {e}")
+            self.computeSlimButton.setEnabled(True)
+            self.stopSlimButton.setEnabled(False)
+
+    def stopSlim(self):
+        if self.process and self.process.poll() is None:
+            self.process.terminate()
+            self.process = None
+        self.computeSlimButton.setEnabled(True)
+        self.stopSlimButton.setEnabled(False)
+        print("Computation process stopped.")
+
     def addFinalizeArea(self, box):
         label = QLabel("Finalize")
         self.computeFinalizeButton = QPushButton("Compute")
@@ -910,12 +975,12 @@ class ThaumatoAnakalyptor(QMainWindow):
     def computeFinalize(self):
         try:
             starting_point = [self.xField.text(), self.yField.text(), self.zField.text()]
-            input_mesh = os.path.join(self.Config["surface_points_path"], f"{starting_point[0]}_{starting_point[1]}_{starting_point[2]}", "point_cloud_colorized_verso_subvolume_blocks_uv.obj")
+            input_mesh = os.path.join(self.Config["surface_points_path"], f"{starting_point[0]}_{starting_point[1]}_{starting_point[2]}", "point_cloud_colorized_verso_subvolume_blocks_uv_flatboi.obj")
             command = [
                 "python3", "-m", "ThaumatoAnakalyptor.finalize_mesh", 
                 "--input_mesh", input_mesh, 
                 "--cut_size", "40000", 
-                "--scale_factor", f"{self.Config['downsample_factor']:f}"
+                "--scale_factor", f"{abs(self.Config['downsample_factor']):f}"
             ]
 
             self.process = subprocess.Popen(command)
