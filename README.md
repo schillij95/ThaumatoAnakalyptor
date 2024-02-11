@@ -91,7 +91,7 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
     ```
 
 - **GUI**
-    ThaumatoAnakalyptor can be used eighter from command line or as a GUI.
+    ThaumatoAnakalyptor can be used either from command line or as a GUI.
     The GUI explains its usage in the help tab.
     After starting the docker image, The GUI can be started with the following command:
     ```bash
