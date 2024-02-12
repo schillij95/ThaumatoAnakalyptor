@@ -865,6 +865,8 @@ class ThaumatoAnakalyptor(QMainWindow):
 
     def addFlatteningArea(self, box):
         label = QLabel("Flattening")
+        self.delaunyCheckbox = QCheckBox("Use Delaunay")
+        self.delaunyCheckbox.setChecked(True)
         self.computeFlatteningButton = QPushButton("Compute")
         self.stopFlatteningButton = QPushButton("Stop")
         self.stopFlatteningButton.setEnabled(False)
@@ -873,6 +875,7 @@ class ThaumatoAnakalyptor(QMainWindow):
         self.stopFlatteningButton.clicked.connect(self.stopFlattening)
 
         box.add_widget(label)
+        box.add_widget(self.delaunyCheckbox)
         box.add_widget(self.computeFlatteningButton)
         box.add_widget(self.stopFlatteningButton)
 
@@ -881,19 +884,15 @@ class ThaumatoAnakalyptor(QMainWindow):
             starting_point = [self.xField.text(), self.yField.text(), self.zField.text()]
             path = os.path.join(self.Config["surface_points_path"], f"{starting_point[0]}_{starting_point[1]}_{starting_point[2]}", "point_cloud_colorized_verso_subvolume_blocks.obj")
 
-            command_cylindricalFlattening = [
+            command = [
                 "python3", "-m", "ThaumatoAnakalyptor.mesh_to_uv", 
                 "--path", path, 
                 "--umbilicus_path", self.Config["umbilicus_path"]
             ]
 
-            command_slimFlattening = [
-                "python3", "-m", "ThaumatoAnakalyptor.slim_uv",
-                "--path", path,
-                "--iter", "20"
-            ]
+            if self.delaunyCheckbox.isChecked():
+                command += ["--enable_delauny"]
 
-            command = command_cylindricalFlattening
 
             self.process = subprocess.Popen(command)
             self.computeFlatteningButton.setEnabled(False)

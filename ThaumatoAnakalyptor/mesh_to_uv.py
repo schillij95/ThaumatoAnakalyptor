@@ -267,7 +267,8 @@ class UmbilicusEntry:
         self.z = z
 
 class MeshFlattener:
-    def __init__(self, input_mesh, umbilicus_path, umbilicus_data=None):
+    def __init__(self, input_mesh, umbilicus_path, umbilicus_data=None, omnidirectional_view=False):
+        self.omnidirectional_view = omnidirectional_view
         self.mesh = input_mesh
         self.vertices_np = np.asarray(self.mesh.vertices).copy()  # Create a copy of the vertices as a NumPy array
         self.visited_vertices = set()
@@ -609,8 +610,10 @@ class MeshFlattener:
         return visible_mask
     
     def unoccluded_vertices_omnidirectional(self):
-        # ray_vectors = [[0, -1, 0], [1, -2, 0], [-1, -2, 0]] # different flattening approaches might benefit from this
-        ray_vectors = [[0, -1, 0]]
+        if self.omnidirectional_view:
+            ray_vectors = [[0, -1, 0], [1, -2, 0], [-1, -2, 0]] # different flattening approaches might benefit from this
+        else:
+            ray_vectors = [[0, -1, 0]]
         mask_unoccluded = np.zeros(self.vertices_np.shape[0], dtype=bool)
         for ray_vector in ray_vectors:
             mask_ = self.unoccluded_vertices(ray_vector)
@@ -1090,26 +1093,32 @@ def main():
     parser = argparse.ArgumentParser(description='Add UV coordinates to a ThaumatoAnakalyptor papyrus surface mesh (.obj). output mesh has addition "_uv.obj" in name.')
     parser.add_argument('--path', type=str, help='Path of .obj Mesh', default=path)
     parser.add_argument('--umbilicus_path', type=str, help='Path of center umbilicus positions for the mesh scroll', default=umbilicus_path)
+    parser.add_argument('--enable_delauny', action='store_true', help='Flag, enables the mesh refinement step with delauny mesh reconstruction from 2D flattening')
 
     # Take arguments back over
     args = parser.parse_args()
+    print(f"Mesh to UV arguments: {args}")
+
     path = args.path
     umbilicus_path = args.umbilicus_path
+    enable_delauny = args.enable_delauny
 
     print(f"Adding UV coordinates to mesh {path}")
 
     mesh = load_obj(path)
     print(f"Loaded mesh with {len(mesh.vertices)} vertices and {len(mesh.triangles)} triangles.")
-    mesh_flattener = MeshFlattener(mesh, umbilicus_path)
+    mesh_flattener = MeshFlattener(mesh, umbilicus_path, omnidirectional_view=not enable_delauny)
     mesh, flattened_mesh = mesh_flattener.compute()
     x_heightmap = mesh_flattener.x_heightmap
 
     path_flattened = path.replace(".obj", "_flattened.obj")
     save_obj(path_flattened, flattened_mesh)
 
-    delauny_triangulator = DelaunyMeshManifold(mesh, flattened_mesh, umbilicus_path)
-    path_delauny = path.replace(".obj", "_delauny.obj")
-    mesh, flattened_mesh = delauny_triangulator.compute(path_delauny)
+    if enable_delauny:
+        delauny_triangulator = DelaunyMeshManifold(mesh, flattened_mesh, umbilicus_path)
+        path_delauny = path.replace(".obj", "_delauny.obj")
+        mesh, flattened_mesh = delauny_triangulator.compute(path_delauny)
+
 
     ortho_mapper = OrthographicUVMapper(mesh, flattened_mesh, x_heightmap, kernel_size=75, gradient_factor=-10.00, heatmap_path=path.replace(".obj", "_heatmap.png"), umbilicus_path=umbilicus_path)
     path_uv = path.replace(".obj", "_uv.obj")

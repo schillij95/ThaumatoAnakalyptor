@@ -92,22 +92,44 @@ def main(args):
 
     print(f"All parameters: {args}, im_shape: {im_shape}, layers_path: {layers_path}, path_template: {path_template}")
     axis_swap_trans = [2, 1, 0]
+
+    # with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
+    #     # Submit all tasks and store the future objects
+    #     futures = {executor.submit(load_and_process_grid_volume, layers, cubes, cube, args, path_template, axis_swap_trans): cube for cube in cubes.keys()}
+
+    #     # Initialize tqdm with the total number of tasks
+    #     with tqdm(total=len(futures), desc="Processing Cubes") as progress:
+    #         for future in as_completed(futures):
+    #             # Update the progress bar each time a future is completed
+    #             progress.update(1)
+
+    #             # Get the result of the completed future and do something with it
+    #             result = future.result()
+    #             samples, xyz_layers = result
+
+    #             # insert into layers
+    #             insert_into_image_3d(samples, xyz_layers, layers) 
+
+    # Process cubes in batches
+    cube_list = list(cubes.keys())
+    total_cubes = len(cube_list)
+    batch_size = args.max_workers  # Process cubes in batches equal to max_workers
+
     with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
-        # Submit all tasks and store the future objects
-        futures = {executor.submit(load_and_process_grid_volume, layers, cubes, cube, args, path_template, axis_swap_trans): cube for cube in cubes.keys()}
+        with tqdm(total=total_cubes, desc="Processing Cubes") as progress:
+            for i in range(0, total_cubes, batch_size):
+                # Submit a batch of tasks
+                futures = [executor.submit(load_and_process_grid_volume, layers, cubes, cube, args, path_template, axis_swap_trans) for cube in cube_list[i:i+batch_size]]
 
-        # Initialize tqdm with the total number of tasks
-        with tqdm(total=len(futures), desc="Processing Cubes") as progress:
-            for future in as_completed(futures):
-                # Update the progress bar each time a future is completed
-                progress.update(1)
+                # Process completed tasks before moving on to the next batch
+                for future in as_completed(futures):
+                    # Update the progress bar each time a future is completed
+                    progress.update(1)
 
-                # Get the result of the completed future and do something with it
-                result = future.result()
-                samples, xyz_layers = result
-
-                # insert into layers
-                insert_into_image_3d(samples, xyz_layers, layers) 
+                    result = future.result()
+                    samples, xyz_layers = result
+                    # Insert into layers
+                    insert_into_image_3d(samples, xyz_layers, layers)
 
     # save layers
     for i in range(layers.shape[0]):

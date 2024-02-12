@@ -24,12 +24,17 @@ class Flatboi:
         self.input_obj = obj_path
         self.max_iter = max_iter
         self.read_mesh()
+        # self.filter_mesh()
 
     def read_mesh(self):
         self.mesh = o3d.io.read_triangle_mesh(self.input_obj)
         self.vertices = np.asarray(self.mesh.vertices, dtype=np.float64)
         self.triangles = np.asarray(self.mesh.triangles, dtype=np.int32)
         self.original_uvs = np.asarray(self.mesh.triangle_uvs, dtype=np.float64)
+
+    def filter_mesh(self):
+        # Filtering out any triangles with 0 area
+        self.triangles = [t for t in self.triangles if abs(igl.triangle_area(self.vertices[t[0]], self.vertices[t[1]], self.vertices[t[2]])) > 0.0001]
 
     def generate_boundary(self):
         return igl.boundary_loop(self.triangles)
@@ -40,6 +45,21 @@ class Flatboi:
         # harmonic map to unit circle, this will be the initial condition
         uv = igl.harmonic(self.vertices, self.triangles, bnd, bnd_uv, 1)
         return bnd, bnd_uv, uv
+    
+    def arap_ic(self):
+        bnd = self.generate_boundary()
+        bnd_uv = igl.map_vertices_to_circle(self.vertices, bnd)
+        uv = igl.harmonic(self.vertices, self.triangles, bnd, bnd_uv, 1)
+        arap = igl.ARAP(self.vertices, self.triangles, 2, np.zeros(0))
+        uva = arap.solve(np.zeros((0, 0)), uv)
+
+        bc = np.zeros((bnd.shape[0],2), dtype=np.float64)
+        for i in tqdm(range(bnd.shape[0])):
+            #bc[i] = conformal_flattening[bnd[i]]
+            #bc[i] = vertex_coord[bnd[i]]
+            bc[i] = uva[bnd[i]]
+
+        return bnd, bc, uva
     
     def original_ic(self):
         input_directory = os.path.dirname(self.input_obj)
@@ -73,11 +93,17 @@ class Flatboi:
     
     def slim(self, initial_condition='original'):
         if initial_condition == 'original':
+            print("Using Cylindrical Unrolling UV Condition")
             bnd, bnd_uv, uv = self.original_ic()
             l2, linf, area_error = self.stretch_metrics(uv)
             print(f"Stretch metrics ABF L2: {l2:.5f}, Linf: {linf:.5f}, Area Error: {area_error:.5f}", end="\n")
+        elif initial_condition == 'arap':
+            # generating arap boundary, boundary uvs, and uvs
+            print("Using ARAP Condition")
+            bnd, bnd_uv, uv = self.arap_ic()
         elif initial_condition == 'harmonic':
             # generating harmonic boundary, boundary uvs, and uvs
+            print("Using Harmonic Condition")
             bnd, bnd_uv, uv = self.harmonic_ic()
 
         # initializing SLIM with Symmetric Dirichlet Distortion Energy (isometric)
@@ -85,12 +111,35 @@ class Flatboi:
 
         energies = np.zeros(self.max_iter+1, dtype=np.float64)
         energies[0] = slim.energy()
-        for i in tqdm(range(self.max_iter)):
+
+
+        # for i in tqdm(range(self.max_iter)):
+        #     slim.solve(1)
+        #     energies[i+1] = slim.energy()
+
+        threshold = 1e-5
+        converged = False
+        iteration = 0
+        while (not converged) and (iteration < self.max_iter):
+            print(iteration)
+            temp_energy = slim.energy()
             slim.solve(1)
-            energies[i+1] = slim.energy()
+            new_energy = slim.energy()
+            energies[iteration+1] = new_energy
+            iteration += 1
+            print(f"{temp_energy:.3f} {new_energy:.3f}")
+            if new_energy >= float("inf") or new_energy == float("nan") or np.isnan(new_energy) or np.isinf(new_energy):
+                continue
+            elif new_energy < temp_energy:
+                if abs(new_energy - temp_energy) < threshold:
+                    converged = True
+                else:
+                    converged = False
+            else:
+                converged = True
 
         l2, linf, area_error = self.stretch_metrics(slim.vertices())
-        print(f"Stretch metrics L2: {l2:.5f}, Linf: {linf:.5f}, , Area Error: {area_error:.5f}", end="\n")
+        print(f"Stretch metrics L2: {l2:.5f}, Linf: {linf:.5f}, Area Error: {area_error:.5f}", end="\n")
         return slim.vertices(), energies
     
     @staticmethod
@@ -99,51 +148,6 @@ class Flatboi:
         uv_max = np.max(uv, axis=0)
         new_uv = (uv - uv_min) / (uv_max - uv_min)
         return new_uv
-    
-    # def save_img(self, uv):
-    #     input_directory = os.path.dirname(self.input_obj)
-    #     base_file_name, _ = os.path.splitext(os.path.basename(self.input_obj))
-    #     image_path = os.path.join(input_directory, f"{base_file_name}_uv_0.png")
-    #     min_x, min_y = np.min(uv, axis=0)
-    #     shifted_coords = uv - np.array([min_x, min_y])
-    #     max_x, max_y = np.max(shifted_coords, axis=0)
-    #     # Create a white image of the determined size
-    #     image_size = (int(round(max_y)) + 1, int(round(max_x)) + 1)
-    #     white_image = np.ones((image_size[0], image_size[1]), dtype=np.uint16) * 65535
-
-    #     # Save the grayscale image
-    #     Image.fromarray(white_image, mode='L').save(image_path)
-
-    # def save_mtl(self):
-    #     input_directory = os.path.dirname(self.input_obj)
-    #     base_file_name, _ = os.path.splitext(os.path.basename(self.input_obj))
-        
-    #     new_file_path = os.path.join(input_directory, f"{base_file_name}_uv_0.mtl")
-    #     content = f"""# Material file generated by ThaumatoAnakalyptor
-    #     newmtl default
-    #     Ka 1.0 1.0 1.0
-    #     Kd 1.0 1.0 1.0
-    #     Ks 0.0 0.0 0.0
-    #     illum 2
-    #     d 1.0
-    #     map_Kd {base_file_name}_uv_0.png
-    #     """
-
-    #     with open(new_file_path, 'w') as file:
-    #         file.write(content)
-
-    # def save_obj(self, uv):
-    #     input_directory = os.path.dirname(self.input_obj)
-    #     base_file_name, _ = os.path.splitext(os.path.basename(self.input_obj))
-    #     obj_path = os.path.join(input_directory, f"{base_file_name}_uv.obj")
-    #     normalized_uv = self.normalize(uv)
-    #     slim_uvs = np.zeros((self.triangles.shape[0],3,2), dtype=np.float64)
-    #     for t in range(self.triangles.shape[0]):
-    #         for v in range(self.triangles.shape[1]):
-    #             slim_uvs[t,v,:] = normalized_uv[self.triangles[t,v]]
-    #     slim_uvs = slim_uvs.reshape(-1,2)
-    #     self.mesh.triangle_uvs = o3d.utility.Vector2dVector(slim_uvs)
-    #     o3d.io.write_triangle_mesh(obj_path, self.mesh)
 
     def save_img(self, uv):
         input_directory = os.path.dirname(self.input_obj)
@@ -163,7 +167,7 @@ class Flatboi:
         input_directory = os.path.dirname(self.input_obj)
         base_file_name, _ = os.path.splitext(os.path.basename(self.input_obj))
         
-        new_file_path = os.path.join(input_directory, f"{base_file_name}_flatboi_0.mtl")
+        new_file_path = os.path.join(input_directory, f"{base_file_name}_flatboi.mtl")
         content = f"""# Material file generated by ThaumatoAnakalyptor
         newmtl default
         Ka 1.0 1.0 1.0
@@ -294,8 +298,8 @@ def main():
 
     print(f"Adding UV coordinates to mesh {path}")
 
-    flatboi = Flatboi(path, args.iter)
-    harmonic_uvs, harmonic_energies = flatboi.slim(initial_condition='original')
+    flatboi = Flatboi(path, 5)
+    harmonic_uvs, harmonic_energies = flatboi.slim(initial_condition='arap')
     flatboi.save_img(harmonic_uvs)
     flatboi.save_obj(harmonic_uvs)
     print_array_to_file(harmonic_energies, energies_file)       
