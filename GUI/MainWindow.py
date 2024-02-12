@@ -508,7 +508,7 @@ class ThaumatoAnakalyptor(QMainWindow):
                 "--dest", self.Config["surface_points_path"], 
                 "--umbilicus_path", self.Config["umbilicus_path"], 
                 "--main_drive", "", "--alternative_ply_drives", "", "", 
-                "--max_umbilicus_dist", "-1"
+                "--max_umbilicus_dist", "-1",
                 "--batch_size", str(batch_size),
             ]
 
