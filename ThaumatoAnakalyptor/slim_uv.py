@@ -91,6 +91,32 @@ class Flatboi:
 
         return bnd, bnd_uv, uv
     
+    def orient_uvs(self, vertices):
+        # Rotate vertices and calculate the needed area
+        vertices[:, 0] = 1.0 - vertices[:, 0]
+        u_range = np.max(vertices[:, 0]) - np.min(vertices[:, 0])
+        v_range = np.max(vertices[:, 1]) - np.min(vertices[:, 1])
+        u_longer_v = u_range > v_range
+        u_return = vertices[:, 0]
+        v_return = vertices[:, 1]
+        area_return = u_range * v_range
+        for angle in range(-70, 70, 5):
+            u_prime = vertices[:, 0] * np.cos(np.deg2rad(angle)) - vertices[:, 1] * np.sin(np.deg2rad(angle))
+            v_prime = vertices[:, 0] * np.sin(np.deg2rad(angle)) + vertices[:, 1] * np.cos(np.deg2rad(angle))
+            u_prime_range = np.max(u_prime) - np.min(u_prime)
+            v_prime_range = np.max(v_prime) - np.min(v_prime)
+            if u_prime_range < v_prime_range and u_longer_v:
+                continue
+            elif u_prime_range > v_prime_range and not u_longer_v:
+                continue
+            area = u_prime_range * v_prime_range
+            if area < area_return:
+                u_return = u_prime
+                v_return = v_prime
+                area_return = area
+
+        return np.stack((u_return, v_return), axis=-1) 
+    
     def slim(self, initial_condition='original'):
         if initial_condition == 'original':
             print("Using Cylindrical Unrolling UV Condition")
@@ -140,7 +166,12 @@ class Flatboi:
 
         l2, linf, area_error = self.stretch_metrics(slim.vertices())
         print(f"Stretch metrics L2: {l2:.5f}, Linf: {linf:.5f}, Area Error: {area_error:.5f}", end="\n")
-        return slim.vertices(), energies
+
+        slim_uvs = slim.vertices()
+
+        slim_uvs = self.orient_uvs(slim_uvs)
+
+        return slim_uvs, energies
     
     @staticmethod
     def normalize(uv):
