@@ -66,13 +66,67 @@ RUN pip install pytorch-lightning==1.7.2 \
 
 RUN apt-get update && apt-get install -y libgl1-mesa-glx
 
-# Copy scripts and modules
-COPY ./ThaumatoAnakalyptor/mask3d/ /workspace/ThaumatoAnakalyptor/mask3d/
-
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Add user
-RUN adduser --quiet --disabled-password qtuser && usermod -a -G audio qtuser
+# Install apt sources for Volume Cartographer
+# RUN echo 'deb http://deb.debian.org/debian bookworm-backports main' > /etc/apt/sources.list.d/backports.list \
+# && apt-get clean && apt-get -y update
+RUN apt-get install --fix-missing --fix-broken -y \
+    build-essential \
+    curl \
+    git \
+    libbz2-dev \
+    libexpat1-dev \
+    libfontconfig1-dev \
+    libfreetype6-dev \
+    libgl1-mesa-dev \
+    libglu1-mesa-dev \
+    libicu-dev \
+    libncurses-dev \
+    libopenblas-dev \
+    libusb-1.0-0-dev \
+    '^libxcb.*-dev' \
+    libx11-dev \
+    libx11-xcb-dev \
+    libxcb-glx0-dev \
+    libxcb-keysyms1-dev \
+    libxcb-image0-dev \
+    libxcb-shm0-dev \
+    libxcb-icccm4-dev \
+    libxcb-sync-dev \
+    libxcb-xfixes0-dev \
+    libxcb-shape0-dev \
+    libxcb-randr0-dev \
+    libxcb-render-util0-dev \
+    libxcb-util-dev \
+    libxcb-xinerama0-dev \
+    libxcb-xkb-dev \
+    libxext-dev \
+    libxfixes-dev \
+    libxi-dev \
+    libxkbcommon-dev \
+    libxkbcommon-x11-dev \
+    libxrender-dev \
+    libxt-dev \
+    ninja-build \
+    perl \
+    pkg-config \
+    python3-dev \
+    python3-pip \
+    python3-setuptools \
+    zlib1g-dev 
+
+RUN apt-get update \
+  && apt-get -y install build-essential \
+  && apt-get install -y wget \
+  && rm -rf /var/lib/apt/lists/* \
+  && wget https://github.com/Kitware/CMake/releases/download/v3.24.1/cmake-3.24.1-Linux-x86_64.sh \
+      -q -O /tmp/cmake-install.sh \
+      && chmod u+x /tmp/cmake-install.sh \
+      && mkdir /opt/cmake-3.24.1 \
+      && /tmp/cmake-install.sh --skip-license --prefix=/opt/cmake-3.24.1 \
+      && rm /tmp/cmake-install.sh \
+      && ln -s /opt/cmake-3.24.1/bin/* /usr/local/bin
 
 # This fix: libGL error: No matching fbConfigs or visuals found
 ENV LIBGL_ALWAYS_INDIRECT=1
@@ -82,6 +136,60 @@ RUN apt-get update && apt-get install -y python3-pyqt5
 
 # Set the XDG_RUNTIME_DIR environment variable for the 'qtuser'
 ENV XDG_RUNTIME_DIR=/workspace
+
+RUN cd /
+
+RUN git clone --recursive https://github.com/educelab/volume-cartographer
+
+# working directory root
+WORKDIR volume-cartographer/
+
+
+# print the current working directory
+RUN pwd
+# print the contents of the current working directory
+RUN ls -la
+
+# Install vc-deps (dynamic)
+RUN cd /volume-cartographer/vc-deps/ \
+&& mkdir -p build \
+&& cd build/ \
+&& ls \
+&& cmake -GNinja -DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release -DVCDEPS_BUILD_ZLIB=OFF -DCMAKE_INSTALL_PREFIX=/usr .. \
+&& ninja \
+&& cd / \
+&& rm -rf /volume-cartographer/vc-deps/
+
+WORKDIR /
+
+# # Install Qt6
+# RUN curl -O -L https://download.qt.io/archive/qt/6.6/6.6.1/single/qt-everywhere-src-6.6.1.tar.xz 
+# RUN tar -xf qt-everywhere-src-6.6.1.tar.xz 
+
+# RUN cd / && cd qt-everywhere-src-6.6.1/ \
+# && ./configure -opensource -nomake examples -nomake tests -bundled-xcb-xinput -confirm-license \
+# && cmake --build . --parallel \
+# && cmake --install . \
+# && cd ../ \
+# && rm -rf qt-*
+
+# RUN export CMAKE_PREFIX_PATH="/usr/local/Qt-6.6.1/" 
+RUN cmake  \
+      -S /volume-cartographer/ \
+      -B /volume-cartographer/build/ \
+      -GNinja  \
+      -DCMAKE_BUILD_TYPE=Release  \
+      -DCMAKE_INSTALL_RPATH=/usr/local/Qt-6.6.1/lib \
+      -DVC_BUILD_ACVD=ON  \
+      -DVC_BUILD_GUI=OFF  \
+    && cmake --build /volume-cartographer/build/ \
+    && cmake --install /volume-cartographer/build/ 
+
+# Add user for GUI
+RUN adduser --quiet --disabled-password qtuser && usermod -a -G audio qtuser
+
+# Copy scripts and modules
+COPY ./ThaumatoAnakalyptor/mask3d/ /workspace/ThaumatoAnakalyptor/mask3d/
 
 # Set the user to 'qtuser'
 USER qtuser
