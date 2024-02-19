@@ -69,8 +69,6 @@ RUN apt-get update && apt-get install -y libgl1-mesa-glx
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install apt sources for Volume Cartographer
-# RUN echo 'deb http://deb.debian.org/debian bookworm-backports main' > /etc/apt/sources.list.d/backports.list \
-# && apt-get clean && apt-get -y update
 RUN apt-get install --fix-missing --fix-broken -y \
     build-essential \
     curl \
@@ -161,17 +159,6 @@ RUN cd /volume-cartographer/vc-deps/ \
 && rm -rf /volume-cartographer/vc-deps/
 
 WORKDIR /
-
-# # Install Qt6
-# RUN curl -O -L https://download.qt.io/archive/qt/6.6/6.6.1/single/qt-everywhere-src-6.6.1.tar.xz 
-# RUN tar -xf qt-everywhere-src-6.6.1.tar.xz 
-
-# RUN cd / && cd qt-everywhere-src-6.6.1/ \
-# && ./configure -opensource -nomake examples -nomake tests -bundled-xcb-xinput -confirm-license \
-# && cmake --build . --parallel \
-# && cmake --install . \
-# && cd ../ \
-# && rm -rf qt-*
 
 # RUN export CMAKE_PREFIX_PATH="/usr/local/Qt-6.6.1/" 
 RUN cmake  \

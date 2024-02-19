@@ -70,6 +70,18 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
     ```
     Download the checkpoint ```last-epoch.ckpt``` for the instance segmentation model and place it into ```ThaumatoAnakalyptor/mask3d/saved/train/last-epoch.ckpt```. 
     
+    Make sure to have installed nvidia docker:
+    ```bash
+    sudo apt-get install nvidia-docker2
+    ```
+    ```bash
+    sudo apt install nvidia-container-runtime
+    ```
+    Restart docker service:
+    ```bash
+    sudo systemctl restart docker
+    ```
+
     Build and start the Docker Container:
 
     ```bash
