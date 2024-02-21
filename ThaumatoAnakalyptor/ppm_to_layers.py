@@ -29,7 +29,7 @@ def cube_coords(cube_key, padding, cube_size):
     grid_block_size = cube_size + 2*padding + 1
     return start_coords, grid_block_size
 
-def load_and_process_grid_volume(layers, cubes, cube, args, path_template, axis_swap_trans):
+def load_and_process_grid_volume(cubes, cube, args, path_template, axis_swap_trans, gpu_num=0):
     # construct volume indexing
     cube_ppm = cubes[cube]
     cube_xyz = np.zeros((len(cube_ppm), 3), dtype=np.float32)
@@ -59,8 +59,9 @@ def load_and_process_grid_volume(layers, cubes, cube, args, path_template, axis_
     grid_volume = np.transpose(grid_volume.copy(), axes=axis_swap_trans)
     grid_volume = torch.from_numpy(grid_volume).cuda()
     
+    device = torch.device("cuda:" + str(gpu_num))
     # recalculate coords to zero on grid_volume
-    coords = coords - torch.tensor(min_coords, dtype=torch.float32, device="cuda")
+    coords = coords - torch.tensor(min_coords, dtype=torch.float32, device=device)
     
     # extract from grid volume
     samples = extract_from_image_3d(grid_volume, coords).cpu()
@@ -80,7 +81,7 @@ def load_and_process_grid_volume(layers, cubes, cube, args, path_template, axis_
 
 def main(args):
     working_path = os.path.dirname(args.ppm_path)
-    path_template = working_path + "/" + args.grid_volume_path + "/cell_yxz_{:03}_{:03}_{:03}.tif"
+    path_template = args.grid_volume_path + "/cell_yxz_{:03}_{:03}_{:03}.tif"
 
     # load ppm cubes
     cubes, im_shape = load_ppm_cubes(args.ppm_path, cube_size=args.rendering_size)
@@ -93,23 +94,6 @@ def main(args):
     print(f"All parameters: {args}, im_shape: {im_shape}, layers_path: {layers_path}, path_template: {path_template}")
     axis_swap_trans = [2, 1, 0]
 
-    # with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
-    #     # Submit all tasks and store the future objects
-    #     futures = {executor.submit(load_and_process_grid_volume, layers, cubes, cube, args, path_template, axis_swap_trans): cube for cube in cubes.keys()}
-
-    #     # Initialize tqdm with the total number of tasks
-    #     with tqdm(total=len(futures), desc="Processing Cubes") as progress:
-    #         for future in as_completed(futures):
-    #             # Update the progress bar each time a future is completed
-    #             progress.update(1)
-
-    #             # Get the result of the completed future and do something with it
-    #             result = future.result()
-    #             samples, xyz_layers = result
-
-    #             # insert into layers
-    #             insert_into_image_3d(samples, xyz_layers, layers) 
-
     # Process cubes in batches
     cube_list = list(cubes.keys())
     total_cubes = len(cube_list)
@@ -118,8 +102,9 @@ def main(args):
     with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
         with tqdm(total=total_cubes, desc="Processing Cubes") as progress:
             for i in range(0, total_cubes, batch_size):
+                gpu_num = i % args.gpus
                 # Submit a batch of tasks
-                futures = [executor.submit(load_and_process_grid_volume, layers, cubes, cube, args, path_template, axis_swap_trans) for cube in cube_list[i:i+batch_size]]
+                futures = [executor.submit(load_and_process_grid_volume, cubes, cube, args, path_template, axis_swap_trans, gpu_num) for cube in cube_list[i:i+batch_size]]
 
                 # Process completed tasks before moving on to the next batch
                 for future in as_completed(futures):
@@ -132,8 +117,8 @@ def main(args):
                     insert_into_image_3d(samples, xyz_layers, layers)
 
     # save layers
+    nr_zeros = len(str(2*args.r))
     for i in range(layers.shape[0]):
-        nr_zeros = len(str(2*args.r))
         layer = layers[i].cpu().numpy().astype(np.uint16)
         # save layer with leading 0's for 2*r layers
         layer_nr = str(i).zfill(nr_zeros)
@@ -149,6 +134,7 @@ if __name__ == '__main__':
     parser.add_argument('--cube_size', type=int, default=500)
     parser.add_argument('--rendering_size', type=int, default=400)
     parser.add_argument('--max_workers', type=int, default=multiprocessing.cpu_count()//2)
+    parser.add_argument('--gpus', type=int, default=1)
     args = parser.parse_args()
 
     main(args)

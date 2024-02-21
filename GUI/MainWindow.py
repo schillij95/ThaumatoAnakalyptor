@@ -1083,13 +1083,13 @@ class ThaumatoAnakalyptor(QMainWindow):
             path_base = os.path.join(self.Config["surface_points_path"], f"{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/")
             print(f"path_base: {path_base}")
 
-            downsampled_2d_tiffs = self.Config.get("downsampled_2d_tiffs", None)
-            if downsampled_2d_tiffs is None:
+            original_2d_tiffs = self.Config.get("original_2d_tiffs", None)
+            if original_2d_tiffs is None:
                 QMessageBox.critical(self, "Error", f"Please specify the 2D Tiff files path")
                 return
-            # volpkg is downsampled_2d_tiffs without last two folders
-            volpkg_path = os.path.dirname(os.path.dirname(downsampled_2d_tiffs)) + "/"
-            volume = os.path.basename(downsampled_2d_tiffs)
+            # volpkg is original_2d_tiffs without last two folders
+            volpkg_path = os.path.dirname(os.path.dirname(original_2d_tiffs)) + "/"
+            volume = os.path.basename(original_2d_tiffs)
             obj_path = self.Config.get("surface_points_path", None)
             if obj_path is None:
                 QMessageBox.critical(self, "Error", f"Please specify the surface points path")
@@ -1143,27 +1143,48 @@ class ThaumatoAnakalyptor(QMainWindow):
             path_base = os.path.join(self.Config["surface_points_path"], f"{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/")
             print(f"path_base: {path_base}")
 
-            downsampled_2d_tiffs = self.Config.get("downsampled_2d_tiffs", None)
-            if downsampled_2d_tiffs is None:
+            original_2d_tiffs = self.Config.get("original_2d_tiffs", None)
+            if original_2d_tiffs is None:
                 QMessageBox.critical(self, "Error", f"Please specify the 2D Tiff files path")
                 return
-            # volpkg is downsampled_2d_tiffs without last two folders
-            volpkg_path = os.path.dirname(os.path.dirname(downsampled_2d_tiffs)) + "/"
-            volume = os.path.basename(downsampled_2d_tiffs)
+            # volpkg is original_2d_tiffs without last two folders
+            volpkg_path = os.path.dirname(os.path.dirname(original_2d_tiffs)) + "/"
+            volume = os.path.basename(original_2d_tiffs)
             obj_path = self.Config.get("surface_points_path", None)
             if obj_path is None:
                 QMessageBox.critical(self, "Error", f"Please specify the surface points path")
                 return
-            ppm_path = obj_path + f"/working_{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/thaumato.obj"
-            obj_path = obj_path + f"/working_{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/point_cloud_colorized_verso_subvolume_blocks_uv_flatboi.obj"
-            print("ppm paths:", volpkg_path, volume, obj_path, ppm_path)
+            layers_path = obj_path + f"/working/working_{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/layers/"
+            ppm_path = obj_path + f"/working/working_{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/thaumato.obj"
+            obj_path = obj_path + f"/working/working_{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/point_cloud_colorized_verso_subvolume_blocks_uv_flatboi.obj"
+            print("texturing paths:", volpkg_path, volume, obj_path, ppm_path)
 
-            command = [
-                "/volume-cartographer-papyrus/build/bin/vc_generate_ppm",
-                "--input-mesh", obj_path,
-                "--output-ppm", ppm_path,
-                "--uv-reuse"
+            command_gpu_downscaled_1 = [
+                "python3", "-m", "ThaumatoAnakalyptor.ppm_to_layers",
+                ppm_path, 
+                self.Config["downsampled_3d_grids"],
+                "--r", "32",
+                "--max_workers", self.Config["num_threads_texturing"],
+                "--gpus", self.Config["gpus"]
             ]
+
+            command_2d_tiffs = [
+                "/volume-cartographer-papyrus/build/bin/vc_layers_from_ppm",
+                "-v", volpkg_path,
+                "--volume", volume,
+                "-p", ppm_path,
+                "--output-dir",layers_path,
+                "-f", "tif",
+                "-r", "32",
+                "--cache-memory-limit", "8G"
+            ]
+
+            if abs(self.Config["downsample_factor"]) == 1:
+                print("Using thaumato GPU render from grid cells to texture layers")
+                command = command_gpu_downscaled_1
+            else:
+                print("Using volume cartographer to render from 2D tiffs")
+                command = command_2d_tiffs
             
             self.process = subprocess.Popen(command)
             self.computeTexturingButton.setEnabled(False)
@@ -1218,11 +1239,15 @@ class ThaumatoAnakalyptor(QMainWindow):
             env["WANDB_MODE"] = "dryrun"  # Set the WANDB_MODE environment variable
 
             # Assuming you have these values or similar ways to obtain them
-            segment_id = "working_20230520191415"
+            segment_id = f"working_{self.xField.text()}_{self.yField.text()}_{self.zField.text()}"
             # Modify the segment_path as per your requirement or dynamically determine it
-            segment_path = "scroll.volpkg"
-            model_path = "Vesuvius-Grandprize-Winner/timesformer_wild15_20230702185753_0_fr_i3depoch=12.ckpt"
-            out_path = "./"  # The current directory or specify as needed
+            segment_path = self.Config.get("surface_points_path", None)
+            if segment_path is None:
+                QMessageBox.critical(self, "Error", f"Please specify the surface points path")
+                return
+            segment_path = os.path.join(segment_path, "working")
+            model_path = "/workspace/Vesuvius-Grandprize-Winner/timesformer_wild15_20230702185753_0_fr_i3depoch=12.ckpt"
+            out_path = os.path.join(segment_path, segment_id, "predictions")
 
             # Construct the command with the provided arguments
             command = [

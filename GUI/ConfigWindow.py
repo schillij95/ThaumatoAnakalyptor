@@ -23,6 +23,7 @@ class ConfigWindow(QDialog):
         self.addIntegerField("Num Threads", "Enter the number of threads for processing", str(self.parent.Config.get('num_threads', '4')))
         self.addIntegerField("GPUs", "Enter the number of GPUs to use", str(self.parent.Config.get('gpus', '1')))
         self.addIntegerField("Batch Size", "Enter the batch size", str(self.parent.Config.get('batch_size', '4')))
+        self.addIntegerField("Num Threads Texturing", "Enter the number of threads for texturing", str(self.parent.Config.get('num_threads_texturing', '4')))
 
         # Connect the config fields to actions
         self.original_2d_tiffs_field.textChanged.connect(lambda _: self.onDownsampleFactorChanged(self.downsample_factor.text()))
@@ -168,7 +169,8 @@ class ConfigWindow(QDialog):
             "surface_points_path": self.surface_points_path_field.text(),
             "num_threads": int(self.num_threads_field.text()) if self.num_threads_field.text() and self.num_threads_field.text() != 'None' else None,
             "gpus": int(self.gpus_field.text()) if self.gpus_field.text() and self.gpus_field.text() != 'None' else None,
-            "batch_size": int(self.batch_size_field.text()) if self.batch_size_field.text() and self.batch_size_field.text() != 'None' else None
+            "batch_size": int(self.batch_size_field.text()) if self.batch_size_field.text() and self.batch_size_field.text() != 'None' else None,
+            "num_threads_texturing": int(self.num_threads_texturing_field.text()) if self.num_threads_texturing_field.text() and self.num_threads_texturing_field.text() != 'None' else None
         }
 
         # Remove empty fields
