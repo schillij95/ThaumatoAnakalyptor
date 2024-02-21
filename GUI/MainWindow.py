@@ -1186,7 +1186,14 @@ class ThaumatoAnakalyptor(QMainWindow):
                 print("Using volume cartographer to render from 2D tiffs")
                 command = command_2d_tiffs
             
-            self.process = subprocess.Popen(command)
+            # Prepare the environment variable
+            env = os.environ.copy()
+            env["MAX_TILE_SIZE"] = "4294967295"  # Set maximum CV io image size for tiff files
+            env["OPENCV_IO_MAX_IMAGE_PIXELS"] = "4294967295"  # Set maximum CV io image size for tiff files
+            env["CV_IO_MAX_IMAGE_PIXELS"] = "4294967295"  # Set maximum CV io image size for tiff files
+            
+            # Run the command with the specified environment variables
+            self.process = subprocess.Popen(command, env=env)
             self.computeTexturingButton.setEnabled(False)
             self.stopTexturingButton.setEnabled(True)
 
