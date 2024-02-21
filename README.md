@@ -91,6 +91,7 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
     The following commands might need adjustments based on how you would like to access your scroll data:
     ```bash
     xhost +local:docker
+    xhost +local:root
 
     ```
     ```bash
