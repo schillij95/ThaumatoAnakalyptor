@@ -26,7 +26,7 @@ def downsample_folder_tifs_singlethreaded(input_directory, output_directory, dow
     max_file = max([int(f.split('.')[0]) for f in files])
     for i in range(min_file, max_file + 1):
         if i % 2 == 0:
-            if f"{i:05}.tif" not in files:
+            if (f"{i:04}.tif" not in files) and (f"{i:05}.tif" not in files):
                 print(f"Missing {i:05}.tif")
                 raise Exception("Missing tif files")
 
@@ -93,7 +93,7 @@ def downsample_folder_tifs(input_directory, output_directory, downsample_factor=
     min_file = min([int(f.split('.')[0]) for f in files])
     max_file = max([int(f.split('.')[0]) for f in files])
     for i in range(min_file, max_file + 1, downsample_factor):  # Adjusted the range to step by downsample_factor for efficiency
-        if f"{i:04}.tif" not in files:
+        if (f"{i:04}.tif" not in files) and (f"{i:05}.tif" not in files):
             raise Exception(f"Missing {i:04}.tif")
 
     # Prepare the arguments for each process
