@@ -174,7 +174,7 @@ RUN cmake  \
     && cmake --install /volume-cartographer-papyrus/build/ 
 
 # Set up Vesuvius-Grandprize-Winner Ink Detection
-RUN git clone https://github.com/younader/Vesuvius-Grandprize-Winner
+# RUN git clone https://github.com/younader/Vesuvius-Grandprize-Winner
 
 # Install virtualenv
 RUN pip install virtualenv
@@ -184,7 +184,7 @@ RUN virtualenv youssefGP
 
 # Activate the virtual environment and install PyTorch Lightning 2.0
 RUN /bin/bash -c "source youssefGP/bin/activate && \
-    cd Vesuvius-Grandprize-Winner && \
+    cd /workspace/Vesuvius-Grandprize-Winner && \
     pip3 install -r requirements.txt"
 
 # Copy scripts and modules
