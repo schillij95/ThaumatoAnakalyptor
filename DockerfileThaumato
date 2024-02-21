@@ -129,57 +129,73 @@ RUN apt-get update \
 # This fix: libGL error: No matching fbConfigs or visuals found
 ENV LIBGL_ALWAYS_INDIRECT=1
 
-# Install Python 3, PyQt5
-RUN apt-get update && apt-get install -y python3-pyqt5
-
 # Set the XDG_RUNTIME_DIR environment variable for the 'qtuser'
 ENV XDG_RUNTIME_DIR=/workspace
 
 RUN cd /
 
-RUN git clone --recursive https://github.com/educelab/volume-cartographer
-
+RUN git clone --recursive https://github.com/schillij95/volume-cartographer-papyrus
 # working directory root
-WORKDIR volume-cartographer/
+WORKDIR volume-cartographer-papyrus/
 
+RUN apt-get update && apt-get install -y python3-pyqt5
 
 # print the current working directory
 RUN pwd
 # print the contents of the current working directory
 RUN ls -la
 
+# Install Python 3, PyQt5
+RUN apt-cache search libsdl
+RUN apt-get install -y libsdl2-dev libgsl-dev
+
 # Install vc-deps (dynamic)
-RUN cd /volume-cartographer/vc-deps/ \
+RUN cd /volume-cartographer-papyrus/vc-deps/ \
 && mkdir -p build \
 && cd build/ \
 && ls \
 && cmake -GNinja -DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release -DVCDEPS_BUILD_ZLIB=OFF -DCMAKE_INSTALL_PREFIX=/usr .. \
 && ninja \
 && cd / \
-&& rm -rf /volume-cartographer/vc-deps/
+&& rm -rf /volume-cartographer-papyrus/vc-deps/
 
 WORKDIR /
 
 # RUN export CMAKE_PREFIX_PATH="/usr/local/Qt-6.6.1/" 
 RUN cmake  \
-      -S /volume-cartographer/ \
-      -B /volume-cartographer/build/ \
+      -S /volume-cartographer-papyrus/ \
+      -B /volume-cartographer-papyrus/build/ \
       -GNinja  \
       -DCMAKE_BUILD_TYPE=Release  \
       -DCMAKE_INSTALL_RPATH=/usr/local/Qt-6.6.1/lib \
       -DVC_BUILD_ACVD=ON  \
       -DVC_BUILD_GUI=OFF  \
-    && cmake --build /volume-cartographer/build/ \
-    && cmake --install /volume-cartographer/build/ 
+    && cmake --build /volume-cartographer-papyrus/build/ \
+    && cmake --install /volume-cartographer-papyrus/build/ 
 
-# Add user for GUI
-RUN adduser --quiet --disabled-password qtuser && usermod -a -G audio qtuser
+# Set up Vesuvius-Grandprize-Winner Ink Detection
+RUN git clone https://github.com/younader/Vesuvius-Grandprize-Winner
+
+# Install virtualenv
+RUN pip install virtualenv
+
+# Create a virtual environment for the second set of dependencies
+RUN virtualenv youssefGP
+
+# Activate the virtual environment and install PyTorch Lightning 2.0
+RUN /bin/bash -c "source youssefGP/bin/activate && \
+    cd Vesuvius-Grandprize-Winner && \
+    pip3 install -r requirements.txt"
 
 # Copy scripts and modules
 COPY ./ThaumatoAnakalyptor/mask3d/ /workspace/ThaumatoAnakalyptor/mask3d/
 
+# Add user for GUI
+# RUN adduser --quiet --disabled-password qtuser && usermod -a -G audio qtuser
+RUN usermod -a -G audio root
+
 # Set the user to 'qtuser'
-USER qtuser
+# USER qtuser
 
 # Set working directory
 WORKDIR /workspace/

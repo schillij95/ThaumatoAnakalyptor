@@ -57,7 +57,7 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
         To generate an ```umbilicus.txt``` for a scroll, make sure to transform the umbilicus coordinates from scroll coordinates ```x, y, z``` - where ```x,y``` is the tif 2D coordinates and ```z``` the tif layer number - into umbilicus coordinates ```uc``` with this formula: ```uc = y + 500, z + 500, x + 500```.
 
 - **Checkpoint and Training Data:**
-    Checkpoint and training data can be downloaded from the private Vesuvius Challenge SFTP server under ```GrandPrizeSubmission-31-12-2023/Codebase/automatic segmentation/ThaumatoAnakalyptor```. The checkpoint ```last-epoch.ckpt``` can also be downloaded from [Google Drive](https://drive.google.com/file/d/1gO8Nf4sCaA7r4dO6ePtt0SE0E5ePXSid/view?usp=sharing).
+    Checkpoint and training data can be downloaded from the private Vesuvius Challenge SFTP server under ```GrandPrizeSubmission-31-12-2023/Codebase/automatic segmentation/ThaumatoAnakalyptor```. The checkpoint ```last-epoch.ckpt``` can also be downloaded from [Google Drive](https://drive.google.com/file/d/1gO8Nf4sCaA7r4dO6ePtt0SE0E5ePXSid/view?usp=sharing). The ink detection model can be downloaded from [Google Drive](https://drive.google.com/drive/folders/1rn3GMOvtJRMBHOxVhWFVSY6IVI6xUnYp).
 
 - **Segmentations:**
     The provided segmentations can be downloaded from the private Vesuvius Challenge SFTP server under ```julian_uploads/finished_segments/``` and ```julian_uploads/scroll3_segments/```.
@@ -69,6 +69,7 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
     git clone --recurse-submodules https://github.com/schillij95/ThaumatoAnakalyptor
     ```
     Download the checkpoint ```last-epoch.ckpt``` for the instance segmentation model and place it into ```ThaumatoAnakalyptor/mask3d/saved/train/last-epoch.ckpt```. 
+    Download checkpoint ```timesformer_wild15_20230702185753_0_fr_i3depoch=12.ckpt``` for the ink detection model and place it into ```Vesuvius-Grandprize-Winner/timesformer_wild15_20230702185753_0_fr_i3depoch=12.ckpt```.
     
     Make sure to have installed nvidia docker:
     ```bash

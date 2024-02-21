@@ -114,7 +114,8 @@ class ThaumatoAnakalyptor(QMainWindow):
         # Collapsible Sections
         self.addVolumeProcessing(right_layout)
         self.addMeshGeneration(right_layout)
-        self.addCollapsibleSection(right_layout, "Rendering")
+        self.addRendering(right_layout)
+        self.addInkDetection(right_layout)
 
         right_panel.setLayout(right_layout)
 
@@ -1045,4 +1046,209 @@ class ThaumatoAnakalyptor(QMainWindow):
             self.process = None
         self.computeSwapVolumeButton.setEnabled(True)
         self.stopSwapVolumeButton.setEnabled(False)
+        print("Computation process stopped.")
+
+    def addRendering(self, layout):
+        # Main Collapsible Box for Rendering
+        renderingBox = CollapsibleBox("Rendering")
+
+        # PPM Area
+        ppmBox = CollapsibleBox("PPM")
+        self.addPpmArea(ppmBox)
+        renderingBox.add_widget(ppmBox)
+
+        # Texturing Area
+        texturingBox = CollapsibleBox("Texturing")
+        self.addTexturingArea(texturingBox)
+        renderingBox.add_widget(texturingBox)
+
+        layout.addWidget(renderingBox)
+
+    def addPpmArea(self, box):
+        label = QLabel("PPM")
+        self.computePpmButton = QPushButton("Compute")
+        self.stopPpmButton = QPushButton("Stop")
+        self.stopPpmButton.setEnabled(False)
+
+        self.computePpmButton.clicked.connect(self.computePPM)
+        self.stopPpmButton.clicked.connect(self.stopPPM)
+
+        box.add_widget(label)
+        box.add_widget(self.computePpmButton)
+        box.add_widget(self.stopPpmButton)
+
+    def computePPM(self):
+        try:
+            starting_point = [self.xField.text(), self.yField.text(), self.zField.text()]
+            path_base = os.path.join(self.Config["surface_points_path"], f"{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/")
+            print(f"path_base: {path_base}")
+
+            downsampled_2d_tiffs = self.Config.get("downsampled_2d_tiffs", None)
+            if downsampled_2d_tiffs is None:
+                QMessageBox.critical(self, "Error", f"Please specify the 2D Tiff files path")
+                return
+            # volpkg is downsampled_2d_tiffs without last two folders
+            volpkg_path = os.path.dirname(os.path.dirname(downsampled_2d_tiffs)) + "/"
+            volume = os.path.basename(downsampled_2d_tiffs)
+            obj_path = self.Config.get("surface_points_path", None)
+            if obj_path is None:
+                QMessageBox.critical(self, "Error", f"Please specify the surface points path")
+                return
+            ppm_path = obj_path + f"/working/working_{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/thaumato.obj"
+            obj_path = obj_path + f"/working/working_{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/point_cloud_colorized_verso_subvolume_blocks_uv_flatboi.obj"
+            print("ppm paths:", volpkg_path, volume, obj_path, ppm_path)
+
+            command = [
+                "/volume-cartographer-papyrus/build/bin/vc_generate_ppm",
+                "--input-mesh", obj_path,
+                "--output-ppm", ppm_path,
+                "--uv-reuse"
+            ]
+            
+            self.process = subprocess.Popen(command)
+            self.computePpmButton.setEnabled(False)
+            self.stopPpmButton.setEnabled(True)
+
+            # Clean up computation after completion
+            self.postComputation()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to start the script: {e}")
+            self.computePpmButton.setEnabled(True)
+            self.stopPpmButton.setEnabled(False)
+
+    def stopPPM(self):
+        if self.process and self.process.poll() is None:
+            self.process.terminate()
+            self.process = None
+        self.computePpmButton.setEnabled(True)
+        self.stopPpmButton.setEnabled(False)
+        print("Computation process stopped.")
+
+    def addTexturingArea(self, box):
+        label = QLabel("Texturing")
+        self.computeTexturingButton = QPushButton("Compute")
+        self.stopTexturingButton = QPushButton("Stop")
+        self.stopTexturingButton.setEnabled(False)
+
+        self.computeTexturingButton.clicked.connect(self.computeTexturing)
+        self.stopTexturingButton.clicked.connect(self.stopTexturing)
+
+        box.add_widget(label)
+        box.add_widget(self.computeTexturingButton)
+        box.add_widget(self.stopTexturingButton)
+
+    def computeTexturing(self):
+        try:
+            starting_point = [self.xField.text(), self.yField.text(), self.zField.text()]
+            path_base = os.path.join(self.Config["surface_points_path"], f"{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/")
+            print(f"path_base: {path_base}")
+
+            downsampled_2d_tiffs = self.Config.get("downsampled_2d_tiffs", None)
+            if downsampled_2d_tiffs is None:
+                QMessageBox.critical(self, "Error", f"Please specify the 2D Tiff files path")
+                return
+            # volpkg is downsampled_2d_tiffs without last two folders
+            volpkg_path = os.path.dirname(os.path.dirname(downsampled_2d_tiffs)) + "/"
+            volume = os.path.basename(downsampled_2d_tiffs)
+            obj_path = self.Config.get("surface_points_path", None)
+            if obj_path is None:
+                QMessageBox.critical(self, "Error", f"Please specify the surface points path")
+                return
+            ppm_path = obj_path + f"/working_{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/thaumato.obj"
+            obj_path = obj_path + f"/working_{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/point_cloud_colorized_verso_subvolume_blocks_uv_flatboi.obj"
+            print("ppm paths:", volpkg_path, volume, obj_path, ppm_path)
+
+            command = [
+                "/volume-cartographer-papyrus/build/bin/vc_generate_ppm",
+                "--input-mesh", obj_path,
+                "--output-ppm", ppm_path,
+                "--uv-reuse"
+            ]
+            
+            self.process = subprocess.Popen(command)
+            self.computeTexturingButton.setEnabled(False)
+            self.stopTexturingButton.setEnabled(True)
+
+            # Clean up computation after completion
+            self.postComputation()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to start the script: {e}")
+            self.computeTexturingButton.setEnabled(True)
+            self.stopTexturingButton.setEnabled(False)
+
+    def stopTexturing(self):
+        if self.process and self.process.poll() is None:
+            self.process.terminate()
+            self.process = None
+        self.computeTexturingButton.setEnabled(True)
+        self.stopTexturingButton.setEnabled(False)
+        print("Computation process stopped.")
+
+    def addInkDetection(self, layout):
+        # Main Collapsible Box for Ink Detection
+        renderingBox = CollapsibleBox("Ink Detection")
+
+        # Ink Detection Area
+        timesformerBox = CollapsibleBox("TimeSformer Inference")
+        self.addInkDetectionArea(timesformerBox)
+        renderingBox.add_widget(timesformerBox)
+
+        layout.addWidget(renderingBox)
+
+    def addInkDetectionArea(self, box):
+        label = QLabel("Ink Detection")
+        self.computeInkDetectionButton = QPushButton("Compute")
+        self.stopInkDetectionButton = QPushButton("Stop")
+        self.stopInkDetectionButton.setEnabled(False)
+
+        self.computeInkDetectionButton.clicked.connect(self.computeInkDetection)
+        self.stopInkDetectionButton.clicked.connect(self.stopInkDetection)
+
+        box.add_widget(label)
+        box.add_widget(self.computeInkDetectionButton)
+        box.add_widget(self.stopInkDetectionButton)
+
+    def computeInkDetection(self):
+        try:
+            # Set the path to the virtual environment's Python executable
+            python_executable = "/youssefGP/bin/python"  # Adjust this path as necessary
+
+            # Prepare the environment variable
+            env = os.environ.copy()
+            env["WANDB_MODE"] = "dryrun"  # Set the WANDB_MODE environment variable
+
+            # Assuming you have these values or similar ways to obtain them
+            segment_id = "working_20230520191415"
+            # Modify the segment_path as per your requirement or dynamically determine it
+            segment_path = "scroll.volpkg"
+            model_path = "Vesuvius-Grandprize-Winner/timesformer_wild15_20230702185753_0_fr_i3depoch=12.ckpt"
+            out_path = "./"  # The current directory or specify as needed
+
+            # Construct the command with the provided arguments
+            command = [
+                python_executable, "Vesuvius-Grandprize-Winner/inference_timesformer.py",
+                "--segment_id", segment_id,
+                "--segment_path", segment_path,
+                "--model_path", model_path,
+                "--out_path", out_path
+            ]
+
+            # Run the command with the specified environment variables
+            self.process = subprocess.Popen(command, env=env)
+            self.computeInkDetectionButton.setEnabled(False)
+            self.stopInkDetectionButton.setEnabled(True)
+
+            # Clean up computation after completion
+            self.postComputation()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to start the script: {e}")
+            self.computeInkDetectionButton.setEnabled(True)
+            self.stopInkDetectionButton.setEnabled(False)
+
+    def stopInkDetection(self):
+        if self.process and self.process.poll() is None:
+            self.process.terminate()
+            self.process = None
+        self.computeInkDetectionButton.setEnabled(True)
+        self.stopInkDetectionButton.setEnabled(False)
         print("Computation process stopped.")
