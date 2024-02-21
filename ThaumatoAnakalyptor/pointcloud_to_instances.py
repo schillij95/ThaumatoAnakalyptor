@@ -13,6 +13,7 @@ print(torch.cuda.current_device())
 # show name of current device
 print(torch.cuda.get_device_name(torch.cuda.current_device()))
 
+import multiprocessing
 from multiprocessing import Pool
 
 # plotting
@@ -312,7 +313,7 @@ def remove_duplicate_points_normals(points, normals, colors=None, angles=None):
         unique_angles = angles[indices]
         return unique_points, unique_normals, unique_colors, unique_angles
 
-def detect_subvolume_surfaces(points_batch, normals_batch, colors_batch, names_batch, batch_size):
+def detect_subvolume_surfaces(index, points_batch, normals_batch, colors_batch, names_batch, batch_size, gpus):
     points_batch_indices = [i for i, points in enumerate(points_batch) if points.shape[0] > 100]
     points_batch = [points_batch[i] for i in points_batch_indices]
     normals_batch = [normals_batch[i] for i in points_batch_indices]
@@ -328,10 +329,10 @@ def detect_subvolume_surfaces(points_batch, normals_batch, colors_batch, names_b
     coords_splits = [coords_batch[i:i + batch_size] for i in range(0, len(coords_batch), batch_size)]
     predictions_mask3d_batch = []
     # Predict the surfaces 
-    print()
+    # print()
     for coords_split in tqdm(coords_splits):
         # print GPU memory usage
-        res = batch_inference(coords_split)
+        res = batch_inference(coords_split, index, gpus)
         if res is None:
             print("batch_inference result is None")
             res = [{"pred_classes": []}]*len(coords_split)
@@ -363,7 +364,7 @@ def extract_subvolumes_for_coord(coord, points, normals, colors, subvolume_size)
     
     return subvolume_points, subvolume_normals, subvolume_colors, start_coord
 
-def subvolume_surface_instance_batch(points, normals, colors, start, size, path, fix_umbilicus, umbilicus_points, umbilicus_points_old, main_drive="", alternative_drives=[], subvolume_size=50, score_threshold=0.5, distance_threshold=10.0, n=4, alpha = 1000.0, slope_alpha = 0.1, batch_size=4):
+def subvolume_surface_instance_batch(index, points, normals, colors, start, size, path, fix_umbilicus, umbilicus_points, umbilicus_points_old, main_drive="", alternative_drives=[], subvolume_size=50, score_threshold=0.5, distance_threshold=10.0, n=4, alpha = 1000.0, slope_alpha = 0.1, batch_size=4, gpus=1, use_multiprocessing=True):
     """
     Detect surface patches from overlapping subvolumes.
     """
@@ -439,16 +440,22 @@ def subvolume_surface_instance_batch(points, normals, colors, start, size, path,
         return
     
     # Detect the surfaces in the subvolume
-    surfaces, surfaces_normals, surfaces_colors, block_names, scores = detect_subvolume_surfaces(subvolumes_points, subvolumes_normals, subvolumes_colors, block_names, batch_size)
+    surfaces, surfaces_normals, surfaces_colors, block_names, scores = detect_subvolume_surfaces(index, subvolumes_points, subvolumes_normals, subvolumes_colors, block_names, batch_size, gpus)
 
     # save each instance for each subvolume
-    # Setting up multiprocessing
-    with Pool(32) as pool:
-        # Save the block
-        pool.map(save_block_ply_args, [(surfaces[i], surfaces_normals[i], surfaces_colors[i], scores[i], block_names[i], score_threshold, distance_threshold, n, alpha, slope_alpha) for i in range(len(surfaces))])
+    # Setting up multiprocessing, process count
+    if use_multiprocessing:
+        num_threads = multiprocessing.cpu_count()
+        with Pool(num_threads) as pool:
+            # Save the block
+            pool.map(save_block_ply_args, [(surfaces[i], surfaces_normals[i], surfaces_colors[i], scores[i], block_names[i], score_threshold, distance_threshold, n, alpha, slope_alpha) for i in range(len(surfaces))])
+    else:
+        # single threaded version
+        for i in range(len(surfaces)):
+            save_block_ply(surfaces[i], surfaces_normals[i], surfaces_colors[i], scores[i], block_names[i], score_threshold, distance_threshold, n, alpha, slope_alpha)
 
 def subvolume_computation_function(args):
-    start, size, path, folder, dest, main_drive, alternative_drives, fix_umbilicus, umbilicus_points, umbilicus_points_old, score_threshold, batch_size = args
+    index, start, size, path, folder, dest, main_drive, alternative_drives, fix_umbilicus, umbilicus_points, umbilicus_points_old, score_threshold, batch_size, gpus, use_multiprocessing = args
     src_path = os.path.join(path, folder)
     dest_path = os.path.join(dest, folder)
     size = np.array(size) + 1 # +1 because we want to include the last subvolume for tiling operation from later calls starting at the last subvolume
@@ -458,7 +465,7 @@ def subvolume_computation_function(args):
         return False
     points, normals, colors = res
     points, normals, colors = remove_duplicate_points_normals(points, normals, colors)
-    subvolume_surface_instance_batch(points, normals, colors, start, size, dest_path, fix_umbilicus, umbilicus_points, umbilicus_points_old, main_drive, alternative_drives, score_threshold=score_threshold, batch_size=batch_size)
+    subvolume_surface_instance_batch(index, points, normals, colors, start, size, dest_path, fix_umbilicus, umbilicus_points, umbilicus_points_old, main_drive, alternative_drives, score_threshold=score_threshold, batch_size=batch_size, gpus=gpus, use_multiprocessing=use_multiprocessing)
     return True
 
 def filter_umilicus_distance(start_list, size, path, folder, umbilicus_points_path, umbilicus_distance_threshold, grid_block_size=200):
@@ -497,7 +504,7 @@ def filter_umilicus_distance(start_list, size, path, folder, umbilicus_points_pa
     
     return start_list_filtered
 
-def subvolume_instances_multithreaded(path="/media/julian/FastSSD/scroll3_surface_points", folder="point_cloud_colorized", dest="/media/julian/HDD8TB/scroll3_surface_points", main_drive="", alternative_drives=[], fix_umbilicus=True, umbilicus_points_path="", start=[0, 0, 0], stop=[16, 17, 29], size = [3, 3, 3], umbilicus_distance_threshold=1500, score_threshold=0.5, batch_size=4):
+def subvolume_instances_multithreaded(path="/media/julian/FastSSD/scroll3_surface_points", folder="point_cloud_colorized", dest="/media/julian/HDD8TB/scroll3_surface_points", main_drive="", alternative_drives=[], fix_umbilicus=True, umbilicus_points_path="", start=[0, 0, 0], stop=[16, 17, 29], size = [3, 3, 3], umbilicus_distance_threshold=1500, score_threshold=0.5, batch_size=4, gpus=1):
     # Build start list
     start_list = []
     for x in range(start[0], stop[0], size[0]):
@@ -522,16 +529,21 @@ def subvolume_instances_multithreaded(path="/media/julian/FastSSD/scroll3_surfac
     num_tasks = len(start_list)
 
     # Single threaded computation
-    for i in tqdm(range(num_tasks)):
-        results = subvolume_computation_function((start_list[i], size, path, folder, dest, main_drive, alternative_drives, fix_umbilicus, umbilicus_points, umbilicus_points_old, score_threshold, batch_size))
+    # for i in tqdm(range(num_tasks)):
+    #     results = subvolume_computation_function((i, start_list[i], size, path, folder, dest, main_drive, alternative_drives, fix_umbilicus, umbilicus_points, umbilicus_points_old, score_threshold, batch_size, gpus, True))
 
-def compute(path, folder, dest, main_drive, alternative_ply_drives, umbilicus_points_path, umbilicus_distance_threshold, fix_umbilicus, score_threshold, batch_size):
+    # multithreaded computation
+    num_threads = multiprocessing.cpu_count()
+    with Pool(processes=num_threads) as pool:
+        results = pool.map(subvolume_computation_function, [(i, start_list[i], size, path, folder, dest, main_drive, alternative_drives, fix_umbilicus, umbilicus_points, umbilicus_points_old, score_threshold, batch_size, gpus, False) for i in range(num_tasks)])
+
+def compute(path, folder, dest, main_drive, alternative_ply_drives, umbilicus_points_path, umbilicus_distance_threshold, fix_umbilicus, score_threshold, batch_size, gpus):
     import sys
     # Remove command-line arguments for later internal calls to Mask3D
     sys.argv = [sys.argv[0]]
 
     # Multithreaded computation
-    subvolume_instances_multithreaded(path=path, folder=folder, dest=dest, main_drive=main_drive, alternative_drives=alternative_ply_drives, fix_umbilicus=fix_umbilicus, umbilicus_points_path=umbilicus_points_path, start=[0, 0, 0], stop=[100, 100, 100], size = [3, 3, 3], umbilicus_distance_threshold=umbilicus_distance_threshold, score_threshold=score_threshold, batch_size=batch_size)
+    subvolume_instances_multithreaded(path=path, folder=folder, dest=dest, main_drive=main_drive, alternative_drives=alternative_ply_drives, fix_umbilicus=fix_umbilicus, umbilicus_points_path=umbilicus_points_path, start=[0, 0, 0], stop=[100, 100, 100], size = [3, 3, 3], umbilicus_distance_threshold=umbilicus_distance_threshold, score_threshold=score_threshold, batch_size=batch_size, gpus=gpus)
 
 def main():
     side = "_verso" # actually recto
@@ -560,6 +572,7 @@ def main():
     parser.add_argument("--fix_umbilicus", action='store_true', help="Flag, recompute all close to the updated umbilicus (make sure to also save the old umbilicus.txt as umbilicus_old.txt)")
     parser.add_argument("--score_threshold", type=float, help="Minimum score for a surface to be saved", default=score_threshold)
     parser.add_argument("--batch_size", type=int, help="Batch size for Mask3D", default=batch_size)
+    parser.add_argument("--gpus", type=int, help="Number of GPUs to use", default=1)
 
     # Parse the arguments
     args = parser.parse_args()
@@ -573,9 +586,10 @@ def main():
     fix_umbilicus = args.fix_umbilicus
     score_threshold = args.score_threshold
     batch_size = args.batch_size
+    gpus = args.gpus
 
     # Compute the surface patches
-    compute(path, folder, dest, main_drive, alternative_ply_drives, umbilicus_points_path, umbilicus_distance_threshold, fix_umbilicus, score_threshold, batch_size)
+    compute(path, folder, dest, main_drive, alternative_ply_drives, umbilicus_points_path, umbilicus_distance_threshold, fix_umbilicus, score_threshold, batch_size, gpus)
 
     
 if __name__ == "__main__":

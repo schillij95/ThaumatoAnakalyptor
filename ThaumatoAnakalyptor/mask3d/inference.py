@@ -80,7 +80,7 @@ def get_parameters(cfg: DictConfig):
 @hydra.main(
     config_path="conf", config_name="config_base_instance_segmentation.yaml"
 )
-def init(cfg: DictConfig):
+def init(cfg: DictConfig, num_gpus=1):
     global initialized
     if initialized:
         return
@@ -119,13 +119,17 @@ def init(cfg: DictConfig):
     cfg.general.export = True
     OmegaConf.set_struct(cfg, True)
     # because hydra wants to change dir for some reason
-    res = get_parameters(cfg)
-    global model
-    model = res[1]
-    # model = nn.DataParallel(model)
-    model.to("cuda")
-    #print("dataset config", cfg.data.datasets)
-    model.prepare_data()
+    global models
+    models = []
+    for gpu_nr in range(num_gpus):
+        res = get_parameters(cfg)
+        model = res[1]
+        model.to(f"cuda:{gpu_nr}")
+        #print("dataset config", cfg.data.datasets)
+        model.prepare_data()
+        # model = nn.DataParallel(model)
+        # Add model to list of models
+        models.append(model)
 
     # thaumato_preprocessing.py for preprocessed npy loading to npy saving format (containing points object)
     global preprocessing_thaumato
@@ -139,7 +143,7 @@ def init(cfg: DictConfig):
     initialized = True
 
 # clusters points, detects the papyrus sheet instances
-def inference(points_3d):
+def inference(points_3d, index=0, num_gpus=1):
     '''
     points: np.array of shape (N, 3)
 
@@ -147,7 +151,7 @@ def inference(points_3d):
     '''
     
     if not initialized:
-        init()
+        init(num_gpus)
 
     # Convert labels into processed labels and instance ids.
     processed_labels = np.zeros(points_3d.shape[0])
@@ -163,9 +167,9 @@ def inference(points_3d):
     item_pytorch = inference_preprocessing.prepare_item(points)
     batch = [item_pytorch]
 
-    global model
+    global models
     with torch.no_grad():
-        predictions = model.inference(batch)
+        predictions = models[index%num_gpus].inference(batch)
 
     print(predictions.keys())
     print(predictions[0].keys())
@@ -183,7 +187,7 @@ def inference(points_3d):
 
     return prediction
 
-def batch_inference(points_3d_list):
+def batch_inference(points_3d_list, index=0, num_gpus=1):
     '''
     points_3d_list: List of np.array, each of shape (N, 3)
 
@@ -191,9 +195,9 @@ def batch_inference(points_3d_list):
     '''
     
     if not initialized:
-        init()
+        init(num_gpus)
 
-    global model
+    global models
     batch = []
 
     # # Utilizing multithreading for preprocessing
@@ -207,7 +211,7 @@ def batch_inference(points_3d_list):
         batch.append(preprocess_points(points))
 
     with torch.no_grad():
-        predictions = model.inference(batch)
+        predictions = models[index%num_gpus].inference(batch)
 
     return predictions
 
@@ -312,7 +316,7 @@ if __name__ == "__main__":
     batch = [item_pytorch]
 
     with torch.no_grad():
-        predictions = model.inference(batch)
+        predictions = models[0].inference(batch)
 
     print(predictions.keys())
     print(predictions[0].keys())
