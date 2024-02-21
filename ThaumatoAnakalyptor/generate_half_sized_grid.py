@@ -78,7 +78,7 @@ def downsample_image(args):
         tifffile.imwrite(output_path, downsampled_image)
     return f"Downsampled and saved '{filename}'."
 
-def downsample_folder_tifs(input_directory, output_directory, downsample_factor=2):
+def downsample_folder_tifs(input_directory, output_directory, downsample_factor=2,  num_threads=1):
     if downsample_factor == 1:
         print("Downsample factor is 1, skipping.")
         return
@@ -100,60 +100,12 @@ def downsample_folder_tifs(input_directory, output_directory, downsample_factor=
     tasks = [(input_directory, output_directory, f, downsample_factor) for f in files]
 
     # Initialize a Pool of processes
-    with Pool(processes=cpu_count()) as pool:
+    with Pool(processes=num_threads) as pool:
         # Process the files in parallel
         for _ in tqdm(pool.imap_unordered(downsample_image, tasks), total=len(tasks)):
             pass
 
     print('Downsampling complete.')
-
-# def generate_grid_blocks(directory_path, block_size):
-#     block_directory = directory_path + '_grids'
-#     os.makedirs(block_directory, exist_ok=True)
-
-#     # Get all the .tif files sorted by name (assuming this sorts them by the z-axis correctly)
-#     tif_files = sorted([f for f in os.listdir(directory_path) if f.endswith('.tif')])
-
-#     # Calculate how many blocks will fit along each axis
-#     # This assumes all tif files are the same shape.
-#     sample_image = tifffile.imread(os.path.join(directory_path, tif_files[0]))
-#     nz = len(tif_files)
-#     ny, nx = sample_image.shape
-#     blocks_in_x = int(np.ceil(nx / block_size))
-#     blocks_in_y = int(np.ceil(ny / block_size))
-#     blocks_in_z = int(np.ceil(nz / block_size))
-
-#     # Initialize an empty array to store one block of the 3D data
-#     block = np.zeros((block_size, block_size, block_size), dtype=sample_image.dtype)
-
-#     # Iterate through each block in z, y, x order
-#     for bz in tqdm(range(blocks_in_z)):
-#         print()
-#         for by in tqdm(range(blocks_in_y)):
-#             print()
-#             for bx in tqdm(range(blocks_in_x)):
-#                 # Construct each block
-#                 block.fill(0) # Reset the block to all zeros
-#                 for z in range(block_size):
-#                     z_index = bz * block_size + z
-#                     if z_index >= nz:
-#                         break
-#                     image_path = os.path.join(directory_path, tif_files[z_index])
-#                     image_slice = tifffile.imread(image_path)
-#                     # The y and x indices need to be offset by the block index times the block size
-#                     y_slice = slice(by * block_size, min((by + 1) * block_size, image_slice.shape[0]))
-#                     x_slice = slice(bx * block_size, min((bx + 1) * block_size, image_slice.shape[1]))
-#                     block_y_slice = slice(0, y_slice.stop - y_slice.start)
-#                     block_x_slice = slice(0, x_slice.stop - x_slice.start)
-#                     block[z, block_y_slice, block_x_slice] = image_slice[y_slice, x_slice]
-
-#                 # Save the block to a 3D tif file
-#                 # The filename indicates the block indices, which are 1-indexed for Julia
-#                 block_filename = f"cell_yxz_{by+1:03}_{bx+1:03}_{bz+1:03}.tif"
-#                 block_path = os.path.join(block_directory, block_filename)
-#                 tifffile.imwrite(block_path, block)
-
-#     print('Grid blocks have been generated.')
 
 def process_block(args):
     bz, by, bx, directory_path, block_size, nz, ny, nx, tif_files, standard_size = args
@@ -179,7 +131,7 @@ def process_block(args):
 
     tifffile.imwrite(block_path, block)
 
-def generate_grid_blocks(directory_path, block_size):
+def generate_grid_blocks(directory_path, block_size, num_threads):
     block_directory = directory_path + '_grids'
     os.makedirs(block_directory, exist_ok=True)
     tif_files = sorted([f for f in os.listdir(directory_path) if f.endswith('.tif')])
@@ -206,15 +158,10 @@ def generate_grid_blocks(directory_path, block_size):
              for bz in range(blocks_in_z) for by in range(blocks_in_y) for bx in range(blocks_in_x)]
 
     # multiprocessing
-    num_pools = max(1, cpu_count() // 3)
+    num_pools = max(1, num_threads // 3)
     with Pool(processes=num_pools) as pool:
         for _ in tqdm(pool.imap_unordered(process_block, tasks), total=len(tasks)):
             pass
-
-    # # singlethreaded
-    # print("going singlethreaded")
-    # for task in tqdm(tasks):
-    #     process_block(task)
 
     print('Grid blocks have been generated.')
 
@@ -305,9 +252,9 @@ def fix_xy_transpose(original_directory, new_directory):
             tifffile.imwrite(new_filepath, image)
     print('XY transposition has been completed.')
 
-def compute(input_directory, output_directory, downsample_factor):
-    downsample_folder_tifs(input_directory, output_directory, downsample_factor)
-    generate_grid_blocks(output_directory, 500)
+def compute(input_directory, output_directory, downsample_factor, num_threads):
+    downsample_folder_tifs(input_directory, output_directory, downsample_factor, num_threads)
+    generate_grid_blocks(output_directory, 500, num_threads)
 
 def main():
     # Path to the directory containing the .tif files
@@ -320,6 +267,7 @@ def main():
     parser.add_argument("--input_directory", type=str, help="Path to the input directory containing the tif files", default=input_directory)
     parser.add_argument("--output_directory", type=str, help="Path to the output directory", default=output_directory)
     parser.add_argument("--downsample_factor", type=int, help="Downsample factor (int)", default=downsample_factor)
+    parser.add_argument("--num_threads", type=int, help="Number of threads to use for processing", default=cpu_count())
 
     # Take arguments back over
     args = parser.parse_args()
@@ -330,9 +278,10 @@ def main():
     input_directory = args.input_directory
     output_directory = args.output_directory
     downsample_factor = args.downsample_factor
+    num_threads = args.num_threads
 
     # Compute the downsampled tifs and grid blocks
-    compute(input_directory, output_directory, downsample_factor)
+    compute(input_directory, output_directory, downsample_factor, num_threads)
 
 if __name__ == '__main__':
     main()
