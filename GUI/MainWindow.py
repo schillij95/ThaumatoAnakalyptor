@@ -1122,6 +1122,8 @@ class ThaumatoAnakalyptor(QMainWindow):
 
     def addTexturingArea(self, box):
         label = QLabel("Texturing")
+        self.useVcCheckbox = QCheckBox("Allways Use Volume Cartographer")
+        self.useVcCheckbox.setChecked(False)
         self.computeTexturingButton = QPushButton("Compute")
         self.stopTexturingButton = QPushButton("Stop")
         self.stopTexturingButton.setEnabled(False)
@@ -1130,6 +1132,7 @@ class ThaumatoAnakalyptor(QMainWindow):
         self.stopTexturingButton.clicked.connect(self.stopTexturing)
 
         box.add_widget(label)
+        box.add_widget(self.useVcCheckbox)
         box.add_widget(self.computeTexturingButton)
         box.add_widget(self.stopTexturingButton)
 
@@ -1173,12 +1176,13 @@ class ThaumatoAnakalyptor(QMainWindow):
                 "--cache-memory-limit", "8G"
             ]
 
-            if abs(self.Config["downsample_factor"]) == 1:
-                print("Using thaumato GPU render from grid cells to texture layers")
-                command = command_gpu_downscaled_1
-            else:
+            use_VC = self.useVcCheckbox.isChecked()
+            if use_VC or (abs(self.Config["downsample_factor"]) != 1):
                 print("Using volume cartographer to render from 2D tiffs")
                 command = command_2d_tiffs
+            else:
+                print("Using ThaumatoAnakalyptor GPU render from grid cells to texture layers")
+                command = command_gpu_downscaled_1
             
             # Prepare the environment variable
             env = os.environ.copy()
@@ -1233,7 +1237,7 @@ class ThaumatoAnakalyptor(QMainWindow):
     def computeInkDetection(self):
         try:
             # Set the path to the virtual environment's Python executable
-            python_executable = "/youssefGP/bin/python"  # Adjust this path as necessary
+            python_executable = "/youssefGP/bin/python"  # Python env for the timesformer
 
             # Prepare the environment variable
             env = os.environ.copy()
