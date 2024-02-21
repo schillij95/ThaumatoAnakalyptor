@@ -1251,7 +1251,7 @@ class ThaumatoAnakalyptor(QMainWindow):
 
             # Construct the command with the provided arguments
             command = [
-                python_executable, "Vesuvius-Grandprize-Winner/inference_timesformer.py",
+                python_executable, "/workspace/Vesuvius-Grandprize-Winner/inference_timesformer.py",
                 "--segment_id", segment_id,
                 "--segment_path", segment_path,
                 "--model_path", model_path,
