@@ -1,4 +1,5 @@
 config.json
 saved/
+wandb/
 scroll*/
 overlapp_threshold.yaml

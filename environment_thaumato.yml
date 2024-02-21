@@ -161,6 +161,7 @@ dependencies:
       - debugpy==1.6.7
       - decorator==5.1.1
       - docker-pycreds==0.4.0
+      - einops==0.7.0
       - executing==1.2.0
       - fastapi==0.95.1
       - fastjsonschema==2.16.3

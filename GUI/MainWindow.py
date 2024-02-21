@@ -1158,8 +1158,8 @@ class ThaumatoAnakalyptor(QMainWindow):
                 ppm_path, 
                 self.Config["downsampled_3d_grids"],
                 "--r", "32",
-                "--max_workers", self.Config["num_threads_texturing"],
-                "--gpus", self.Config["gpus"]
+                "--max_workers", str(self.Config["num_threads_texturing"]),
+                "--gpus", str(self.Config["gpus"])
             ]
 
             command_2d_tiffs = [
