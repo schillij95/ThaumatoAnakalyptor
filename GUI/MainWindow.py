@@ -1080,23 +1080,19 @@ class ThaumatoAnakalyptor(QMainWindow):
     def computePPM(self):
         try:
             starting_point = [self.xField.text(), self.yField.text(), self.zField.text()]
-            path_base = os.path.join(self.Config["surface_points_path"], f"{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/")
-            print(f"path_base: {path_base}")
 
             original_2d_tiffs = self.Config.get("original_2d_tiffs", None)
             if original_2d_tiffs is None:
                 QMessageBox.critical(self, "Error", f"Please specify the 2D Tiff files path")
                 return
             # volpkg is original_2d_tiffs without last two folders
-            volpkg_path = os.path.dirname(os.path.dirname(original_2d_tiffs)) + "/"
-            volume = os.path.basename(original_2d_tiffs)
             obj_path = self.Config.get("surface_points_path", None)
             if obj_path is None:
                 QMessageBox.critical(self, "Error", f"Please specify the surface points path")
                 return
-            ppm_path = obj_path + f"/working/working_{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/thaumato.obj"
+            ppm_path = obj_path + f"/working/working_{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/thaumato.ppm"
             obj_path = obj_path + f"/working/working_{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/point_cloud_colorized_verso_subvolume_blocks_uv_flatboi.obj"
-            print("ppm paths:", volpkg_path, volume, obj_path, ppm_path)
+            print("ppm paths:", obj_path, ppm_path)
 
             command = [
                 "/volume-cartographer-papyrus/build/bin/vc_generate_ppm",
@@ -1140,8 +1136,6 @@ class ThaumatoAnakalyptor(QMainWindow):
     def computeTexturing(self):
         try:
             starting_point = [self.xField.text(), self.yField.text(), self.zField.text()]
-            path_base = os.path.join(self.Config["surface_points_path"], f"{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/")
-            print(f"path_base: {path_base}")
 
             original_2d_tiffs = self.Config.get("original_2d_tiffs", None)
             if original_2d_tiffs is None:
@@ -1155,7 +1149,7 @@ class ThaumatoAnakalyptor(QMainWindow):
                 QMessageBox.critical(self, "Error", f"Please specify the surface points path")
                 return
             layers_path = obj_path + f"/working/working_{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/layers/"
-            ppm_path = obj_path + f"/working/working_{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/thaumato.obj"
+            ppm_path = obj_path + f"/working/working_{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/thaumato.ppm"
             obj_path = obj_path + f"/working/working_{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/point_cloud_colorized_verso_subvolume_blocks_uv_flatboi.obj"
             print("texturing paths:", volpkg_path, volume, obj_path, ppm_path)
 
