@@ -61,7 +61,7 @@ def downsample_image(args):
     # Check if image already exists in the output directory
     if os.path.exists(output_path):
         return f"'{filename}' already exists in the output directory. Skipping."
-    print(f"Downsampling {filename}.")
+    # print(f"Downsampling {filename}.")
     
     with tifffile.TiffFile(filepath) as tif:
         image = tif.asarray()
