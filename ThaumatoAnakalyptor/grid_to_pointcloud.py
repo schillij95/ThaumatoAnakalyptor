@@ -425,7 +425,7 @@ def compute_surface_for_block_multiprocessing(corner_coords, path_template, save
                 if len(current_block_batch) == 0:
                     continue
                 # Process each block and update the progress bar upon completion of each block
-                for _ in pool.imap(process_block, [(block, blocks_to_process, blocks_processed, umbilicus_points, umbilicus_points_old, lock, path_template, save_template_v, save_template_r, grid_block_size, recompute, fix_umbilicus, maximum_distance, proc_nr % CFG['GPUs']) for proc_nr, block in enumerate(current_block_batch)]), total=len(current_block_batch)):
+                for _ in pool.imap(process_block, [(block, blocks_to_process, blocks_processed, umbilicus_points, umbilicus_points_old, lock, path_template, save_template_v, save_template_r, grid_block_size, recompute, fix_umbilicus, maximum_distance, proc_nr % CFG['GPUs']) for proc_nr, block in enumerate(current_block_batch)]):
                     pbar.update(1)
                 torch.cuda.empty_cache()
 
