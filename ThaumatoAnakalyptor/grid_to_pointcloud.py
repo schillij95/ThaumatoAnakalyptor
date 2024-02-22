@@ -295,7 +295,6 @@ def process_block(args):
     surface_ply_filename_r = save_template_r.format(file_x, file_y, file_z)
 
     if (not skip_computation_flag) and (recompute or not (os.path.exists(surface_ply_filename_r) and os.path.exists(surface_ply_filename_v))) and (not computed_block): # Recompute if file doesn't exist or recompute flag is set
-        print(f"Skip computation flag: {skip_computation_flag}, Recompute flag: {recompute}, path verso exists: {os.path.exists(surface_ply_filename_v)}, path recto exists: {os.path.exists(surface_ply_filename_r)}")
         # Load padded grid block
         block = load_grid(path_template, corner_coords_padded, grid_block_size=grid_block_size_padded)
         # Check if the block is empty
