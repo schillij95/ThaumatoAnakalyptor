@@ -352,7 +352,6 @@ def process_block(args):
                         if neighbor_coords not in blocks_processed and neighbor_coords not in blocks_to_process:
                             blocks_to_process.append(neighbor_coords)
 
-    torch.cuda.empty_cache()
     return True
 
 # fixing the pointcloud because of computation with too short umbilicus
@@ -422,6 +421,7 @@ def compute_surface_for_block_multiprocessing(corner_coords, path_template, save
         results = list(tqdm.tqdm(pool.imap(process_block, [(block, blocks_to_process, blocks_processed, umbilicus_points, umbilicus_points_old, lock, path_template, save_template_v, save_template_r, grid_block_size, recompute, fix_umbilicus, maximum_distance, proc_nr % CFG['GPUs']) for proc_nr, block in enumerate(current_blocks)]), total=len(current_blocks)))
         current_time = time.time()
         print("Blocks total processed:", len(blocks_processed), "Blocks to process:", len(blocks_to_process), "Time per block:", f"{(current_time - start_time) / (len(blocks_processed) - processed_nr):.3f}" if len(blocks_processed)-processed_nr > 0 else "Unknown")
+        torch.cuda.empty_cache()
         processed_nr = len(blocks_processed)
 
 def compute(disk_load_save, base_path, volume_subpath, pointcloud_subpath, maximum_distance, recompute, fix_umbilicus, start_block, num_threads, gpus):
