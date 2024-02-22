@@ -420,6 +420,8 @@ def compute_surface_for_block_multiprocessing(corner_coords, path_template, save
 
         current_block_batches = [current_blocks[i:min(len(current_blocks), i+3*CFG['num_threads'])] for i in range(0, len(current_blocks), CFG['num_threads'])]
         for current_block_batch in current_block_batches:
+            if len(current_block_batch) == 0:
+                continue
             results = list(tqdm.tqdm(pool.imap(process_block, [(block, blocks_to_process, blocks_processed, umbilicus_points, umbilicus_points_old, lock, path_template, save_template_v, save_template_r, grid_block_size, recompute, fix_umbilicus, maximum_distance, proc_nr % CFG['GPUs']) for proc_nr, block in enumerate(current_block_batch)]), total=len(current_block_batch)))
             torch.cuda.empty_cache()
 
