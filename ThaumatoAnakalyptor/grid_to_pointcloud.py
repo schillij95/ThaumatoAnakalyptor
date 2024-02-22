@@ -386,12 +386,20 @@ def skip_computation_block(corner_coords, grid_block_size, umbilicus_points, max
     return umbilicus_point_dist > maximum_distance
 
 
-def compute_surface_for_block_multiprocessing(corner_coords, path_template, save_template_v, save_template_r, umbilicus_points, grid_block_size=500, recompute=False, fix_umbilicus=False, umbilicus_points_old=None, maximum_distance=2500):
+def compute_surface_for_block_multiprocessing(corner_coords, pointcloud_base, path_template, save_template_v, save_template_r, umbilicus_points, grid_block_size=500, recompute=False, fix_umbilicus=False, umbilicus_points_old=None, maximum_distance=2500):
     # Create a manager for shared data
     manager = multiprocessing.Manager()
     blocks_to_process = manager.list([corner_coords])
     blocks_processed = manager.dict()
     lock = manager.Lock()
+
+    computed_blocks = set()
+    # Try to load the list of computed blocks
+    try:
+        with open(os.path.join(pointcloud_base, "computed_blocks.txt"), "r") as f:
+            computed_blocks = set([tuple(map(int, block.split())) for block in f.readlines()])
+    except Exception as e:
+        print(f"Error loading computed blocks: {e}")
 
     # Limit the number of concurrent jobs to, for instance, 4. You can change this value as desired.
     # for 2 threads:
@@ -417,7 +425,10 @@ def compute_surface_for_block_multiprocessing(corner_coords, path_template, save
     # This loop ensures that all tasks in the list are completed.
     while len(blocks_to_process) > 0:
         start_time = time.time()
-        current_blocks = list(blocks_to_process)  # Take a snapshot of current blocks
+        current_blocks = list(set(list(blocks_to_process)))  # Take a snapshot of current blocks
+
+        # Remove already computed blocks
+        current_blocks = [block for block in current_blocks if block not in computed_blocks]
 
         current_block_batches = [current_blocks[i:min(len(current_blocks), i+3*CFG['num_threads'])] for i in range(0, len(current_blocks), 3*CFG['num_threads'])]
         # Initialize the tqdm progress bar
@@ -428,6 +439,14 @@ def compute_surface_for_block_multiprocessing(corner_coords, path_template, save
                 # Process each block and update the progress bar upon completion of each block
                 for _ in pool.imap(process_block, [(block, blocks_to_process, blocks_processed, umbilicus_points, umbilicus_points_old, lock, path_template, save_template_v, save_template_r, grid_block_size, recompute, fix_umbilicus, maximum_distance, proc_nr % CFG['GPUs']) for proc_nr, block in enumerate(current_block_batch)]):
                     pbar.update(1)
+
+                computed_blocks.update(current_block_batch)
+                # Save the computed blocks
+                with open(os.path.join(pointcloud_base, "computed_blocks.txt"), "w") as f:
+                    for block in computed_blocks:
+                        f.write(str(block) + "\n")
+
+
                 torch.cuda.empty_cache()
 
         # results = list(tqdm.tqdm(pool.imap(process_block, [(block, blocks_to_process, blocks_processed, umbilicus_points, umbilicus_points_old, lock, path_template, save_template_v, save_template_r, grid_block_size, recompute, fix_umbilicus, maximum_distance, proc_nr % CFG['GPUs']) for proc_nr, block in enumerate(current_blocks)]), total=len(current_blocks)))
@@ -446,6 +465,7 @@ def compute(disk_load_save, base_path, volume_subpath, pointcloud_subpath, maxim
     CFG['num_threads'] = num_threads
     CFG['GPUs'] = gpus
 
+    pointcloud_base = os.path.dirname(pointcloud_subpath)
     pointcloud_subpath_recto = pointcloud_subpath + "_recto"
     pointcloud_subpath_verso = pointcloud_subpath + "_verso"
     pointcloud_subpath_colorized = pointcloud_subpath + "_colorized"
@@ -491,7 +511,7 @@ def compute(disk_load_save, base_path, volume_subpath, pointcloud_subpath, maxim
 
     # Starting grid block at corner (3000, 4000, 2000) to match cell_yxz_006_008_004
     # (2600, 2200, 5000)
-    compute_surface_for_block_multiprocessing(start_block, path_template, save_template_v, save_template_r, umbilicus_points, grid_block_size=200, recompute=recompute, fix_umbilicus=fix_umbilicus, umbilicus_points_old=umbilicus_points_old, maximum_distance=maximum_distance)
+    compute_surface_for_block_multiprocessing(start_block, pointcloud_base, path_template, save_template_v, save_template_r, umbilicus_points, grid_block_size=200, recompute=recompute, fix_umbilicus=fix_umbilicus, umbilicus_points_old=umbilicus_points_old, maximum_distance=maximum_distance)
 
     # Sample usage:
     # src is folder of save_umbilicus_path
