@@ -352,6 +352,7 @@ def process_block(args):
                         if neighbor_coords not in blocks_processed and neighbor_coords not in blocks_to_process:
                             blocks_to_process.append(neighbor_coords)
 
+    torch.cuda.empty_cache()
     return True
 
 # fixing the pointcloud because of computation with too short umbilicus

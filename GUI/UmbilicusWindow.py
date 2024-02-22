@@ -26,12 +26,13 @@ class GraphicsView(QGraphicsView):
             self.scale(1 / factor, 1 / factor)
 
 class UmbilicusWindow(QMainWindow):
-    def __init__(self, imagePath, parent=None):
+    def __init__(self, imagePath, scale_factor, parent=None):
         super().__init__(parent)
         self.imagePath = imagePath
+        self.scale_factor = scale_factor
         self.currentIndex = 0
         self.incrementing=True
-        self.images = sorted([f for f in os.listdir(self.imagePath) if f.endswith('.tif')])
+        self.construct_images()
         self.points = {}  # Dictionary to store points as {index: (x, y)}
         self.initUI()
         # set icon
@@ -100,6 +101,12 @@ class UmbilicusWindow(QMainWindow):
         # Load the first image
         self.loadImage(self.currentIndex)
 
+    def construct_images(self):
+        tifs = [f for f in os.listdir(self.imagePath) if f.endswith('.tif')]
+        self.images = {}
+        for tif in tifs:
+            self.images[int(tif[:-4])] = tif
+
     def showHelp(self):
         helpText = "ThaumatoAnakalyptor Help\n\n" \
                    "If you already have an umbilicus generated, load it with 'Load'. \n" \
@@ -113,7 +120,11 @@ class UmbilicusWindow(QMainWindow):
         QMessageBox.information(self, "Help", helpText)
 
     def loadImage(self, index):
-        if 0 <= index < len(self.images):
+        # Adjust index for scale factor
+        index_original = index
+        index *= self.scale_factor
+
+        if index in self.images:
             imagePath = os.path.join(self.imagePath, self.images[index])
 
             # Use tifffile to read the TIFF image
@@ -142,11 +153,12 @@ class UmbilicusWindow(QMainWindow):
             # self.view.fitInView(self.scene.itemsBoundingRect(), Qt.KeepAspectRatio)
 
             # Set the index box text
-            self.indexBox.setText(str(index))
+            self.indexBox.setText(str(index_original))
+            self.fileNameLabel.setText("File: " + self.images[index])
 
             # Draw a red point if it exists for this image
-            if index in self.points:
-                x, y = self.points[index]
+            if index_original in self.points:
+                x, y = self.points[index_original]
                 # Convert to scene coordinates
                 sceneX = x / self.image_width * self.image_width
                 sceneY = y / self.image_height * self.image_height
@@ -160,7 +172,7 @@ class UmbilicusWindow(QMainWindow):
 
     def jumpToIndex(self):
         index = int(self.indexBox.text())
-        if 0 <= index < len(self.images):
+        if 0 <= index <= max(self.images.keys()) // self.scale_factor:
             self.currentIndex = index
             self.loadImage(self.currentIndex)
         # Unfocus the index box
@@ -169,7 +181,7 @@ class UmbilicusWindow(QMainWindow):
     def incrementIndex(self):
         self.incrementing = True
         step_size = int(self.stepSizeBox.text())
-        self.currentIndex = min((self.currentIndex + step_size), len(self.images) - 1)
+        self.currentIndex = min((self.currentIndex + step_size), max(self.images.keys()) // self.scale_factor)
 
     def decrementIndex(self):
         self.incrementing = False
@@ -237,14 +249,19 @@ class UmbilicusWindow(QMainWindow):
         try:
             umbilicus_path = os.path.join(self.imagePath, umbilicus_name)
             print(umbilicus_path)
+            point_keys = list(self.points.keys())
+            # sort list
+            point_keys.sort()
             with open(umbilicus_path, "w") as file:
-                for index, (x, y) in self.points.items():
+                for index in point_keys:
+                    x, y = self.points[index]
                     file.write(f"{y + 500}, {index + 500}, {x + 500}\n")
 
             umbilicus_path = os.path.join(self.imagePath + "_grids", umbilicus_name)
             print(umbilicus_path)
             with open(umbilicus_path, "w") as file:
-                for index, (x, y) in self.points.items():
+                for index in point_keys:
+                    x, y = self.points[index]
                     file.write(f"{y + 500}, {index + 500}, {x + 500}\n")
             print("Points saved to umbilicus.txt")
         except Exception as e:

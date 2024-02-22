@@ -373,7 +373,7 @@ class ThaumatoAnakalyptor(QMainWindow):
 
     def openUmbilicusWindow(self):
         if self.Config.get("downsampled_2d_tiffs", None) and os.path.exists(self.Config["downsampled_2d_tiffs"]):
-            self.umbilicusWindow = UmbilicusWindow(self.Config["downsampled_2d_tiffs"])
+            self.umbilicusWindow = UmbilicusWindow(self.Config["downsampled_2d_tiffs"], abs(self.Config["downsample_factor"]))
             self.umbilicusWindow.resize(self.width(), self.height())  # Adjust width and height as needed
             self.umbilicusWindow.show()
 
