@@ -423,7 +423,7 @@ def compute_surface_for_block_multiprocessing(corner_coords, path_template, save
             if len(current_block_batch) == 0:
                 continue
             results = list(tqdm.tqdm(pool.imap(process_block, [(block, blocks_to_process, blocks_processed, umbilicus_points, umbilicus_points_old, lock, path_template, save_template_v, save_template_r, grid_block_size, recompute, fix_umbilicus, maximum_distance, proc_nr % CFG['GPUs']) for proc_nr, block in enumerate(current_block_batch)]), total=len(current_block_batch)))
-            # torch.cuda.empty_cache()
+            torch.cuda.empty_cache()
 
         # results = list(tqdm.tqdm(pool.imap(process_block, [(block, blocks_to_process, blocks_processed, umbilicus_points, umbilicus_points_old, lock, path_template, save_template_v, save_template_r, grid_block_size, recompute, fix_umbilicus, maximum_distance, proc_nr % CFG['GPUs']) for proc_nr, block in enumerate(current_blocks)]), total=len(current_blocks)))
         current_time = time.time()
