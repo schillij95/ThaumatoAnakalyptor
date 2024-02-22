@@ -419,11 +419,15 @@ def compute_surface_for_block_multiprocessing(corner_coords, path_template, save
         current_blocks = list(blocks_to_process)  # Take a snapshot of current blocks
 
         current_block_batches = [current_blocks[i:min(len(current_blocks), i+3*CFG['num_threads'])] for i in range(0, len(current_blocks), 3*CFG['num_threads'])]
-        for current_block_batch in current_block_batches:
-            if len(current_block_batch) == 0:
-                continue
-            results = list(tqdm.tqdm(pool.imap(process_block, [(block, blocks_to_process, blocks_processed, umbilicus_points, umbilicus_points_old, lock, path_template, save_template_v, save_template_r, grid_block_size, recompute, fix_umbilicus, maximum_distance, proc_nr % CFG['GPUs']) for proc_nr, block in enumerate(current_block_batch)]), total=len(current_block_batch)))
-            torch.cuda.empty_cache()
+        # Initialize the tqdm progress bar
+        with tqdm.tqdm(total=len(current_blocks)) as pbar:
+            for current_block_batch in current_block_batches:
+                if len(current_block_batch) == 0:
+                    continue
+                # Process each block and update the progress bar upon completion of each block
+                for _ in pool.imap(process_block, [(block, blocks_to_process, blocks_processed, umbilicus_points, umbilicus_points_old, lock, path_template, save_template_v, save_template_r, grid_block_size, recompute, fix_umbilicus, maximum_distance, proc_nr % CFG['GPUs']) for proc_nr, block in enumerate(current_block_batch)]), total=len(current_block_batch)):
+                    pbar.update(1)
+                torch.cuda.empty_cache()
 
         # results = list(tqdm.tqdm(pool.imap(process_block, [(block, blocks_to_process, blocks_processed, umbilicus_points, umbilicus_points_old, lock, path_template, save_template_v, save_template_r, grid_block_size, recompute, fix_umbilicus, maximum_distance, proc_nr % CFG['GPUs']) for proc_nr, block in enumerate(current_blocks)]), total=len(current_blocks)))
         current_time = time.time()
