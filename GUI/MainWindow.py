@@ -1086,22 +1086,28 @@ class ThaumatoAnakalyptor(QMainWindow):
                 QMessageBox.critical(self, "Error", f"Please specify the 2D Tiff files path")
                 return
             # volpkg is original_2d_tiffs without last two folders
-            obj_path = self.Config.get("surface_points_path", None)
-            if obj_path is None:
+            base_path = self.Config.get("surface_points_path", None)
+            if base_path is None:
                 QMessageBox.critical(self, "Error", f"Please specify the surface points path")
                 return
-            ppm_path = obj_path + f"/working/working_{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/thaumato.ppm"
-            obj_path = obj_path + f"/working/working_{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/point_cloud_colorized_verso_subvolume_blocks_uv_flatboi.obj"
-            print("ppm paths:", obj_path, ppm_path)
-
-            command = [
-                "/volume-cartographer-papyrus/build/bin/vc_generate_ppm",
-                "--input-mesh", obj_path,
-                "--output-ppm", ppm_path,
-                "--uv-reuse"
-            ]
+            base_path = os.path.join(base_path, "working")
             
-            self.process = subprocess.Popen(command)
+            working_directories = [dir_ for dir_ in os.listdir(base_path) if dir_.startswith(f"working_{starting_point[0]}_{starting_point[1]}_{starting_point[2]}")]
+
+            for working_directory in working_directories:
+                ppm_path = base_path + f"/{working_directory}/thaumato.ppm"
+                obj_path = base_path + f"/{working_directory}/point_cloud_colorized_verso_subvolume_blocks_uv_flatboi.obj"
+                print("ppm paths:", obj_path, ppm_path)
+
+                command = [
+                    "/volume-cartographer-papyrus/build/bin/vc_generate_ppm",
+                    "--input-mesh", obj_path,
+                    "--output-ppm", ppm_path,
+                    "--uv-reuse"
+                ]
+                
+                self.process = subprocess.Popen(command)
+
             self.computePpmButton.setEnabled(False)
             self.stopPpmButton.setEnabled(True)
 
@@ -1147,51 +1153,58 @@ class ThaumatoAnakalyptor(QMainWindow):
             # volpkg is original_2d_tiffs without last two folders
             volpkg_path = os.path.dirname(os.path.dirname(original_2d_tiffs)) + "/"
             volume = os.path.basename(original_2d_tiffs)
-            obj_path = self.Config.get("surface_points_path", None)
-            if obj_path is None:
+            base_path = self.Config.get("surface_points_path", None)
+            if base_path is None:
                 QMessageBox.critical(self, "Error", f"Please specify the surface points path")
                 return
-            layers_path = obj_path + f"/working/working_{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/layers/"
-            ppm_path = obj_path + f"/working/working_{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/thaumato.ppm"
-            obj_path = obj_path + f"/working/working_{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/point_cloud_colorized_verso_subvolume_blocks_uv_flatboi.obj"
-            print("texturing paths:", volpkg_path, volume, obj_path, ppm_path)
-
-            command_gpu_downscaled_1 = [
-                "python3", "-m", "ThaumatoAnakalyptor.ppm_to_layers",
-                ppm_path, 
-                self.Config["downsampled_3d_grids"],
-                "--r", "32",
-                "--max_workers", str(self.Config["num_threads_texturing"]),
-                "--gpus", str(self.Config["gpus"])
-            ]
-
-            command_2d_tiffs = [
-                "/volume-cartographer-papyrus/build/bin/vc_layers_from_ppm",
-                "-v", volpkg_path,
-                "--volume", volume,
-                "-p", ppm_path,
-                "--output-dir",layers_path,
-                "-f", "tif",
-                "-r", "32",
-                "--cache-memory-limit", "8G"
-            ]
-
-            use_VC = self.useVcCheckbox.isChecked()
-            if use_VC or (abs(self.Config["downsample_factor"]) != 1):
-                print("Using volume cartographer to render from 2D tiffs")
-                command = command_2d_tiffs
-            else:
-                print("Using ThaumatoAnakalyptor GPU render from grid cells to texture layers")
-                command = command_gpu_downscaled_1
+            base_path = os.path.join(base_path, "working")
             
-            # Prepare the environment variable
-            env = os.environ.copy()
-            env["MAX_TILE_SIZE"] = "4294967295"  # Set maximum CV io image size for tiff files
-            env["OPENCV_IO_MAX_IMAGE_PIXELS"] = "4294967295"  # Set maximum CV io image size for tiff files
-            env["CV_IO_MAX_IMAGE_PIXELS"] = "4294967295"  # Set maximum CV io image size for tiff files
-            
-            # Run the command with the specified environment variables
-            self.process = subprocess.Popen(command, env=env)
+            working_directories = [dir_ for dir_ in os.listdir(base_path) if dir_.startswith(f"working_{starting_point[0]}_{starting_point[1]}_{starting_point[2]}")]
+
+            for working_directory in working_directories:
+
+                layers_path = base_path + f"/{working_directory}/layers/"
+                ppm_path = base_path + f"/{working_directory}/thaumato.ppm"
+                obj_path = base_path + f"/{working_directory}/point_cloud_colorized_verso_subvolume_blocks_uv_flatboi.obj"
+                print("texturing paths:", volpkg_path, volume, obj_path, ppm_path)
+
+                command_gpu_downscaled_1 = [
+                    "python3", "-m", "ThaumatoAnakalyptor.ppm_to_layers",
+                    ppm_path, 
+                    self.Config["downsampled_3d_grids"],
+                    "--r", "32",
+                    "--max_workers", str(self.Config["num_threads_texturing"]),
+                    "--gpus", str(self.Config["gpus"])
+                ]
+
+                command_2d_tiffs = [
+                    "/volume-cartographer-papyrus/build/bin/vc_layers_from_ppm",
+                    "-v", volpkg_path,
+                    "--volume", volume,
+                    "-p", ppm_path,
+                    "--output-dir",layers_path,
+                    "-f", "tif",
+                    "-r", "32",
+                    "--cache-memory-limit", "8G"
+                ]
+
+                use_VC = self.useVcCheckbox.isChecked()
+                if use_VC or (abs(self.Config["downsample_factor"]) != 1):
+                    print("Using volume cartographer to render from 2D tiffs")
+                    command = command_2d_tiffs
+                else:
+                    print("Using ThaumatoAnakalyptor GPU render from grid cells to texture layers")
+                    command = command_gpu_downscaled_1
+                
+                # Prepare the environment variable
+                env = os.environ.copy()
+                env["MAX_TILE_SIZE"] = "4294967295"  # Set maximum CV io image size for tiff files
+                env["OPENCV_IO_MAX_IMAGE_PIXELS"] = "4294967295"  # Set maximum CV io image size for tiff files
+                env["CV_IO_MAX_IMAGE_PIXELS"] = "4294967295"  # Set maximum CV io image size for tiff files
+                
+                # Run the command with the specified environment variables
+                self.process = subprocess.Popen(command, env=env)
+
             self.computeTexturingButton.setEnabled(False)
             self.stopTexturingButton.setEnabled(True)
 
@@ -1238,13 +1251,12 @@ class ThaumatoAnakalyptor(QMainWindow):
         try:
             # Set the path to the virtual environment's Python executable
             python_executable = "/youssefGP/bin/python"  # Python env for the timesformer
-
+            script_name = "/workspace/Vesuvius-Grandprize-Winner/inference_timesformer.py"  # Path to the script to run
+            
             # Prepare the environment variable
             env = os.environ.copy()
             env["WANDB_MODE"] = "dryrun"  # Set the WANDB_MODE environment variable
 
-            # Assuming you have these values or similar ways to obtain them
-            segment_id = f"working_{self.xField.text()}_{self.yField.text()}_{self.zField.text()}"
             # Modify the segment_path as per your requirement or dynamically determine it
             segment_path = self.Config.get("surface_points_path", None)
             if segment_path is None:
@@ -1252,19 +1264,25 @@ class ThaumatoAnakalyptor(QMainWindow):
                 return
             segment_path = os.path.join(segment_path, "working")
             model_path = "/workspace/Vesuvius-Grandprize-Winner/timesformer_wild15_20230702185753_0_fr_i3depoch=12.ckpt"
-            out_path = os.path.join(segment_path, segment_id, "predictions")
 
-            # Construct the command with the provided arguments
-            command = [
-                python_executable, "/workspace/Vesuvius-Grandprize-Winner/inference_timesformer.py",
-                "--segment_id", segment_id,
-                "--segment_path", segment_path,
-                "--model_path", model_path,
-                "--out_path", out_path
-            ]
+            starting_point = [self.xField.text(), self.yField.text(), self.zField.text()]
+            working_directories = [dir_ for dir_ in os.listdir(segment_path) if dir_.startswith(f"working_{starting_point[0]}_{starting_point[1]}_{starting_point[2]}")]
 
-            # Run the command with the specified environment variables
-            self.process = subprocess.Popen(command, env=env)
+            for segment_id in working_directories:
+                out_path = os.path.join(segment_path, segment_id, "predictions")
+
+                # Construct the command with the provided arguments
+                command = [
+                    python_executable, script_name,
+                    "--segment_id", segment_id,
+                    "--segment_path", segment_path,
+                    "--model_path", model_path,
+                    "--out_path", out_path
+                ]
+
+                # Run the command with the specified environment variables
+                self.process = subprocess.Popen(command, env=env)
+            
             self.computeInkDetectionButton.setEnabled(False)
             self.stopInkDetectionButton.setEnabled(True)
 
