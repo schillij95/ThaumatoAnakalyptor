@@ -418,7 +418,7 @@ def compute_surface_for_block_multiprocessing(corner_coords, path_template, save
         start_time = time.time()
         current_blocks = list(blocks_to_process)  # Take a snapshot of current blocks
 
-        current_block_batches = [current_blocks[i:min(len(current_blocks), i+3*CFG['num_threads'])] for i in range(0, len(current_blocks), CFG['num_threads'])]
+        current_block_batches = [current_blocks[i:min(len(current_blocks), i+3*CFG['num_threads'])] for i in range(0, len(current_blocks), 3*CFG['num_threads'])]
         for current_block_batch in current_block_batches:
             if len(current_block_batch) == 0:
                 continue
