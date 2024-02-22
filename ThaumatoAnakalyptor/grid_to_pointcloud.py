@@ -272,7 +272,7 @@ def extract_size(points, normals, grid_block_position_min, grid_block_position_m
     return filtered_points, filtered_normals
 
 def process_block(args):
-    corner_coords, blocks_to_process, blocks_processed, umbilicus_points, umbilicus_points_old, lock, path_template, save_template_v, save_template_r, grid_block_size, recompute, fix_umbilicus, maximum_distance, gpu_num = args
+    corner_coords, blocks_to_process, blocks_processed, umbilicus_points, umbilicus_points_old, lock, path_template, save_template_v, save_template_r, grid_block_size, recompute, fix_umbilicus, computed_block, maximum_distance, gpu_num = args
     if fix_umbilicus:
         fix_umbilicus_indicator = fix_umbilicus_recompute(corner_coords, grid_block_size, umbilicus_points, umbilicus_points_old)
     else:
@@ -294,7 +294,7 @@ def process_block(args):
     surface_ply_filename_v = save_template_v.format(file_x, file_y, file_z)
     surface_ply_filename_r = save_template_r.format(file_x, file_y, file_z)
 
-    if (not skip_computation_flag) and (recompute or not (os.path.exists(surface_ply_filename_r) and os.path.exists(surface_ply_filename_v))): # Recompute if file doesn't exist or recompute flag is set
+    if (not skip_computation_flag) and (recompute or not (os.path.exists(surface_ply_filename_r) and os.path.exists(surface_ply_filename_v))) and (not computed_block): # Recompute if file doesn't exist or recompute flag is set
         print(f"Skip computation flag: {skip_computation_flag}, Recompute flag: {recompute}, path verso exists: {os.path.exists(surface_ply_filename_v)}, path recto exists: {os.path.exists(surface_ply_filename_r)}")
         # Load padded grid block
         block = load_grid(path_template, corner_coords_padded, grid_block_size=grid_block_size_padded)
@@ -428,9 +428,6 @@ def compute_surface_for_block_multiprocessing(corner_coords, pointcloud_base, pa
         start_time = time.time()
         current_blocks = list(set(list(blocks_to_process)))  # Take a snapshot of current blocks
 
-        # Remove already computed blocks
-        current_blocks = [block for block in current_blocks if block not in computed_blocks]
-
         current_block_batches = [current_blocks[i:min(len(current_blocks), i+3*CFG['num_threads'])] for i in range(0, len(current_blocks), 3*CFG['num_threads'])]
         # Initialize the tqdm progress bar
         with tqdm.tqdm(total=len(current_blocks)) as pbar:
@@ -438,7 +435,7 @@ def compute_surface_for_block_multiprocessing(corner_coords, pointcloud_base, pa
                 if len(current_block_batch) == 0:
                     continue
                 # Process each block and update the progress bar upon completion of each block
-                for _ in pool.imap(process_block, [(block, blocks_to_process, blocks_processed, umbilicus_points, umbilicus_points_old, lock, path_template, save_template_v, save_template_r, grid_block_size, recompute, fix_umbilicus, maximum_distance, proc_nr % CFG['GPUs']) for proc_nr, block in enumerate(current_block_batch)]):
+                for _ in pool.imap(process_block, [(block, blocks_to_process, blocks_processed, umbilicus_points, umbilicus_points_old, lock, path_template, save_template_v, save_template_r, grid_block_size, recompute, fix_umbilicus, block in computed_blocks, maximum_distance, proc_nr % CFG['GPUs']) for proc_nr, block in enumerate(current_block_batch)]):
                     pbar.update(1)
 
                 computed_blocks.update(current_block_batch)
