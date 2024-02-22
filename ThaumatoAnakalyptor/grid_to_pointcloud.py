@@ -397,7 +397,8 @@ def compute_surface_for_block_multiprocessing(corner_coords, pointcloud_base, pa
     # Try to load the list of computed blocks
     try:
         with open(os.path.join(pointcloud_base, "computed_blocks.txt"), "r") as f:
-            computed_blocks = set([tuple(map(int, block.split())) for block in f.readlines()])
+            # load saved tuples with 3 elements
+            computed_blocks = set([eval(line.strip()) for line in f])
     except Exception as e:
         print(f"Error loading computed blocks: {e}")
 
