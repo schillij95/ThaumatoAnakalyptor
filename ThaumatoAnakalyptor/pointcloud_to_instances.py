@@ -19,7 +19,7 @@ from multiprocessing import Pool
 # plotting
 from tqdm import tqdm
 
-from .mask3d.inference import batch_inference, to_surfaces
+from .mask3d.inference import batch_inference, to_surfaces, init
 
 import json
 import argparse
@@ -530,6 +530,9 @@ def subvolume_instances_multithreaded(path="/media/julian/FastSSD/scroll3_surfac
         umbilicus_points_old = None
 
     num_tasks = len(start_list)
+
+    # init the Mask3D model
+    init(gpus)
 
     # Single threaded computation
     # for i in tqdm(range(num_tasks)):
