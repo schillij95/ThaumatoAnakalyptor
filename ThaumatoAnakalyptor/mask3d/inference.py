@@ -120,19 +120,31 @@ def init(cfg: DictConfig, num_gpus=1):
     cfg.general.export = True
     OmegaConf.set_struct(cfg, True)
     # because hydra wants to change dir for some reason
-    res = get_parameters(cfg)
-    model_original = res[1]
-    model_original.to(f"cuda:0")
     global models
     models = []
-    for gpu_nr in range(1, num_gpus):
-        model = deepcopy(model_original)
+    for gpu_nr in range(num_gpus):
+        res = get_parameters(cfg)
+        model = res[1]
         model.to(f"cuda:{gpu_nr}")
         #print("dataset config", cfg.data.datasets)
         model.prepare_data()
         # model = nn.DataParallel(model)
         # Add model to list of models
         models.append(model)
+
+    # res = get_parameters(cfg)
+    # model_original = res[1]
+    # model_original.to(f"cuda:0")
+    # global models
+    # models = []
+    # for gpu_nr in range(1, num_gpus):
+    #     model = deepcopy(model_original)
+    #     model.to(f"cuda:{gpu_nr}")
+    #     #print("dataset config", cfg.data.datasets)
+    #     model.prepare_data()
+    #     # model = nn.DataParallel(model)
+    #     # Add model to list of models
+    #     models.append(model)
 
     # thaumato_preprocessing.py for preprocessed npy loading to npy saving format (containing points object)
     global preprocessing_thaumato
@@ -154,7 +166,7 @@ def inference(points_3d, index=0, num_gpus=1):
     '''
     
     if not initialized:
-        init(num_gpus)
+        init(num_gpus=num_gpus)
 
     # Convert labels into processed labels and instance ids.
     processed_labels = np.zeros(points_3d.shape[0])
@@ -198,7 +210,7 @@ def batch_inference(points_3d_list, index=0, num_gpus=1):
     '''
     
     if not initialized:
-        init(num_gpus)
+        init(num_gpus=num_gpus)
 
     global models
     batch = []

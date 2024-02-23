@@ -532,7 +532,7 @@ def subvolume_instances_multithreaded(path="/media/julian/FastSSD/scroll3_surfac
     num_tasks = len(start_list)
 
     # init the Mask3D model
-    init(gpus)
+    init(num_gpus=gpus)
 
     # Single threaded computation
     # for i in tqdm(range(num_tasks)):
