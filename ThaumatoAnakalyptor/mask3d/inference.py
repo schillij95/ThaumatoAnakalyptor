@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from copy import deepcopy
 import logging
 import os
 os.environ["WANDB_MODE"] = "dryrun" # turn off annoying bugging wandb logging
@@ -119,11 +120,13 @@ def init(cfg: DictConfig, num_gpus=1):
     cfg.general.export = True
     OmegaConf.set_struct(cfg, True)
     # because hydra wants to change dir for some reason
+    res = get_parameters(cfg)
+    model_original = res[1]
+    model_original.to(f"cuda:0")
     global models
     models = []
-    for gpu_nr in range(num_gpus):
-        res = get_parameters(cfg)
-        model = res[1]
+    for gpu_nr in range(1, num_gpus):
+        model = deepcopy(model_original)
         model.to(f"cuda:{gpu_nr}")
         #print("dataset config", cfg.data.datasets)
         model.prepare_data()
