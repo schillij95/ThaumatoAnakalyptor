@@ -207,7 +207,7 @@ def load_single_ply(ply_file, grid_block_size, main_drive="", alternative_drives
     except Exception as e:
         return None
 
-def load_plys(src_folder, main_drive, alternative_drives, start, size, grid_block_size=200, num_processes=3):
+def load_plys(src_folder, main_drive, alternative_drives, start, size, grid_block_size=200, num_processes=3, load_multithreaded=True):
     path_template = "cell_yxz_{:03}_{:03}_{:03}.ply"
     ply_files = []
     for x in range(start[0], start[0]+size[0]):
@@ -215,8 +215,11 @@ def load_plys(src_folder, main_drive, alternative_drives, start, size, grid_bloc
             for z in range(start[2], start[2]+size[2]):
                 ply_files.append(os.path.join(src_folder, path_template.format(x,y,z)))
 
-    with Pool(processes=num_processes) as pool:
-        results = pool.starmap(load_single_ply, [(ply_file, grid_block_size, main_drive, alternative_drives) for ply_file in ply_files])
+    if load_multithreaded:
+        with Pool(processes=num_processes) as pool:
+            results = pool.starmap(load_single_ply, [(ply_file, grid_block_size, main_drive, alternative_drives) for ply_file in ply_files])
+    else:
+        results = [load_single_ply(ply_file, grid_block_size, main_drive, alternative_drives) for ply_file in ply_files]
 
     # Filter out None results
     results = [res for res in results if res is not None]
@@ -460,7 +463,7 @@ def subvolume_computation_function(args):
     dest_path = os.path.join(dest, folder)
     size = np.array(size) + 1 # +1 because we want to include the last subvolume for tiling operation from later calls starting at the last subvolume
     
-    res = load_plys(src_path, main_drive, alternative_drives, start, size, grid_block_size=200)
+    res = load_plys(src_path, main_drive, alternative_drives, start, size, grid_block_size=200, load_multithreaded=use_multiprocessing)
     if res is None:
         return False
     points, normals, colors = res
