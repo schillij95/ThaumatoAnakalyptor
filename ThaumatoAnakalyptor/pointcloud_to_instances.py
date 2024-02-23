@@ -542,7 +542,7 @@ def subvolume_instances_multithreaded(path="/media/julian/FastSSD/scroll3_surfac
             results = subvolume_computation_function((i, start_list[i], size, path, folder, dest, main_drive, alternative_drives, fix_umbilicus, umbilicus_points, umbilicus_points_old, score_threshold, batch_size, gpus, True))
     elif gpus > 1:
         # multithreaded computation
-        num_threads = multiprocessing.cpu_count()
+        num_threads = gpus
         with Pool(processes=num_threads) as pool:
             results = pool.map(subvolume_computation_function, [(i, start_list[i], size, path, folder, dest, main_drive, alternative_drives, fix_umbilicus, umbilicus_points, umbilicus_points_old, score_threshold, batch_size, gpus, False) for i in range(num_tasks)])
     else:
