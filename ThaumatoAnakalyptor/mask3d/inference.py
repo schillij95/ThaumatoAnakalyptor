@@ -32,6 +32,11 @@ import concurrent.futures
 global initialized
 initialized = False
 
+num_gpus = 1
+
+def set_num_gpus(num_gpus_):
+    global num_gpus
+    num_gpus = num_gpus_
 
 def get_parameters(cfg: DictConfig):
     logger = logging.getLogger(__name__)
@@ -77,11 +82,15 @@ def get_parameters(cfg: DictConfig):
     logger.info(flatten_dict(OmegaConf.to_container(cfg, resolve=True)))
     return cfg, model, loggers
 
+def init(num_gpus=1):
+    set_num_gpus(num_gpus)
+    init_()
 
 @hydra.main(
     config_path="conf", config_name="config_base_instance_segmentation.yaml"
 )
-def init(cfg: DictConfig, num_gpus=1):
+def init_(cfg: DictConfig):
+    print("cfg", cfg, "gpus", num_gpus)
     global initialized
     if initialized:
         return

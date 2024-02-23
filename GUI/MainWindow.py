@@ -511,6 +511,7 @@ class ThaumatoAnakalyptor(QMainWindow):
                 "--main_drive", "", "--alternative_ply_drives", "", "", 
                 "--max_umbilicus_dist", "-1",
                 "--batch_size", str(batch_size),
+                "--gpus", str(self.Config["gpus"])
             ]
 
             self.process = subprocess.Popen(command)

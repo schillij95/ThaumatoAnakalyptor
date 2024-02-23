@@ -333,7 +333,8 @@ def detect_subvolume_surfaces(index, points_batch, normals_batch, colors_batch, 
     predictions_mask3d_batch = []
     # Predict the surfaces 
     # print()
-    for coords_split in tqdm(coords_splits):
+    # for coords_split in tqdm(coords_splits):
+    for coords_split in coords_splits:
         # print GPU memory usage
         res = batch_inference(coords_split, index, gpus)
         if res is None:
@@ -532,16 +533,20 @@ def subvolume_instances_multithreaded(path="/media/julian/FastSSD/scroll3_surfac
     num_tasks = len(start_list)
 
     # init the Mask3D model
-    init(num_gpus=gpus)
+    init(gpus)
 
-    # Single threaded computation
-    # for i in tqdm(range(num_tasks)):
-    #     results = subvolume_computation_function((i, start_list[i], size, path, folder, dest, main_drive, alternative_drives, fix_umbilicus, umbilicus_points, umbilicus_points_old, score_threshold, batch_size, gpus, True))
 
-    # multithreaded computation
-    num_threads = multiprocessing.cpu_count()
-    with Pool(processes=num_threads) as pool:
-        results = pool.map(subvolume_computation_function, [(i, start_list[i], size, path, folder, dest, main_drive, alternative_drives, fix_umbilicus, umbilicus_points, umbilicus_points_old, score_threshold, batch_size, gpus, False) for i in range(num_tasks)])
+    if gpus == 1:
+        # Single threaded computation
+        for i in tqdm(range(num_tasks)):
+            results = subvolume_computation_function((i, start_list[i], size, path, folder, dest, main_drive, alternative_drives, fix_umbilicus, umbilicus_points, umbilicus_points_old, score_threshold, batch_size, gpus, True))
+    elif gpus > 1:
+        # multithreaded computation
+        num_threads = multiprocessing.cpu_count()
+        with Pool(processes=num_threads) as pool:
+            results = pool.map(subvolume_computation_function, [(i, start_list[i], size, path, folder, dest, main_drive, alternative_drives, fix_umbilicus, umbilicus_points, umbilicus_points_old, score_threshold, batch_size, gpus, False) for i in range(num_tasks)])
+    else:
+        raise ValueError("gpus must be >= 1")
 
 def compute(path, folder, dest, main_drive, alternative_ply_drives, umbilicus_points_path, umbilicus_distance_threshold, fix_umbilicus, score_threshold, batch_size, gpus):
     import sys
