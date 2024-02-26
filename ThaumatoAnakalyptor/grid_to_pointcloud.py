@@ -460,6 +460,9 @@ def compute_surface_for_block_multiprocessing(corner_coords, pointcloud_base, pa
                 with open(os.path.join(pointcloud_base, "computed_blocks.txt"), "w") as f:
                     for block in computed_blocks:
                         f.write(str(block) + "\n")
+                with open(os.path.join(pointcloud_base, "computed_blocks_skipped.txt"), "w") as f:
+                    for block in computed_blocks_skipped:
+                        f.write(str(block) + "\n")
 
 
                 torch.cuda.empty_cache()
