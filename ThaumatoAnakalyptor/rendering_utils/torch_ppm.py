@@ -49,11 +49,12 @@ def build_kdtree(vertices, triangles):
 def query_kdtree(kdtree, points, top_k=16):
     # Convert points to numpy and query KDTree
     _, indices = kdtree.query(points.cpu().numpy(), k=top_k, workers=-1)
-    return torch.from_numpy(indices).to(points.device)  # Convert back to tensor and move to original device
+    return torch.from_numpy(indices)  # Convert back to tensor and move to original device
 
 
 def points_in_triangles_batched(pts, vertices, triangles, kdtree, pts_batch_size=2048, tri_batch_size=16):
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    #device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = 'cpu'
     num_pts = pts.size(0)
     final_triangle_indices = torch.full((num_pts,), -1, dtype=torch.int64, device=device)
     final_bary_coords = torch.zeros((num_pts, 3), dtype=torch.float64, device=device)
