@@ -30,8 +30,8 @@ def points_in_triangles(pts, tri_pts):
 
     is_inside = (u >= 0) & (v >= 0) & ((u + v) <= 1 )
 
-    bary_coords = torch.zeros((u.shape[0], 3), dtype=torch.float64, device=u.device)
-    triangle_indices = torch.where(is_inside.any(dim=1), is_inside.float().argmax(dim=1), torch.tensor(-1, device=u.device, dtype=torch.int64))
+    bary_coords = torch.zeros((u.shape[0], 3), dtype=torch.float64, device=pts.device)
+    triangle_indices = torch.where(is_inside.any(dim=1), is_inside.float().argmax(dim=1), torch.tensor(-1, device=pts.device, dtype=torch.int64))
     inside_mask = triangle_indices != -1
 
     u_vals = torch.gather(u[inside_mask], 1, triangle_indices[inside_mask].unsqueeze(1)).squeeze(1)
@@ -53,7 +53,7 @@ def query_kdtree(kdtree, points, top_k=16):
 
 
 def points_in_triangles_batched(pts, vertices, triangles, kdtree, pts_batch_size=2048, tri_batch_size=16):
-    device = pts.device
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     num_pts = pts.size(0)
     final_triangle_indices = torch.full((num_pts,), -1, dtype=torch.int64, device=device)
     final_bary_coords = torch.zeros((num_pts, 3), dtype=torch.float64, device=device)
@@ -67,7 +67,7 @@ def points_in_triangles_batched(pts, vertices, triangles, kdtree, pts_batch_size
         closest_tri_indices = query_kdtree(kdtree, batch_pts, top_k=tri_batch_size)
 
         batch_vertices = vertices.view(triangles.size(0), 3, 2)[closest_tri_indices]
-        triangle_indices, bary_coords = points_in_triangles(batch_pts, batch_vertices)
+        triangle_indices, bary_coords = points_in_triangles(to_device(batch_pts, device), to_device(batch_vertices, device))
         valid_mask = (triangle_indices != -1).clone()
         valid_points = valid_mask.nonzero().squeeze()
 
