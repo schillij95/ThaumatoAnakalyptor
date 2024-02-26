@@ -272,7 +272,11 @@ def extract_size(points, normals, grid_block_position_min, grid_block_position_m
     return filtered_points, filtered_normals
 
 def process_block(args):
-    corner_coords, blocks_to_process, blocks_processed, umbilicus_points, umbilicus_points_old, lock, path_template, save_template_v, save_template_r, grid_block_size, recompute, fix_umbilicus, computed_block, maximum_distance, gpu_num = args
+    corner_coords, blocks_to_process, blocks_processed, umbilicus_points, umbilicus_points_old, lock, path_template, save_template_v, save_template_r, grid_block_size, recompute, fix_umbilicus, computed_block, computed_block_skipped, maximum_distance, gpu_num = args
+
+    if computed_block_skipped:
+        return False, corner_coords
+
     if fix_umbilicus:
         fix_umbilicus_indicator = fix_umbilicus_recompute(corner_coords, grid_block_size, umbilicus_points, umbilicus_points_old)
     else:
@@ -299,7 +303,7 @@ def process_block(args):
         block = load_grid(path_template, corner_coords_padded, grid_block_size=grid_block_size_padded)
         # Check if the block is empty
         if np.all(block == 0):
-            return False
+            return False, corner_coords
         
         device = torch.device("cuda:" + str(gpu_num))
         block = torch.tensor(np.array(block), device=device, dtype=torch.float16)
@@ -352,7 +356,7 @@ def process_block(args):
                         if neighbor_coords not in blocks_processed and neighbor_coords not in blocks_to_process:
                             blocks_to_process.append(neighbor_coords)
 
-    return True
+    return True, corner_coords
 
 # fixing the pointcloud because of computation with too short umbilicus
 def fix_umbilicus_recompute(corner_coords, grid_block_size, umbilicus_points, umbilicus_points_old, additional_distance=300):
@@ -401,6 +405,15 @@ def compute_surface_for_block_multiprocessing(corner_coords, pointcloud_base, pa
     except Exception as e:
         print(f"Error loading computed blocks: {e}")
 
+    computed_blocks_skipped = set()
+    # Try to load the list of computed blocks
+    try:
+        with open(os.path.join(pointcloud_base, "computed_blocks_skipped.txt"), "r") as f:
+            # load saved tuples with 3 elements
+            computed_blocks_skipped = set([eval(line.strip()) for line in f])
+    except Exception as e:
+        print(f"Error loading computed blocks skipped: {e}")
+
     # Limit the number of concurrent jobs to, for instance, 4. You can change this value as desired.
     # for 2 threads:
     # Blocks processed: 0 Blocks to process: 1 Time per block: Unknown
@@ -435,10 +448,14 @@ def compute_surface_for_block_multiprocessing(corner_coords, pointcloud_base, pa
                 if len(current_block_batch) == 0:
                     continue
                 # Process each block and update the progress bar upon completion of each block
-                for _ in pool.imap(process_block, [(block, blocks_to_process, blocks_processed, umbilicus_points, umbilicus_points_old, lock, path_template, save_template_v, save_template_r, grid_block_size, recompute, fix_umbilicus, block in computed_blocks, maximum_distance, proc_nr % CFG['GPUs']) for proc_nr, block in enumerate(current_block_batch)]):
+                for good_coords, coords in pool.imap(process_block, [(block, blocks_to_process, blocks_processed, umbilicus_points, umbilicus_points_old, lock, path_template, save_template_v, save_template_r, grid_block_size, recompute, fix_umbilicus, block in computed_blocks, block in computed_blocks_skipped, maximum_distance, proc_nr % CFG['GPUs']) for proc_nr, block in enumerate(current_block_batch)]):
                     pbar.update(1)
+                    if good_coords:
+                        computed_blocks.append(coords)
+                    else:
+                        computed_blocks_skipped.append(coords)
 
-                computed_blocks.update(current_block_batch)
+
                 # Save the computed blocks
                 with open(os.path.join(pointcloud_base, "computed_blocks.txt"), "w") as f:
                     for block in computed_blocks:
