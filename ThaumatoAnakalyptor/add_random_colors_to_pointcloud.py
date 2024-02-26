@@ -14,18 +14,21 @@ def load_ply(filename):
     """
     # Check that the file exists
     assert os.path.isfile(filename), f"File {filename} not found."
+    print(f"File {filename} found.")
 
     # Load the file and extract the points and normals
     pcd = o3d.io.read_point_cloud(filename)
     points = np.asarray(pcd.points)
     normals = np.asarray(pcd.normals)
 
+    print(f"Loaded {len(points)} points and normals from {filename}.")
     return points, normals
 
 def save_surface_ply(surface_points, normals, filename):
     # Ensure random colors aren't repeated due to thread-local random state.
     # Seed with the thread's identifier, process id and number of points.
     np.random.seed((len(surface_points) * int((os.getpid() << 16) | (id(current_thread()) & 0xFFFF)))% (2**31))
+    print(f"Saving {len(surface_points)} points to {filename}...")
 
     # Create an Open3D point cloud object and populate it
     pcd = o3d.geometry.PointCloud()
@@ -36,9 +39,11 @@ def save_surface_ply(surface_points, normals, filename):
 
     # Create folder if it doesn't exist
     os.makedirs(os.path.dirname(filename), exist_ok=True)
+    print(f"Made folder {os.path.dirname(filename)} if it didn't exist.")
 
     # Save as a PLY file
     o3d.io.write_point_cloud(filename, pcd)
+    print(f"Saved {filename}.")
 
 def process_file(file, src_folder, dest_folder):
     # Load volume
@@ -50,14 +55,17 @@ def process_file(file, src_folder, dest_folder):
 def add_random_colors(src_folder, dest_folder):
     # List all files in the source folder
     all_files = os.listdir(src_folder)
-    
+    print("Listing all files in the source folder...")
+
     # Filter out all files that are not .ply files
     ply_files = [file for file in all_files if file.endswith('.ply')]
     
+    print(f"Found {len(ply_files)} .ply files in {src_folder}")
     # Make destination folder if it does not exist
     if not os.path.exists(dest_folder):
         os.makedirs(dest_folder)
     
+    print(f"Processing {len(ply_files)} files...")
     # Use ThreadPoolExecutor to process files in parallel
     with ProcessPoolExecutor(1) as executor:
         list(tqdm(executor.map(process_file, ply_files, [src_folder]*len(ply_files), [dest_folder]*len(ply_files)), total=len(ply_files)))
