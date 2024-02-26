@@ -427,6 +427,7 @@ def compute_surface_for_block_multiprocessing(corner_coords, pointcloud_base, pa
         start_time = time.time()
         current_blocks = list(set(list(blocks_to_process)))  # Take a snapshot of current blocks
         blocks_to_process = list(set(list(blocks_to_process)))  # Update blocks to process
+        print("Blocks to process:", blocks_to_process)
 
         current_block_batches = [current_blocks[i:min(len(current_blocks), i+3*CFG['num_threads'])] for i in range(0, len(current_blocks), 3*CFG['num_threads'])]
         # Initialize the tqdm progress bar
