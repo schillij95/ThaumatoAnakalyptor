@@ -474,7 +474,7 @@ def compute_surface_for_block_multiprocessing(corner_coords, pointcloud_base, pa
     
     print("All blocks processed.")
 
-def compute(disk_load_save, base_path, volume_subpath, pointcloud_subpath, maximum_distance, recompute, fix_umbilicus, start_block, num_threads, gpus):
+def compute(disk_load_save, base_path, volume_subpath, pointcloud_subpath, maximum_distance, recompute, fix_umbilicus, start_block, num_threads, gpus, skip_surface_blocks):
     # Initialize CUDA context
     # _ = torch.tensor([0.0]).cuda()
     try:
@@ -531,7 +531,8 @@ def compute(disk_load_save, base_path, volume_subpath, pointcloud_subpath, maxim
 
     # Starting grid block at corner (3000, 4000, 2000) to match cell_yxz_006_008_004
     # (2600, 2200, 5000)
-    compute_surface_for_block_multiprocessing(start_block, pointcloud_base, path_template, save_template_v, save_template_r, umbilicus_points, grid_block_size=200, recompute=recompute, fix_umbilicus=fix_umbilicus, umbilicus_points_old=umbilicus_points_old, maximum_distance=maximum_distance)
+    if not skip_surface_blocks:
+        compute_surface_for_block_multiprocessing(start_block, pointcloud_base, path_template, save_template_v, save_template_r, umbilicus_points, grid_block_size=200, recompute=recompute, fix_umbilicus=fix_umbilicus, umbilicus_points_old=umbilicus_points_old, maximum_distance=maximum_distance)
 
     # Sample usage:
     # src is folder of save_umbilicus_path
@@ -565,6 +566,7 @@ def main():
     parser.add_argument("--start_block", type=int, nargs=3, help="Starting block to compute", default=start_block)
     parser.add_argument("--num_threads", type=int, help="Number of threads to use", default=CFG['num_threads'])
     parser.add_argument("--gpus", type=int, help="Number of GPUs to use", default=CFG['GPUs'])
+    parser.add_argument("--skip_surface_blocks", action='store_true', help="Flag, skip the surface block computation")
 
     args = parser.parse_args()
 
@@ -580,9 +582,10 @@ def main():
     recompute = args.recompute
     fix_umbilicus = args.fix_umbilicus
     start_block = tuple(args.start_block)
+    skip_surface_blocks = args.skip_surface_blocks
     
     # Compute the surface points
-    compute(disk_load_save, base_path, volume_subpath, pointcloud_subpath, maximum_distance, recompute, fix_umbilicus, start_block, args.num_threads, args.gpus)
+    compute(disk_load_save, base_path, volume_subpath, pointcloud_subpath, maximum_distance, recompute, fix_umbilicus, start_block, args.num_threads, args.gpus, skip_surface_blocks)
 
 if __name__ == "__main__":
     main()
