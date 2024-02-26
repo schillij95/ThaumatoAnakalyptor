@@ -60,7 +60,7 @@ def main(args):
     gc.collect()
 
     print(f"Computing coordinates...", end="\n")
-    _, coords3d, norms3d, _ = compute_barycentric(UV_scaled, V, N, F, UV_TARGET, pts_batch_size=args.pts_batch, tri_batch_size=args.tri_batch)
+    _, coords3d, norms3d = compute_barycentric(UV_scaled, V, N, F, UV_TARGET, pts_batch_size=args.pts_batch, tri_batch_size=args.tri_batch)
     print(f"Computed new coordinates and normals.", end="\n")
 
     del UV_scaled, V, N, F, UV_TARGET 

@@ -4,7 +4,7 @@ import torch
 from torch.nn.functional import normalize
 from tqdm import tqdm
 from scipy.spatial import KDTree
-
+import gc
 
 def to_device(tensor, device):
     """Move tensor to a specified device."""
@@ -66,6 +66,8 @@ def points_in_triangles_batched(pts, vertices, triangles, kdtree, pts_batch_size
         # Query KDTree for each point in the batch to find the top 16 closest triangles
         closest_tri_indices = query_kdtree(kdtree, batch_pts, top_k=tri_batch_size)
 
+        closest_tri_indices = to_device(closest_tri_indices, device)
+        
         batch_vertices = vertices.view(triangles.size(0), 3, 2)[closest_tri_indices]
         triangle_indices, bary_coords = points_in_triangles(to_device(batch_pts, device), to_device(batch_vertices, device))
         valid_mask = (triangle_indices != -1).clone()
@@ -83,7 +85,7 @@ def points_in_triangles_batched(pts, vertices, triangles, kdtree, pts_batch_size
 
     return final_triangle_indices, final_bary_coords
 
-def compute_barycentric(uv, v, normals, faces, target_uv, pts_batch_size=2048, tri_batch_size=16):
+def compute_barycentric(uv, v, normals, faces, target_uv, pts_batch_size=8192, tri_batch_size=64):
     uv = uv.to(torch.float64)
     # Compute centroids of the triangles and build KDTree
     kdtree = build_kdtree(uv, faces)
@@ -93,11 +95,17 @@ def compute_barycentric(uv, v, normals, faces, target_uv, pts_batch_size=2048, t
     tri_v = v[faces[triangle_indices,:]]
     tri_norm = normals[faces[triangle_indices,:]]
 
+    del uv, target_uv, kdtree, faces, triangle_indices, v, normals
+    gc.collect()
+
     new_order = [2,1,0]
     tri_v = tri_v[:,new_order,:]
-    tri_norm = tri_norm[:,new_order,:]
-
     coord_in_v = torch.einsum('ijk,ij->ik', tri_v, bary_coords).squeeze()
+
+    del tri_v
+    gc.collect()
+
+    tri_norm = tri_norm[:,new_order,:]
     norm_in_v = normalize(torch.einsum('ijk,ij->ik', tri_norm, bary_coords).squeeze(),dim=1)
 
-    return bary_coords, coord_in_v, norm_in_v, triangle_indices
+    return bary_coords, coord_in_v, norm_in_v
