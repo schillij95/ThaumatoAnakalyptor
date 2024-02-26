@@ -533,6 +533,8 @@ def compute(disk_load_save, base_path, volume_subpath, pointcloud_subpath, maxim
     # (2600, 2200, 5000)
     if not skip_surface_blocks:
         compute_surface_for_block_multiprocessing(start_block, pointcloud_base, path_template, save_template_v, save_template_r, umbilicus_points, grid_block_size=200, recompute=recompute, fix_umbilicus=fix_umbilicus, umbilicus_points_old=umbilicus_points_old, maximum_distance=maximum_distance)
+    else:
+        print("Skipping surface block computation.")
 
     # Sample usage:
     print("Adding random colors to pointclouds...")

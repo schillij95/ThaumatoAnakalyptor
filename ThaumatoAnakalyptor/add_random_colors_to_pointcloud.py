@@ -47,13 +47,13 @@ def add_random_colors(src_folder, dest_folder):
     all_files = os.listdir(src_folder)
 
     # Filter out all files that are not .ply files
-    ply_files = [file for file in all_files if file.endswith('.ply')]
+    ply_files = sorted([file for file in all_files if file.endswith('.ply')])
     
     # Make destination folder if it does not exist
     if not os.path.exists(dest_folder):
         os.makedirs(dest_folder)
     
-    # Use ThreadPoolExecutor to process files in parallel
+    # Use ThreadPoolExecutor to process files in parallel. ?this does not work on the compute cluster?
     # num_threads = cpu_count()
     # with ProcessPoolExecutor(num_threads) as executor:
     #     list(tqdm(executor.map(process_file, ply_files, [src_folder]*len(ply_files), [dest_folder]*len(ply_files)), total=len(ply_files)))
