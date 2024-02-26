@@ -450,6 +450,8 @@ def compute_surface_for_block_multiprocessing(corner_coords, pointcloud_base, pa
         current_time = time.time()
         print("Blocks total processed:", len(blocks_processed), "Blocks to process:", len(blocks_to_process), "Time per block:", f"{(current_time - start_time) / (len(blocks_processed) - processed_nr):.3f}" if len(blocks_processed)-processed_nr > 0 else "Unknown")
         processed_nr = len(blocks_processed)
+    
+    print("All blocks processed.")
 
 def compute(disk_load_save, base_path, volume_subpath, pointcloud_subpath, maximum_distance, recompute, fix_umbilicus, start_block, num_threads, gpus):
     # Initialize CUDA context
