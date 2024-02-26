@@ -3,7 +3,7 @@
 from PyQt5.QtWidgets import (QMainWindow, QAction, QSplitter, QVBoxLayout, 
                              QWidget, QPushButton, QLabel, QFrame,
                              QFileDialog, QLineEdit, QCheckBox, QMessageBox, QStyle, QVBoxLayout, QScrollArea, QHBoxLayout, QGraphicsScene, QGraphicsView)
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen, QBrush, QKeyEvent, QIcon
 
 import tifffile
@@ -51,9 +51,36 @@ class GraphicsView(QGraphicsView):
 
 
 class ThaumatoAnakalyptor(QMainWindow):
+    # Signals for computation completion
+    gridCellsComputationDone = pyqtSignal()
+    pointcloudComputationDone = pyqtSignal()
+    instancesComputationDone = pyqtSignal()
+    stitchSheetComputationDone = pyqtSignal()
+    meshingComputationDone = pyqtSignal()
+    flatteningComputationDone = pyqtSignal()
+    slimComputationDone = pyqtSignal()
+    finalizeComputationDone = pyqtSignal()
+    swapVolumeComputationDone = pyqtSignal()
+    ppmComputationDone = pyqtSignal()
+    texturingComputationDone = pyqtSignal()
+    inkDetectionComputationDone = pyqtSignal()
+
     def __init__(self):
         super().__init__()
         self.process = None
+        self.process_grid_cells = None
+        self.process_pointcloud = None
+        self.process_instances = None
+        self.process_stitching = None
+        self.process_meshing = None
+        self.process_flattening = None
+        self.process_slim = None
+        self.process_finalize = None
+        self.process_swap_volume = None
+        self.process_ppm = None
+        self.process_texturing = None
+        self.process_ink_detection = None
+        
         self.isSelectingStartingPoint = False
         self.points = []
         self.loadConfig()
@@ -391,20 +418,8 @@ class ThaumatoAnakalyptor(QMainWindow):
         box.add_widget(self.computeGridCellsButton)
         box.add_widget(self.stopGridCellsButton)
 
-    def gridCellsComputation(self, config):
-        try:
-            compute_grid_cells(input_directory=config["original_2d_tiffs"], 
-                               output_directory=config["downsampled_2d_tiffs"], 
-                               downsample_factor=abs(config["downsample_factor"]))
-
-            # Clean up computation after completion
-            self.postComputation()
-        except Exception as e:
-            print(f"Error in computation: {e}")
-
-    def postComputation(self):
-        # Note: This is executed in the child process
-        print("Computation completed.")
+        # Connect the signal to the slot method
+        self.gridCellsComputationDone.connect(self.onGridCellsComputationDone)
 
     def computeGridCells(self):
         command = [
@@ -413,27 +428,32 @@ class ThaumatoAnakalyptor(QMainWindow):
                 "--output_directory", str(self.Config["downsampled_2d_tiffs"]), 
                 "--downsample_factor", str(abs(self.Config["downsample_factor"]))
             ]
+        
+        def run():
+            self.process_grid_cells = subprocess.Popen(command)
+            self.process_grid_cells.wait()  # Wait for the process to complete
+            print("Done Waiting")
+            self.gridCellsComputationDone.emit()  # Emit the signal on completion
+    
+        # Start the monitoring thread
+        thread = threading.Thread(target=run)
 
-        self.process = subprocess.Popen(command)
-
-        # self.process = multiprocessing.Process(target=self.gridCellsComputation, args=(self.Config,))
-        # self.process.start()
+        thread.start()
         self.computeGridCellsButton.setEnabled(False)
         self.stopGridCellsButton.setEnabled(True)
 
     def stopGridCells(self):
-        if self.process and self.process.poll() is None:  # Check if process is running
-            self.process.terminate()  # or self.process.kill() for a more forceful termination
-            self.process = None
+        if self.process_grid_cells and self.process_grid_cells.poll() is None:  # Check if process is running
+            print("Stopping process...")
+            self.process_grid_cells.kill()  # or self.process.kill() for a more forceful termination
+            self.process_grid_cells = None
+            self.gridCellsComputationDone.emit()  # Update UI immediately
+        else:
+            print("No process to stop")
 
-        # if self.process and self.process.is_alive():
-        #     os.kill(self.process.pid, signal.SIGTERM)
-        #     self.process.join()
+    def onGridCellsComputationDone(self):
         self.computeGridCellsButton.setEnabled(True)
         self.stopGridCellsButton.setEnabled(False)
-
-        # Clean up computation after completion
-        self.postComputation()
         print("Computation process stopped.")
 
     def addPointcloudArea(self, box):
@@ -452,6 +472,9 @@ class ThaumatoAnakalyptor(QMainWindow):
         box.add_widget(self.computePointcloudButton)
         box.add_widget(self.stopPointcloudButton)
 
+        # Connect the signal to the slot method
+        self.pointcloudComputationDone.connect(self.onPointcloudComputationDone)
+
     def computePointcloud(self):
         try:
             command = [
@@ -466,21 +489,30 @@ class ThaumatoAnakalyptor(QMainWindow):
             
             if self.recomputeCheckbox.isChecked():
                 command += ["--recompute"]
-            self.process = subprocess.Popen(command)
+
+            def run():
+                self.process_pointcloud = subprocess.Popen(command)
+                self.process_pointcloud.wait()  # Wait for the process to complete
+                self.pointcloudComputationDone.emit()  # Emit the signal on completion
+        
+            # Start the monitoring thread
+            thread = threading.Thread(target=run)
+
+            thread.start()
             self.computePointcloudButton.setEnabled(False)
             self.stopPointcloudButton.setEnabled(True)
-
-            # Clean up computation after completion
-            self.postComputation()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to start the script: {e}")
-            self.computeGridCellsButton.setEnabled(True)
+            self.computePointcloudButton.setEnabled(True)
             self.stopPointcloudButton.setEnabled(False)
 
     def stopPointcloud(self):
-        if self.process and self.process.poll() is None:  # Check if process is running
-            self.process.terminate()  # or self.process.kill() for a more forceful termination
-            self.process = None
+        if self.process_pointcloud and self.process_pointcloud.poll() is None:  # Check if process is running
+            self.process_pointcloud.kill()  # or self.process.kill() for a more forceful termination
+            self.process_pointcloud = None
+            self.pointcloudComputationDone.emit()  # Update UI immediately
+
+    def onPointcloudComputationDone(self):
         self.computePointcloudButton.setEnabled(True)
         self.stopPointcloudButton.setEnabled(False)
         print("Computation process stopped.")
@@ -499,6 +531,9 @@ class ThaumatoAnakalyptor(QMainWindow):
         box.add_widget(self.computeInstancesButton)
         box.add_widget(self.stopInstancesButton)
 
+        # Connect the signal to the slot method
+        self.pointcloudComputationDone.connect(self.onPointcloudComputationDone)
+
     def computeInstances(self):
         try:
             batch_size = int(self.Config["batch_size"])
@@ -514,21 +549,29 @@ class ThaumatoAnakalyptor(QMainWindow):
                 "--gpus", str(self.Config["gpus"])
             ]
 
-            self.process = subprocess.Popen(command)
+            def run():
+                self.process_instances = subprocess.Popen(command)
+                self.process_instances.wait()  # Wait for the process to complete
+                self.pointcloudComputationDone.emit() # Emit the signal on completion
+
+            # Start the monitoring thread
+            thread = threading.Thread(target=run)
+
+            thread.start()
             self.computeInstancesButton.setEnabled(False)
             self.stopInstancesButton.setEnabled(True)
-
-            # Clean up computation after completion
-            self.postComputation()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to start the script: {e}")
             self.computeInstancesButton.setEnabled(True)
             self.stopInstancesButton.setEnabled(False)
 
     def stopInstances(self):
-        if self.process and self.process.poll() is None:
-            self.process.terminate()
-            self.process = None
+        if self.process_instances and self.process_instances.poll() is None:
+            self.process_instances.kill()
+            self.process_instances = None
+            self.pointcloudComputationDone.emit()
+
+    def onInstancesComputationDone(self):
         self.computeInstancesButton.setEnabled(True)
         self.stopInstancesButton.setEnabled(False)
         print("Computation process stopped.")
@@ -637,6 +680,7 @@ class ThaumatoAnakalyptor(QMainWindow):
         # Add the starting point widget to the box
         box.add_widget(starting_point_widget)
 
+
     def setStitchSheetDefaultValues(self):
         self.sheetKRangeStartField.setText("-1")
         self.sheetKRangeEndField.setText("1")
@@ -686,60 +730,18 @@ class ThaumatoAnakalyptor(QMainWindow):
         box.add_widget(self.stopStitchSheetButton)
         box.add_widget(self.defaultValuesButton)
 
-    # def computeStitchSheet(self):
-    #     try:
-    #         # Fetching values from GUI fields
-    #         path = os.path.join(self.Config["surface_points_path"], "point_cloud_colorized_verso_subvolume_blocks")
-    #         starting_point = f"{self.xField.text()} {self.yField.text()} {self.zField.text()}"
-    #         sheet_k_range = f"{self.sheetKRangeStartField.text()} {self.sheetKRangeEndField.text()}"
-    #         sheet_z_range = f"{self.sheetZRangeStartField.text()} {self.sheetZRangeEndField.text()}"
-    #         min_steps = self.minStepsField.text()
-    #         min_end_steps = self.minEndStepsField.text()
-    #         max_nr_walks = self.maxNrWalksField.text()
-    #         continue_segmentation = '1' if self.continueSegmentationCheckbox.isChecked() else '0'
-    #         recompute = '1' if self.recomputeStitchSheetCheckbox.isChecked() else '0'
-    #         walk_aggregation_threshold = self.walkAggregationThresholdField.text()
-
-    #         # Construct the command
-    #         command = [
-    #             "python3", "-m", "ThaumatoAnakalyptor.Random_Walks",
-    #             "--path", path,
-    #             "--starting_point", self.xField.text(), self.yField.text(), self.zField.text(),
-    #             "--sheet_k_range", self.sheetKRangeStartField.text(), self.sheetKRangeEndField.text(),
-    #             "--sheet_z_range", self.sheetZRangeStartField.text(), self.sheetZRangeEndField.text(),
-    #             "--min_steps", min_steps,
-    #             "--min_end_steps", min_end_steps,
-    #             "--max_nr_walks", max_nr_walks,
-    #             "--continue_segmentation", continue_segmentation,
-    #             "--recompute", recompute,
-    #             "--walk_aggregation_threshold", walk_aggregation_threshold
-    #         ]
-
-    #         print(f"Command: {command}")
-
-    #         # Starting the process
-    #         self.process = subprocess.Popen(command)
-    #         self.computeStitchSheetButton.setEnabled(False)
-    #         self.stopStitchSheetButton.setEnabled(True)
-
-    #         # Create a thread to monitor the completion of the process
-    #         # self.monitorThread = threading.Thread(target=self.monitorProcess)
-    #         # self.monitorThread.start()
-
-    #     except Exception as e:
-    #         QMessageBox.critical(self, "Error", f"Failed to start the script: {e}")
-    #         self.computeStitchSheetButton.setEnabled(True)
-    #         self.stopStitchSheetButton.setEnabled(False)
+        # Connect the signal to the slot method
+        self.stitchSheetComputationDone.connect(self.onStitchSheetComputationDone)
 
     def stitchSheetComputation(self, overlapp_threshold, start_point, path, recompute, stop_event):
         try:
             # Compute
             compute_stitch_sheet(overlapp_threshold, start_point=start_point, path=path, recompute=recompute, stop_event=stop_event)
 
-            # Clean up computation after completion
-            self.postComputation()
         except Exception as e:
             print(f"Error in computation: {e}")
+        # Emit the signal on completion
+        self.stitchSheetComputationDone.emit()
 
     def computeStitchSheet(self):
         try:
@@ -788,11 +790,8 @@ class ThaumatoAnakalyptor(QMainWindow):
             self.stop_event = threading.Event()
 
             # start self.stitchSheetComputation in a new thread
-            self.process = threading.Thread(target=self.stitchSheetComputation, args=(overlapp_threshold, start_point, path, recompute, self.stop_event))
-            self.process.start()
-
-            # self.process = multiprocessing.Process(target=self.stitchSheetComputation, args=(overlapp_threshold, start_point, path, recompute,))
-            # self.process.start()
+            self.process_stitching = threading.Thread(target=self.stitchSheetComputation, args=(overlapp_threshold, start_point, path, recompute, self.stop_event))
+            self.process_stitching.start()
 
             self.computeStitchSheetButton.setEnabled(False)
             self.stopStitchSheetButton.setEnabled(True)
@@ -802,20 +801,14 @@ class ThaumatoAnakalyptor(QMainWindow):
             self.computeStitchSheetButton.setEnabled(True)
             self.stopStitchSheetButton.setEnabled(False)
 
-
     def stopStitchSheet(self):
-        # if self.process and self.process.poll() is None:
-        #     self.process.terminate()
-        #     self.process = None
-
-        # if self.process and self.process.is_alive():
-        #     os.kill(self.process.pid, signal.SIGTERM)
-        #     self.process.join()
-
         # Kill the thread
         self.stop_event.set()
-        self.process.join()
+        self.process_stitching.join()
 
+        self.onStitchSheetComputationDone()
+
+    def onStitchSheetComputationDone(self):
         self.computeStitchSheetButton.setEnabled(True)
         self.stopStitchSheetButton.setEnabled(False)
         print("Computation process stopped.")
@@ -833,6 +826,9 @@ class ThaumatoAnakalyptor(QMainWindow):
         box.add_widget(self.computeMeshingButton)
         box.add_widget(self.stopMeshingButton)
 
+        # Connect the signal to the slot method
+        self.meshingComputationDone.connect(self.onMeshingComputationDone)
+
     def computeMeshing(self):
         try:
             starting_point = [self.xField.text(), self.yField.text(), self.zField.text()]
@@ -846,21 +842,30 @@ class ThaumatoAnakalyptor(QMainWindow):
                 "--umbilicus_path", self.Config["umbilicus_path"]
             ]
             
-            self.process = subprocess.Popen(command)
+            def run():
+                self.process_meshing = subprocess.Popen(command)
+                self.process_meshing.wait()
+                self.meshingComputationDone.emit()
+
+            # Start the monitoring thread
+            thread = threading.Thread(target=run)
+
+            thread.start()
             self.computeMeshingButton.setEnabled(False)
             self.stopMeshingButton.setEnabled(True)
 
-            # Clean up computation after completion
-            self.postComputation()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to start the script: {e}")
             self.computeMeshingButton.setEnabled(True)
             self.stopMeshingButton.setEnabled(False)
 
     def stopMeshing(self):
-        if self.process and self.process.poll() is None:
-            self.process.terminate()
-            self.process = None
+        if self.process_meshing and self.process_meshing.poll() is None:
+            self.process_meshing.kill()
+            self.process_meshing = None
+            self.meshingComputationDone.emit()
+
+    def onMeshingComputationDone(self):
         self.computeMeshingButton.setEnabled(True)
         self.stopMeshingButton.setEnabled(False)
         print("Computation process stopped.")
@@ -881,6 +886,9 @@ class ThaumatoAnakalyptor(QMainWindow):
         box.add_widget(self.computeFlatteningButton)
         box.add_widget(self.stopFlatteningButton)
 
+        # Connect the signal to the slot method
+        self.flatteningComputationDone.connect(self.onFlatteningComputationDone)
+
     def computeFlattening(self):
         try:
             starting_point = [self.xField.text(), self.yField.text(), self.zField.text()]
@@ -895,22 +903,30 @@ class ThaumatoAnakalyptor(QMainWindow):
             if self.delaunyCheckbox.isChecked():
                 command += ["--enable_delauny"]
 
+            def run():
+                self.process_flattening = subprocess.Popen(command)
+                self.process_flattening.wait()
+                self.flatteningComputationDone.emit()
 
-            self.process = subprocess.Popen(command)
+            # Start the monitoring thread
+            thread = threading.Thread(target=run)
+            
+            thread.start()
             self.computeFlatteningButton.setEnabled(False)
             self.stopFlatteningButton.setEnabled(True)
 
-            # Clean up computation after completion
-            self.postComputation()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to start the script: {e}")
             self.computeFlatteningButton.setEnabled(True)
             self.stopFlatteningButton.setEnabled(False)
 
     def stopFlattening(self):
-        if self.process and self.process.poll() is None:
-            self.process.terminate()
-            self.process = None
+        if self.process_flattening and self.process_flattening.poll() is None:
+            self.process_flattening.kill()
+            self.process_flattening = None
+            self.flatteningComputationDone.emit()
+
+    def onFlatteningComputationDone(self):
         self.computeFlatteningButton.setEnabled(True)
         self.stopFlatteningButton.setEnabled(False)
         print("Computation process stopped.")
@@ -928,6 +944,9 @@ class ThaumatoAnakalyptor(QMainWindow):
         box.add_widget(self.computeSlimButton)
         box.add_widget(self.stopSlimButton)
 
+        # Connect the signal to the slot method
+        self.slimComputationDone.connect(self.onSlimComputationDone)
+
     def computeSlim(self):
         try:
             starting_point = [self.xField.text(), self.yField.text(), self.zField.text()]
@@ -941,21 +960,30 @@ class ThaumatoAnakalyptor(QMainWindow):
 
             command = command_slimFlattening
 
-            self.process = subprocess.Popen(command)
+            def run():
+                self.process_slim = subprocess.Popen(command)
+                self.process_slim.wait()
+                self.slimComputationDone.emit()
+
+            # Start the monitoring thread
+            thread = threading.Thread(target=run)
+
+            thread.start()
             self.computeSlimButton.setEnabled(False)
             self.stopSlimButton.setEnabled(True)
 
-            # Clean up computation after completion
-            self.postComputation()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to start the script: {e}")
             self.computeSlimButton.setEnabled(True)
             self.stopSlimButton.setEnabled(False)
 
     def stopSlim(self):
-        if self.process and self.process.poll() is None:
-            self.process.terminate()
-            self.process = None
+        if self.process_slim and self.process_slim.poll() is None:
+            self.process_slim.kill()
+            self.process_slim = None
+            self.slimComputationDone.emit()
+
+    def onSlimComputationDone(self):
         self.computeSlimButton.setEnabled(True)
         self.stopSlimButton.setEnabled(False)
         print("Computation process stopped.")
@@ -973,6 +1001,9 @@ class ThaumatoAnakalyptor(QMainWindow):
         box.add_widget(self.computeFinalizeButton)
         box.add_widget(self.stopFinalizeButton)
 
+        # Connect the signal to the slot method
+        self.finalizeComputationDone.connect(self.onFinalizeComputationDone)
+
     def computeFinalize(self):
         try:
             starting_point = [self.xField.text(), self.yField.text(), self.zField.text()]
@@ -984,21 +1015,30 @@ class ThaumatoAnakalyptor(QMainWindow):
                 "--scale_factor", f"{abs(self.Config['downsample_factor']):f}"
             ]
 
-            self.process = subprocess.Popen(command)
+            def run():
+                self.process_finalize = subprocess.Popen(command)
+                self.process_finalize.wait()
+                self.finalizeComputationDone.emit()
+            
+            # Start the monitoring thread
+            thread = threading.Thread(target=run)
+
+            thread.start()
             self.computeFinalizeButton.setEnabled(False)
             self.stopFinalizeButton.setEnabled(True)
 
-            # Clean up computation after completion
-            self.postComputation()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to start the script: {e}")
             self.computeFinalizeButton.setEnabled(True)
             self.stopFinalizeButton.setEnabled(False)
 
     def stopFinalize(self):
-        if self.process and self.process.poll() is None:
-            self.process.terminate()
-            self.process = None
+        if self.process_finalize and self.process_finalize.poll() is None:
+            self.process_finalize.kill()
+            self.process_finalize = None
+            self.finalizeComputationDone.emit()
+
+    def onFinalizeComputationDone(self):
         self.computeFinalizeButton.setEnabled(True)
         self.stopFinalizeButton.setEnabled(False)
         print("Computation process stopped.")
@@ -1019,6 +1059,9 @@ class ThaumatoAnakalyptor(QMainWindow):
         box.add_widget(self.computeSwapVolumeButton)
         box.add_widget(self.stopSwapVolumeButton)
 
+        # Connect the signal to the slot method
+        self.swapVolumeComputationDone.connect(self.onSwapVolumeComputationDone)
+
     def computeSwapVolume(self):
         try:
             target_volume_id = self.targetVolumeIdField.text()
@@ -1030,21 +1073,30 @@ class ThaumatoAnakalyptor(QMainWindow):
                 "--base_path", self.Config["surface_points_path"]
             ]
 
-            self.process = subprocess.Popen(command)
+            def run():
+                self.process_swap = subprocess.Popen(command)
+                self.process_swap.wait()
+                self.swapVolumeComputationDone.emit()
+
+            # Start the monitoring thread
+            thread = threading.Thread(target=run)
+            
+            thread.start()
             self.computeSwapVolumeButton.setEnabled(False)
             self.stopSwapVolumeButton.setEnabled(True)
 
-            # Clean up computation after completion
-            self.postComputation()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to start the script: {e}")
             self.computeSwapVolumeButton.setEnabled(True)
             self.stopSwapVolumeButton.setEnabled(False)
 
     def stopSwapVolume(self):
-        if self.process and self.process.poll() is None:
-            self.process.terminate()
-            self.process = None
+        if self.process_swap and self.process_swap.poll() is None:
+            self.process_swap.kill()
+            self.process_swap = None
+            self.swapVolumeComputationDone.emit()
+
+    def onSwapVolumeComputationDone(self):
         self.computeSwapVolumeButton.setEnabled(True)
         self.stopSwapVolumeButton.setEnabled(False)
         print("Computation process stopped.")
@@ -1078,6 +1130,9 @@ class ThaumatoAnakalyptor(QMainWindow):
         box.add_widget(self.computePpmButton)
         box.add_widget(self.stopPpmButton)
 
+        # Connect the signal to the slot method
+        self.ppmComputationDone.connect(self.onPpmComputationDone)
+
     def computePPM(self):
         try:
             starting_point = [self.xField.text(), self.yField.text(), self.zField.text()]
@@ -1095,6 +1150,9 @@ class ThaumatoAnakalyptor(QMainWindow):
             
             working_directories = [dir_ for dir_ in os.listdir(base_path) if dir_.startswith(f"working_{starting_point[0]}_{starting_point[1]}_{starting_point[2]}")]
 
+            self.computePpmButton.setEnabled(False)
+            self.stopPpmButton.setEnabled(True)
+
             for working_directory in working_directories:
                 ppm_path = base_path + f"/{working_directory}/thaumato.ppm"
                 obj_path = base_path + f"/{working_directory}/point_cloud_colorized_verso_subvolume_blocks_uv_flatboi.obj"
@@ -1107,22 +1165,28 @@ class ThaumatoAnakalyptor(QMainWindow):
                     "--uv-reuse"
                 ]
                 
-                self.process = subprocess.Popen(command)
+                def run():
+                    self.process_ppm = subprocess.Popen(command)
+                    self.process_ppm.wait()
+                    self.ppmComputationDone.emit()
+                
+                # Start the monitoring thread
+                thread = threading.Thread(target=run)
 
-            self.computePpmButton.setEnabled(False)
-            self.stopPpmButton.setEnabled(True)
+                thread.start()
 
-            # Clean up computation after completion
-            self.postComputation()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to start the script: {e}")
             self.computePpmButton.setEnabled(True)
             self.stopPpmButton.setEnabled(False)
 
     def stopPPM(self):
-        if self.process and self.process.poll() is None:
-            self.process.terminate()
-            self.process = None
+        if self.process_ppm and self.process_ppm.poll() is None:
+            self.process_ppm.kill()
+            self.process_ppm = None
+            self.ppmComputationDone.emit()
+
+    def onPpmComputationDone(self):
         self.computePpmButton.setEnabled(True)
         self.stopPpmButton.setEnabled(False)
         print("Computation process stopped.")
@@ -1143,6 +1207,9 @@ class ThaumatoAnakalyptor(QMainWindow):
         box.add_widget(self.computeTexturingButton)
         box.add_widget(self.stopTexturingButton)
 
+        # Connect the signal to the slot method
+        self.texturingComputationDone.connect(self.onTexturingComputationDone)
+
     def computeTexturing(self):
         try:
             starting_point = [self.xField.text(), self.yField.text(), self.zField.text()]
@@ -1161,6 +1228,9 @@ class ThaumatoAnakalyptor(QMainWindow):
             base_path = os.path.join(base_path, "working")
             
             working_directories = [dir_ for dir_ in os.listdir(base_path) if dir_.startswith(f"working_{starting_point[0]}_{starting_point[1]}_{starting_point[2]}")]
+
+            self.computeTexturingButton.setEnabled(False)
+            self.stopTexturingButton.setEnabled(True)
 
             for working_directory in working_directories:
 
@@ -1203,23 +1273,29 @@ class ThaumatoAnakalyptor(QMainWindow):
                 env["OPENCV_IO_MAX_IMAGE_PIXELS"] = "4294967295"  # Set maximum CV io image size for tiff files
                 env["CV_IO_MAX_IMAGE_PIXELS"] = "4294967295"  # Set maximum CV io image size for tiff files
                 
-                # Run the command with the specified environment variables
-                self.process = subprocess.Popen(command, env=env)
+                def run():
+                    # Run the command with the specified environment variables
+                    self.process_texturing = subprocess.Popen(command, env=env)
+                    self.process_texturing.wait()
+                    self.texturingComputationDone.emit()
 
-            self.computeTexturingButton.setEnabled(False)
-            self.stopTexturingButton.setEnabled(True)
+                # Start the monitoring thread
+                thread = threading.Thread(target=run)
 
-            # Clean up computation after completion
-            self.postComputation()
+                thread.start()
+
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to start the script: {e}")
             self.computeTexturingButton.setEnabled(True)
             self.stopTexturingButton.setEnabled(False)
 
     def stopTexturing(self):
-        if self.process and self.process.poll() is None:
-            self.process.terminate()
-            self.process = None
+        if self.process_texturing and self.process_texturing.poll() is None:
+            self.process_texturing.kill()
+            self.process_texturing = None
+            self.texturingComputationDone.emit()
+
+    def onTexturingComputationDone(self):
         self.computeTexturingButton.setEnabled(True)
         self.stopTexturingButton.setEnabled(False)
         print("Computation process stopped.")
@@ -1248,6 +1324,9 @@ class ThaumatoAnakalyptor(QMainWindow):
         box.add_widget(self.computeInkDetectionButton)
         box.add_widget(self.stopInkDetectionButton)
 
+        # Connect the signal to the slot method
+        self.inkDetectionComputationDone.connect(self.onInkDetectionComputationDone)
+
     def computeInkDetection(self):
         try:
             # Set the path to the virtual environment's Python executable
@@ -1268,6 +1347,9 @@ class ThaumatoAnakalyptor(QMainWindow):
 
             starting_point = [self.xField.text(), self.yField.text(), self.zField.text()]
             working_directories = [dir_ for dir_ in os.listdir(segment_path) if dir_.startswith(f"working_{starting_point[0]}_{starting_point[1]}_{starting_point[2]}")]
+            
+            self.computeInkDetectionButton.setEnabled(False)
+            self.stopInkDetectionButton.setEnabled(True)
 
             for segment_id in working_directories:
                 out_path = os.path.join(segment_path, segment_id, "predictions")
@@ -1281,23 +1363,28 @@ class ThaumatoAnakalyptor(QMainWindow):
                     "--out_path", out_path
                 ]
 
-                # Run the command with the specified environment variables
-                self.process = subprocess.Popen(command, env=env)
-            
-            self.computeInkDetectionButton.setEnabled(False)
-            self.stopInkDetectionButton.setEnabled(True)
+                def run():
+                    self.process_inkdetection = subprocess.Popen(command, env=env)
+                    self.process_inkdetection.wait()
+                    self.inkDetectionComputationDone.emit()
 
-            # Clean up computation after completion
-            self.postComputation()
+                # Start the monitoring thread
+                thread = threading.Thread(target=run)
+
+                thread.start()
+
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to start the script: {e}")
             self.computeInkDetectionButton.setEnabled(True)
             self.stopInkDetectionButton.setEnabled(False)
 
     def stopInkDetection(self):
-        if self.process and self.process.poll() is None:
-            self.process.terminate()
-            self.process = None
+        if self.process_inkdetection and self.process_inkdetection.poll() is None:
+            self.process_inkdetection.kill()
+            self.process_inkdetection = None
+            self.inkDetectionComputationDone.emit()
+
+    def onInkDetectionComputationDone(self):
         self.computeInkDetectionButton.setEnabled(True)
         self.stopInkDetectionButton.setEnabled(False)
         print("Computation process stopped.")
