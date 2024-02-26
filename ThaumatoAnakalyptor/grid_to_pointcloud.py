@@ -535,6 +535,7 @@ def compute(disk_load_save, base_path, volume_subpath, pointcloud_subpath, maxim
         compute_surface_for_block_multiprocessing(start_block, pointcloud_base, path_template, save_template_v, save_template_r, umbilicus_points, grid_block_size=200, recompute=recompute, fix_umbilicus=fix_umbilicus, umbilicus_points_old=umbilicus_points_old, maximum_distance=maximum_distance)
 
     # Sample usage:
+    print("Adding random colors to pointclouds...")
     # src is folder of save_umbilicus_path
     dest_folder_v = dest_dir_v.replace(pointcloud_subpath, pointcloud_subpath_colorized).replace(disk_load_save[0], disk_load_save[1])
     add_random_colors(dest_dir_v, dest_folder_v)

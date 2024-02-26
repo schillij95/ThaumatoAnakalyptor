@@ -54,9 +54,13 @@ def add_random_colors(src_folder, dest_folder):
         os.makedirs(dest_folder)
     
     # Use ThreadPoolExecutor to process files in parallel
-    num_threads = cpu_count()
-    with ProcessPoolExecutor(num_threads) as executor:
-        list(tqdm(executor.map(process_file, ply_files, [src_folder]*len(ply_files), [dest_folder]*len(ply_files)), total=len(ply_files)))
+    # num_threads = cpu_count()
+    # with ProcessPoolExecutor(num_threads) as executor:
+    #     list(tqdm(executor.map(process_file, ply_files, [src_folder]*len(ply_files), [dest_folder]*len(ply_files)), total=len(ply_files)))
+
+    # use singlethread
+    for file in tqdm(ply_files):
+        process_file(file, src_folder, dest_folder)
 
 
 if __name__ == '__main__':
