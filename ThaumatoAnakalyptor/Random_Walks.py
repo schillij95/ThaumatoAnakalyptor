@@ -1327,22 +1327,25 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
 
     print(f"Configs: {overlapp_threshold}")
+
+    recompute_path = path.replace("blocks", "graph_raw") + ".pkl"
+    recompute = recompute or not os.path.exists(recompute_path)
     
     # Build graph
     if recompute:
         scroll_graph = ScrollGraph(7, overlapp_threshold, limit_stickiness=0.6)
         start_block, patch_id = scroll_graph.build_graph(path, num_processes=30, start_point=start_point, distance=-1)
         print("Saving built graph...")
-        scroll_graph.save_graph(path.replace("blocks", "graph_raw") + ".pkl")
+        scroll_graph.save_graph(recompute_path)
 
     if recompute and compute_cpp_translation:
-        scroll_graph = load_graph(path.replace("blocks", "graph_raw") + ".pkl")
+        scroll_graph = load_graph(recompute_path)
         solver = RandomWalkSolver(scroll_graph, umbilicus_path)
         print("Computing cpp translation...")
         res = solver.translate_data_to_cpp(recompute_translation=True)
         # Save data to graph object
         solver.graph.cpp_translation = path
-        solver.graph.save_graph(path.replace("blocks", "graph_raw") + ".pkl")
+        solver.graph.save_graph(recompute_path)
         for i in range(1, len(res)):
             # save np
             np.save(path.replace("blocks", "graph_RW") + "_nodes_cpp_" + str(i) + ".npy", res[i])
@@ -1350,7 +1353,7 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
         
     solve_graph = True
     if solve_graph:
-        scroll_graph = load_graph(path.replace("blocks", "graph_raw") + ".pkl")
+        scroll_graph = load_graph(recompute_path)
         if overlapp_threshold["continue_walks"]:
             nodes = np.load(save_path.replace("blocks", "graph_RW") + "_nodes.npy")
             ks = np.load(save_path.replace("blocks", "graph_RW") + "_ks.npy")
