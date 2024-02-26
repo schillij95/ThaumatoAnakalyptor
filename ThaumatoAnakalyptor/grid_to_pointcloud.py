@@ -274,9 +274,6 @@ def extract_size(points, normals, grid_block_position_min, grid_block_position_m
 def process_block(args):
     corner_coords, blocks_to_process, blocks_processed, umbilicus_points, umbilicus_points_old, lock, path_template, save_template_v, save_template_r, grid_block_size, recompute, fix_umbilicus, computed_block, computed_block_skipped, maximum_distance, gpu_num = args
 
-    if computed_block_skipped:
-        return False, corner_coords
-
     if fix_umbilicus:
         fix_umbilicus_indicator = fix_umbilicus_recompute(corner_coords, grid_block_size, umbilicus_points, umbilicus_points_old)
     else:
@@ -287,6 +284,9 @@ def process_block(args):
     # Pick a block to process
     blocks_to_process.remove(corner_coords)
     blocks_processed[corner_coords] = True
+
+    if computed_block_skipped:
+        return False, corner_coords
 
     # Load the grid block from corner_coords and grid size
     padding = 50
