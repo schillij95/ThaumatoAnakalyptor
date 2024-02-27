@@ -466,11 +466,11 @@ def subvolume_computation_function(args):
     
     res = load_plys(src_path, main_drive, alternative_drives, start, size, grid_block_size=200, load_multithreaded=use_multiprocessing)
     if res is None:
-        return False
+        return index
     points, normals, colors = res
     points, normals, colors = remove_duplicate_points_normals(points, normals, colors)
     subvolume_surface_instance_batch(index, points, normals, colors, start, size, dest_path, fix_umbilicus, umbilicus_points, umbilicus_points_old, main_drive, alternative_drives, score_threshold=score_threshold, batch_size=batch_size, gpus=gpus, use_multiprocessing=use_multiprocessing)
-    return True
+    return index
 
 def filter_umilicus_distance(start_list, size, path, folder, umbilicus_points_path, umbilicus_distance_threshold, grid_block_size=200):
     # Load umbilicus points
@@ -508,6 +508,11 @@ def filter_umilicus_distance(start_list, size, path, folder, umbilicus_points_pa
     
     return start_list_filtered
 
+def update_progress_file(progress_file, indices, config):
+    # Update the progress file
+    with open(progress_file, 'w') as file:
+        json.dump({'indices': indices, 'config': config}, file)
+
 def subvolume_instances_multithreaded(path="/media/julian/FastSSD/scroll3_surface_points", folder="point_cloud_colorized", dest="/media/julian/HDD8TB/scroll3_surface_points", main_drive="", alternative_drives=[], fix_umbilicus=True, umbilicus_points_path="", start=[0, 0, 0], stop=[16, 17, 29], size = [3, 3, 3], umbilicus_distance_threshold=1500, score_threshold=0.5, batch_size=4, gpus=1):
     # Build start list
     start_list = []
@@ -535,16 +540,47 @@ def subvolume_instances_multithreaded(path="/media/julian/FastSSD/scroll3_surfac
     # init the Mask3D model
     init(gpus)
 
+    to_compute_indices = range(num_tasks)
+    computed_indices = []
+    progress_file = os.path.join(dest, "progress.json")
+    config = {"path": path, "folder": folder, "dest": dest, "main_drive": main_drive, "alternative_drives": alternative_drives, "fix_umbilicus": fix_umbilicus, "umbilicus_points_path": umbilicus_points_path, "start": start, "stop": stop, "size": size, "umbilicus_distance_threshold": umbilicus_distance_threshold, "score_threshold": score_threshold, "batch_size": batch_size, "gpus": gpus}
+    if os.path.exists(progress_file):
+        with open(progress_file, 'r') as file:
+            progress = json.load(file)
+            if 'config' in progress:
+                if progress['config'] != config:
+                    print("Progress file found but with different config. Overwriting.")
+                    
+                else:
+                    print("Progress file found with same config. Resuming computation.")
+                    if 'indices' in progress:
+                        nr_total_indices = len(to_compute_indices)
+                        computed_indices = progress['indices']
+                        to_compute_indices = list(set(to_compute_indices) - set(computed_indices))
+                        print(f"Resuming computation. {len(to_compute_indices)} blocks of {nr_total_indices} left to compute.")
+                    else:
+                        print("No progress file found.")
+
 
     if gpus == 1:
         # Single threaded computation
         for i in tqdm(range(num_tasks)):
-            results = subvolume_computation_function((i, start_list[i], size, path, folder, dest, main_drive, alternative_drives, fix_umbilicus, umbilicus_points, umbilicus_points_old, score_threshold, batch_size, gpus, True))
+            result = subvolume_computation_function((i, start_list[i], size, path, folder, dest, main_drive, alternative_drives, fix_umbilicus, umbilicus_points, umbilicus_points_old, score_threshold, batch_size, gpus, True))
+            index = result
+            computed_indices.append(index)
+            update_progress_file(progress_file, computed_indices, config)
     elif gpus > 1:
         # multithreaded computation
         num_threads = gpus
-        with Pool(processes=num_threads) as pool:
-            results = pool.map(subvolume_computation_function, [(i, start_list[i], size, path, folder, dest, main_drive, alternative_drives, fix_umbilicus, umbilicus_points, umbilicus_points_old, score_threshold, batch_size, gpus, False) for i in range(num_tasks)])
+        # Initialize the tqdm progress bar
+        with tqdm(total=num_tasks) as pbar:
+            with Pool(processes=num_threads) as pool:
+                for result in pool.imap(subvolume_computation_function, [(i, start_list[i], size, path, folder, dest, main_drive, alternative_drives, fix_umbilicus, umbilicus_points, umbilicus_points_old, score_threshold, batch_size, gpus, False) for i in ]):
+                    pbar.update(1)
+                    index = result
+                    computed_indices.append(index)
+                    update_progress_file(progress_file, computed_indices, config)
+                    
     else:
         raise ValueError("gpus must be >= 1")
 
