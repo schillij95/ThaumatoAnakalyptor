@@ -7,7 +7,7 @@
   <figcaption><i>0.5 meter long automatic segmentation of scroll 3.</i></figcaption>
 </figure>
 
-For a detailed report and a roadmap with possible future improvements to Thaumato that could be implemented to win [monthly progress prizes](https://www.scrollprize.org/), check this [PDF](documentation/ThaumatoAnakalyptor___Technical_Report_and_Roadmap.pdf).
+For a detailed report and a roadmap with possible future improvements to Thaumato that could be implemented to win [monthly progress prizes](https://scrollprize.org/2024_prizes), check this [PDF](documentation/ThaumatoAnakalyptor___Technical_Report_and_Roadmap.pdf).
 
 ---
 
