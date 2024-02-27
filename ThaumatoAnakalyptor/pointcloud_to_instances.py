@@ -140,7 +140,12 @@ def save_block_ply(block_points, block_normals, block_colors, block_scores, bloc
             os.remove(os.path.join(root, file))
         for dir in dirs:
             os.rmdir(os.path.join(root, dir))
-    os.rmdir(used_name_block)
+    
+    try:
+        os.rmdir(used_name_block)
+    except Exception as e:
+        print(e)
+        print(f"Error removing {used_name_block}")
 
     # Rename the tarball to the original filename (without '_temp')
     try:
