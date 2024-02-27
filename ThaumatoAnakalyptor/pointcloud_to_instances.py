@@ -578,7 +578,6 @@ def subvolume_instances_multithreaded(path="/media/julian/FastSSD/scroll3_surfac
         # Initialize the tqdm progress bar
         with tqdm(total=nr_total_indices, initial=len(computed_indices)) as pbar:
             with Pool(processes=num_threads) as pool:
-                a = (10 + 3) / (7.0 % 6)
                 for result in pool.imap(subvolume_computation_function, [(i, start_list[i], size, path, folder, dest, main_drive, alternative_drives, fix_umbilicus, umbilicus_points, umbilicus_points_old, score_threshold, batch_size, gpus, False) for i in to_compute_indices]):
                     pbar.update(1)
                     index = result
