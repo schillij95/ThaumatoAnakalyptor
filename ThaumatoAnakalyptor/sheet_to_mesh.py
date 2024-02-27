@@ -20,9 +20,9 @@ from scipy.interpolate import interp1d
 
 from sklearn.neighbors import KDTree
 from copy import deepcopy
-from .surface_fitting_utilities import get_vector_mean, rotation_matrix_to_align_z_with_v, f_n,  rotate_points, rotate_points_invers, fit_surface_to_points_n_regularized
 
 from .instances_to_sheets import load_main_sheet, surrounding_volumes_main_sheet, build_main_sheet_patches_list, build_main_sheet_from_patches_list, build_main_sheet_volume_from_patches_list, build_patch, make_unique, alpha_angles, angle_to_180
+from .surface_fitting_utilities import get_vector_mean, rotation_matrix_to_align_z_with_v, f_n,  rotate_points, rotate_points_invers, fit_surface_to_points_n_regularized
 from .fix_mesh import find_degenerated_triangles_and_delete
 
 def load_xyz_from_file(filename='umbilicus.txt'):
