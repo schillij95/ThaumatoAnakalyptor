@@ -4,7 +4,7 @@ import torch
 from torch.nn.functional import normalize
 from tqdm import tqdm
 from scipy.spatial import KDTree
-import gc
+import numpy as np
 
 def to_device(tensor, device):
     """Move tensor to a specified device."""
@@ -31,14 +31,14 @@ def points_in_triangles(pts, tri_pts):
     is_inside = (u >= 0) & (v >= 0) & ((u + v) <= 1 )
 
     bary_coords = torch.zeros((u.shape[0], 3), dtype=torch.float64, device=pts.device)
-    triangle_indices = torch.where(is_inside.any(dim=1), is_inside.float().argmax(dim=1), torch.tensor(-1, device=pts.device, dtype=torch.int64))
+    triangle_indices = torch.where(is_inside.any(dim=1), is_inside.float().argmax(dim=1), torch.tensor(-1, device=pts.device, dtype=torch.int32))
     inside_mask = triangle_indices != -1
 
     u_vals = torch.gather(u[inside_mask], 1, triangle_indices[inside_mask].unsqueeze(1)).squeeze(1)
     v_vals = torch.gather(v[inside_mask], 1, triangle_indices[inside_mask].unsqueeze(1)).squeeze(1)
     w_vals = 1 - u_vals - v_vals
     bary_coords[inside_mask] = torch.stack([u_vals, v_vals, w_vals], dim=1)
-
+    bary_coords = normalize(bary_coords, p=1, dim=1)
     return triangle_indices, bary_coords
 
 def build_kdtree(vertices, triangles):
@@ -52,18 +52,24 @@ def query_kdtree(kdtree, points, top_k=16):
     return torch.from_numpy(indices)  # Convert back to tensor and move to original device
 
 
-def points_in_triangles_batched(pts, vertices, triangles, kdtree, pts_batch_size=2048, tri_batch_size=16):
+def points_in_triangles_batched(ppm_path, shape, pts, vertices, triangles, vertices3d, normals3d, pts_batch_size=2048, tri_batch_size=64):
+    # Compute centroids of the triangles and build KDTree
+    kdtree = build_kdtree(vertices, triangles)
     #device = 'cuda' if torch.cuda.is_available() else 'cpu'
     device = 'cpu'
     num_pts = pts.size(0)
-    final_triangle_indices = torch.full((num_pts,), -1, dtype=torch.int64, device=device)
-    final_bary_coords = torch.zeros((num_pts, 3), dtype=torch.float64, device=device)
+    y_size, x_size = shape
+    new_order = [2,1,0]
+    
+    ppm = np.memmap(ppm_path, dtype=np.float64, mode='w+', shape=(y_size, x_size, 6))
 
     for pts_batch_idx in tqdm(range((num_pts + pts_batch_size - 1) // pts_batch_size), desc="Batch"):
+        
         pts_start_idx = pts_batch_idx * pts_batch_size
         pts_end_idx = min(pts_start_idx + pts_batch_size, num_pts)
         batch_pts = pts[pts_start_idx:pts_end_idx]
 
+        final_triangle_indices = torch.full((min(pts_batch_size, pts_end_idx - pts_start_idx),), -1, dtype=torch.int64, device=device)
         # Query KDTree for each point in the batch to find the top 16 closest triangles
         closest_tri_indices = query_kdtree(kdtree, batch_pts, top_k=tri_batch_size)
 
@@ -73,40 +79,31 @@ def points_in_triangles_batched(pts, vertices, triangles, kdtree, pts_batch_size
         triangle_indices, bary_coords = points_in_triangles(to_device(batch_pts, device), to_device(batch_vertices, device))
         valid_mask = (triangle_indices != -1).clone()
         valid_points = valid_mask.nonzero().squeeze()
-
         # For each valid point, select the correct triangle index from closest_tri_indices
         if valid_points.numel() > 0:  # Check if there are any valid points
             valid_tri_indices = triangle_indices[valid_mask]
             valid_closest_tri_indices = closest_tri_indices[valid_mask,valid_tri_indices]
             # Update final_triangle_indices for valid points
-            final_triangle_indices[pts_start_idx:pts_end_idx][valid_mask] = valid_closest_tri_indices
+            final_triangle_indices[valid_mask] = valid_closest_tri_indices
             
             # Update final_bary_coords for valid points
-            final_bary_coords[pts_start_idx:pts_end_idx][valid_mask] = bary_coords[valid_mask]
 
-    return final_triangle_indices, final_bary_coords
+            tri_v = vertices3d[triangles[final_triangle_indices,:]]
+            tri_norm = normals3d[triangles[final_triangle_indices,:]]
 
-def compute_barycentric(uv, v, normals, faces, target_uv, pts_batch_size=8192, tri_batch_size=64):
-    uv = uv.to(torch.float64)
-    # Compute centroids of the triangles and build KDTree
-    kdtree = build_kdtree(uv, faces)
-    triangle_indices, bary_coords = points_in_triangles_batched(target_uv, uv, faces, kdtree, pts_batch_size=pts_batch_size, tri_batch_size=tri_batch_size)
-    bary_coords = normalize(bary_coords, p=1, dim=1)
+            tri_v = tri_v[:,new_order,:]
+            tri_norm = tri_norm[:,new_order,:]
+            
+            batch_pts = batch_pts.cpu().to(torch.int32).numpy()
 
-    tri_v = v[faces[triangle_indices,:]]
-    tri_norm = normals[faces[triangle_indices,:]]
 
-    del uv, target_uv, kdtree, faces, triangle_indices, v, normals
-    gc.collect()
+            coords = torch.einsum('ijk,ij->ik', tri_v, bary_coords).squeeze().numpy()
+            norms = normalize(torch.einsum('ijk,ij->ik', tri_norm, bary_coords).squeeze(),dim=1).numpy()
 
-    new_order = [2,1,0]
-    tri_v = tri_v[:,new_order,:]
-    coord_in_v = torch.einsum('ijk,ij->ik', tri_v, bary_coords).squeeze()
+            ppm[batch_pts[:,0], batch_pts[:,1], :3] = coords
+            ppm[batch_pts[:,0], batch_pts[:,1], 3:] = norms
+    
+    print('Final flush')
+    ppm.flush()
 
-    del tri_v
-    gc.collect()
-
-    tri_norm = tri_norm[:,new_order,:]
-    norm_in_v = normalize(torch.einsum('ijk,ij->ik', tri_norm, bary_coords).squeeze(),dim=1)
-
-    return bary_coords, coord_in_v, norm_in_v
+    print(f"PPM saved at {ppm_path}", end="\n")

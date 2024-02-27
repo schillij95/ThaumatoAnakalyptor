@@ -1,7 +1,6 @@
 ### Giorgio Angelotti - 2024
 
-from rendering_utils.torch_ppm import compute_barycentric
-from rendering_utils.ppm_writer import PPMWriter
+from rendering_utils.torch_ppm import points_in_triangles_batched
 import open3d as o3d
 import argparse
 import gc
@@ -14,7 +13,7 @@ Image.MAX_IMAGE_PIXELS = None
 def main(args):
     working_path = os.path.dirname(args.obj_path)
     base_name = os.path.splitext(os.path.basename(args.obj_path))[0]
-    ppm_path = os.path.join(working_path, f"{base_name}.ppm")
+    ppm_path = os.path.join(working_path, f"{base_name}.memmap")
 
     # Construct the potential paths for the .tif and .png files
     tif_path = os.path.join(working_path, f"{base_name}.tif")
@@ -51,38 +50,26 @@ def main(args):
     UV_scaled = UV * torch.tensor([y_size, x_size])
 
     # Generate UV_TARGET
-    x = torch.arange(x_size, 0, -1)
+    x = torch.arange(x_size-1, -1, -1)
     y = torch.arange(0, y_size, 1)
     grid_x, grid_y = torch.meshgrid(x, y, indexing='ij')
     UV_TARGET = torch.stack([grid_y.flatten(), grid_x.flatten()], dim=1).to(torch.float64)
     print(f"Created grid.", end="\n")
+
     del mesh, x, y, grid_x, grid_y, UV
     gc.collect()
 
     print(f"Computing coordinates...", end="\n")
-    _, coords3d, norms3d = compute_barycentric(UV_scaled, V, N, F, UV_TARGET, pts_batch_size=args.pts_batch, tri_batch_size=args.tri_batch)
-    print(f"Computed new coordinates and normals.", end="\n")
 
-    del UV_scaled, V, N, F, UV_TARGET 
-    gc.collect()
+    points_in_triangles_batched(ppm_path, (y_size, x_size), UV_TARGET, UV_scaled, F, V, N, pts_batch_size=args.pts_batch, tri_batch_size=args.tri_batch)
 
-    coords = coords3d.numpy()
-    norms = norms3d.numpy()
-
-    del coords3d, norms3d
-    gc.collect()
-
-    writer = PPMWriter(ppm_path, height=x_size, width=y_size)
-    writer.write_header()
-    print(f"Writing PPM...", end="\n")
-    writer.write_coords(coords, norms)
-    print(f"PPM written at {ppm_path}", end="\n")
 if __name__ == '__main__':
-    # parse obj path, process batches of 2048 points, check against 64 near triangles
-    # change the batch sizes according to your resources. A too low tri_batch can affect the result
+    # parse obj path, process batches of 4096 points, check against 64 nearest triangles (according to centroid)
+    # change the batch sizes according to your resources. A too low tri_batch can affect the result, since KDTree might not find the
+    # right triangle in the list... play with the parameters according to your RAM and mesh size
     parser = argparse.ArgumentParser()
     parser.add_argument('obj_path', type=str)
-    parser.add_argument('--pts_batch', type=int, default=2048)
+    parser.add_argument('--pts_batch', type=int, default=4096)
     parser.add_argument('--tri_batch', type=int, default=64)
     args = parser.parse_args()
 
