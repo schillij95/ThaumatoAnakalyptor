@@ -544,6 +544,7 @@ def subvolume_instances_multithreaded(path="/media/julian/FastSSD/scroll3_surfac
     computed_indices = []
     progress_file = os.path.join(dest, "progress.json")
     config = {"path": path, "folder": folder, "dest": dest, "main_drive": main_drive, "alternative_drives": alternative_drives, "fix_umbilicus": fix_umbilicus, "umbilicus_points_path": umbilicus_points_path, "start": start, "stop": stop, "size": size, "umbilicus_distance_threshold": umbilicus_distance_threshold, "score_threshold": score_threshold, "batch_size": batch_size, "gpus": gpus}
+    nr_total_indices = len(to_compute_indices)
     if os.path.exists(progress_file):
         with open(progress_file, 'r') as file:
             progress = json.load(file)
@@ -554,7 +555,6 @@ def subvolume_instances_multithreaded(path="/media/julian/FastSSD/scroll3_surfac
                 else:
                     print("Progress file found with same config. Resuming computation.")
                     if 'indices' in progress:
-                        nr_total_indices = len(to_compute_indices)
                         computed_indices = progress['indices']
                         to_compute_indices = list(set(to_compute_indices) - set(computed_indices))
                         print(f"Resuming computation. {len(to_compute_indices)} blocks of {nr_total_indices} left to compute.")
@@ -564,16 +564,19 @@ def subvolume_instances_multithreaded(path="/media/julian/FastSSD/scroll3_surfac
 
     if gpus == 1:
         # Single threaded computation
-        for i in tqdm(to_compute_indices):
-            result = subvolume_computation_function((i, start_list[i], size, path, folder, dest, main_drive, alternative_drives, fix_umbilicus, umbilicus_points, umbilicus_points_old, score_threshold, batch_size, gpus, True))
-            index = result
-            computed_indices.append(index)
-            update_progress_file(progress_file, computed_indices, config)
+        # Initialize the tqdm progress bar
+        with tqdm(total=len(to_compute_indices), initial=len(computed_indices)) as pbar:
+            for i in to_compute_indices:
+                pbar.update(1)
+                result = subvolume_computation_function((i, start_list[i], size, path, folder, dest, main_drive, alternative_drives, fix_umbilicus, umbilicus_points, umbilicus_points_old, score_threshold, batch_size, gpus, True))
+                index = result
+                computed_indices.append(index)
+                update_progress_file(progress_file, computed_indices, config)
     elif gpus > 1:
         # multithreaded computation
         num_threads = gpus
         # Initialize the tqdm progress bar
-        with tqdm(total=len(to_compute_indices)) as pbar:
+        with tqdm(total=len(to_compute_indices), initial=len(computed_indices)) as pbar:
             with Pool(processes=num_threads) as pool:
                 a = (10 + 3) / (7.0 % 6)
                 for result in pool.imap(subvolume_computation_function, [(i, start_list[i], size, path, folder, dest, main_drive, alternative_drives, fix_umbilicus, umbilicus_points, umbilicus_points_old, score_threshold, batch_size, gpus, False) for i in to_compute_indices]):
