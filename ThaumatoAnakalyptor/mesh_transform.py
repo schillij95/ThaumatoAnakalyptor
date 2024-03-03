@@ -15,6 +15,13 @@ def load_transform(transform_path):
         data = json.load(file)
     return np.array(data["params"])
 
+def invert_transform(transform_matrix):
+    inv_transform = np.linalg.inv(transform_matrix)
+    return inv_transform
+
+def combine_transforms(transform_a, transform_b):
+    return np.dot(transform_b, transform_a)
+
 def apply_transform_to_mesh(mesh_path, transform_matrix):
     mesh = o3d.io.read_triangle_mesh(mesh_path)
     mesh.vertices = o3d.utility.Vector3dVector(np.asarray(mesh.vertices) @ transform_matrix[:3, :3].T + transform_matrix[:3, 3])
@@ -26,50 +33,62 @@ def apply_transform_to_image(image_path, transform_matrix):
     new_size = int(image.width * scale_x), int(image.height * scale_y)
     return image.resize(new_size, Image.ANTIALIAS)
 
-def main(transform_path, mesh_path, image_path, mtl_path, mesh_save_path, image_save_path, mtl_save_path):
-    transform_matrix = load_transform(transform_path)
-    mesh = apply_transform_to_mesh(mesh_path, transform_matrix)
-    # Create folder if it doesn't exist
+def compute(transform_path, original_volume_id, target_volume_id, base_path):
+    # Load transform from original to canonical
+    if not (original_volume_id is None):
+        transform_to_canonical_path = glob.glob(f"{transform_path}/*-to-{original_volume_id}.json")
+        if len(transform_to_canonical_path) == 0:
+            inverted_transform_to_canonical = np.eye(4)
+        else:
+            transform_to_canonical_path = transform_to_canonical_path[0]
+            transform_to_canonical = load_transform(transform_to_canonical_path)
+
+            # Invert it since we need to go from original to canonical
+            inverted_transform_to_canonical = invert_transform(transform_to_canonical)
+            assert np.allclose(np.dot(transform_to_canonical, inverted_transform_to_canonical), np.eye(4))
+    else:
+        inverted_transform_to_canonical = np.eye(4)
+    
+    # Load transform from canonical to target
+    transform_to_target_path = glob.glob(f"{transform_path}/*-to-{target_volume_id}.json")[0]
+    transform_to_target = load_transform(transform_to_target_path)
+    
+    # Combine the transformations
+    combined_transform = combine_transforms(inverted_transform_to_canonical, transform_to_target)
+    
+    # Find .obj
+    obj_name = sorted(glob.glob(f"{base_path}/*.obj"))[0][:-4]
+
+    # Paths and application of transforms
+    mesh_path = f"{base_path}/{obj_name}.obj"
+    image_path = f"{base_path}/{obj_name}_0.png"
+    mtl_path = f"{base_path}/{obj_name}.mtl"
+
+    base_path_save = base_path + f"_{target_volume_id}"
+    mesh_save_path = f"{base_path_save}/{obj_name}.obj"
+    image_save_path = f"{base_path_save}/{obj_name}_0.png"
+    mtl_save_path = f"{base_path_save}/{obj_name}.mtl"
+
+    mesh = apply_transform_to_mesh(mesh_path, combined_transform)
     os.makedirs(os.path.dirname(mesh_save_path), exist_ok=True)
-    # Save or process the transformed mesh as needed
     o3d.io.write_triangle_mesh(mesh_save_path, mesh)
 
-    transformed_image = apply_transform_to_image(image_path, transform_matrix)
-    # Save or display the transformed image as needed
+    transformed_image = apply_transform_to_image(image_path, combined_transform)
     transformed_image.save(image_save_path)
 
-    # Save the mtl file
     with open(mtl_path, 'r') as file:
         mtl_data = file.read()
     with open(mtl_save_path, 'w') as file:
         file.write(mtl_data)
-    
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Transform mesh .obj with VC volume-volume transformation .json')
-    parser.add_argument("--transform_path", type=str, default="path_to_your_json_file.json")
-    parser.add_argument("--targed_volume_id", type=str, default="Volume ID of the target volume")
-    parser.add_argument("--base_path", type=str, default="path_to_your_obj_file.obj")
+    parser.add_argument("--transform_path", type=str, required=True, help="Folder containing the transform .json files")
+    parser.add_argument("--original_volume_id", type=str, required=True, help="Volume ID of the original scroll volume for the input mesh")
+    parser.add_argument("--target_volume_id", type=str, required=True, help="Volume ID of the target scroll volume to transform the input mesh to")
+    parser.add_argument("--base_path", type=str, required=True, help="Path to your .obj file")
 
     args = parser.parse_args()
-    transform_path = args.transform_path
-    target_volume_id = args.targed_volume_id
-    base_path = args.base_path
 
-    # Replace these paths with your actual file paths
-
-    transform_path = f"{transform_path}/*-to-{target_volume_id}.json"
-    # Find the first json file in the directory
-    transform_path = glob.glob(transform_path)[0]
-    mesh_path = f"{base_path}/point_cloud_colorized_verso_subvolume_blocks_uv.obj"
-    image_path = f"{base_path}/point_cloud_colorized_verso_subvolume_blocks_uv_0.png"
-    mtl_path = f"{base_path}/point_cloud_colorized_verso_subvolume_blocks_uv.mtl"
-
-    base_path_save = base_path + f"_{target_volume_id}"
-    mesh_save_path = f"{base_path_save}/point_cloud_colorized_verso_subvolume_blocks_uv.obj"
-    image_save_path = f"{base_path_save}/point_cloud_colorized_verso_subvolume_blocks_uv_0.png"
-    mtl_save_path = f"{base_path_save}/point_cloud_colorized_verso_subvolume_blocks_uv.mtl"
-
-    print(f"Processing {transform_path}, {mesh_path}, {image_path}")
-    print(f"Saving to {base_path_save}, {mesh_save_path}, {image_save_path}")
-
-    main(transform_path, mesh_path, image_path, mtl_path, mesh_save_path, image_save_path, mtl_save_path)
+    print(f"Processing from {args.original_volume_id} to {args.target_volume_id}")
+    compute(args.transform_path, args.original_volume_id, args.target_volume_id, args.base_path)

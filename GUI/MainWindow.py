@@ -1065,12 +1065,17 @@ class ThaumatoAnakalyptor(QMainWindow):
     def computeSwapVolume(self):
         try:
             target_volume_id = self.targetVolumeIdField.text()
+            base_path = self.Config.get("surface_points_path", None)
+            if base_path is None:
+                QMessageBox.critical(self, "Error", f"Please specify the surface points path")
+                return
+            base_path = os.path.join(base_path, "working", f"working_{self.xField.text()}_{self.yField.text()}_{self.zField.text()}")
 
             command = [
                 "python3", "-m", "ThaumatoAnakalyptor.mesh_transform", 
                 "--transform_path", self.Config["surface_points_path"], 
                 "--targed_volume_id", target_volume_id,
-                "--base_path", self.Config["surface_points_path"]
+                "--base_path", base_path
             ]
 
             def run():
