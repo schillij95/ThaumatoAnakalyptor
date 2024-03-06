@@ -16,7 +16,7 @@ class ConfigWindow(QDialog):
 
         # Adding specific configuration fields
         self.original_2d_tiffs_field = self.addPathConfigField("Canonical 2D TIFFs", "Enter the path to the folder containing Canonical original 2D TIFF files for the volume", self.parent.Config.get('original_2d_tiffs', ''))
-        self.downsample_factor = self.addIntegerField("Downsample Factor", "Enter the downsample factor (whole number) to achieve close to 8um resolution. Negative numbers will allow you to set the 2D and 3D TIFF paths manually and are threated like their positive analoges", str(self.parent.Config.get('downsample_factor', '')))
+        self.downsample_factor = self.addIntegerField("Downsample Factor", "Enter the downsample factor (whole number) to achieve close to 8um resolution. Negative numbers will allow you to set the 2D and 3D TIFF paths manually and are treated like their positive analogs", str(self.parent.Config.get('downsample_factor', '')))
         self.downsampled_2d_tiffs_field = self.addPathConfigField("Downsampled 2D TIFFs", "Enter the path to the folder containing downsampled 2D TIFF files", self.parent.Config.get('downsampled_2d_tiffs', ''))
         self.downsampled_3d_grids_field = self.addPathConfigField("Downsampled 3D Grid Cells", "Enter the path to the folder containing downsampled 3D Grid Cells", self.parent.Config.get('downsampled_3d_grids', ''))
         self.surface_points_path_field = self.addPathConfigField("Surface Points Path", "Enter the surface points path", self.parent.Config.get('surface_points_path', ''))
