@@ -5,6 +5,8 @@ import os
 import open3d as o3d
 import tarfile
 
+import time
+
 # surface points extraction
 import torch
 from torch.utils.data import Dataset, DataLoader
@@ -568,14 +570,12 @@ class PointCloudDataset(Dataset):
 
         stop_max_coords = np.ceil(max_coords / (subvolume_size//2)) * (subvolume_size//2) - 1
         # Min between stop and max_coord
+        # print(f"Stop_max_coords: {stop_max_coords}, Stop: {stop_coord}, Range: {ranges}")
         stop = np.minimum(stop_max_coords, stop_coord)
-        # print(f"Start: {start}, Stop: {stop}, Size: {size}")
         # Make blocks of size '50x50x50'
         for x in range(int(start[0]), int(stop[0]), subvolume_size[0] // 2):
             for y in range(int(start[1]), int(stop[1]), subvolume_size[1] // 2):
                 for z in range(int(start[2]), int(stop[2]), subvolume_size[2] // 2):
-                    if (x + subvolume_size[0] > stop_max_coords[0]+2 or y + subvolume_size[1] > stop_max_coords[1]+2 or z + subvolume_size[2] > stop_max_coords[2]+2):
-                        continue
                     x_prime = x
                     y_prime = y
                     z_prime = z
