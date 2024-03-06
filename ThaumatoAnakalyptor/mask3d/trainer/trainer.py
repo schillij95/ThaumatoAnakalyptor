@@ -125,6 +125,12 @@ class InstanceSegmentation(pl.LightningModule):
             )
         return x
     
+    def predict_step(self, batch, batch_idx, dataloader_idx=None):
+        if len(batch[0]) == 0:
+            return []
+        prediction = self.inference(batch[0])
+        return prediction
+    
     def inference(self, batch):
         # check if self.inference_c_fn exists
         if not hasattr(self, "inference_c_fn"):

@@ -84,16 +84,17 @@ def get_parameters(cfg: DictConfig):
 
 def init(num_gpus=1):
     set_num_gpus(num_gpus)
-    init_()
+    return init_()
 
 @hydra.main(
     config_path="conf", config_name="config_base_instance_segmentation.yaml"
 )
 def init_(cfg: DictConfig):
     print("cfg", cfg, "gpus", num_gpus)
+    global models
     global initialized
     if initialized:
-        return
+        return models
     # Update the configuration with the specific settings
     CURR_DBSCAN = 14.0
     CURR_TOPK = 25
@@ -129,7 +130,6 @@ def init_(cfg: DictConfig):
     cfg.general.export = True
     OmegaConf.set_struct(cfg, True)
     # because hydra wants to change dir for some reason
-    global models
     models = []
     for gpu_nr in range(num_gpus):
         res = get_parameters(cfg)
@@ -165,6 +165,12 @@ def init_(cfg: DictConfig):
     print("initialized")
 
     initialized = True
+    return models
+
+def get_model():
+    if not initialized:
+        init()
+    return models[0]
 
 # clusters points, detects the papyrus sheet instances
 def inference(points_3d, index=0, num_gpus=1):

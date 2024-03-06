@@ -543,7 +543,8 @@ class ThaumatoAnakalyptor(QMainWindow):
                 "--path", self.Config["surface_points_path"], 
                 "--dest", self.Config["surface_points_path"], 
                 "--umbilicus_path", self.Config["umbilicus_path"], 
-                "--main_drive", "", "--alternative_ply_drives", "", "", 
+                "--main_drive", "",
+                "--alternative_ply_drives", "", "", 
                 "--max_umbilicus_dist", "-1",
                 "--batch_size", str(batch_size),
                 "--gpus", str(self.Config["gpus"])
