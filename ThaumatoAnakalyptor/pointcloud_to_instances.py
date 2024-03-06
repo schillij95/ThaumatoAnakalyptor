@@ -430,6 +430,9 @@ class MyPredictionWriter(BasePredictionWriter):
         print("On predict")
     
     def write_on_batch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, prediction, batch_indices, batch, batch_idx: int, dataloader_idx: int) -> None:
+        if prediction is None:
+            print("Prediction is None")
+            return
         print(f"On batch end, len: {len(prediction)}")
         if len(prediction) == 0:
             print("Prediction is empty")
@@ -678,7 +681,7 @@ def pointcloud_inference(path, folder, dest, main_drive, alternative_drives, fix
 
     print("Start prediction")
     # Run prediction
-    trainer.predict(model, dataloaders=dataloader)
+    trainer.predict(model, dataloaders=dataloader, return_predictions=False)
     print("Prediction done")
 
 def main():
