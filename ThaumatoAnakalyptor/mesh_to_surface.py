@@ -27,21 +27,100 @@ class MyPredictionWriter(BasePredictionWriter):
             return
 
         indexes_2d, values = prediction
+        print("Writing prediction to disk")
         # TODO: Save the prediction to the save_path
         
         
-class ObjDataset(Dataset):
-    def __init__(self, path, save_path, grid_size=500):
+class MeshDataset(Dataset):
+    """Dataset class for rendering a mesh."""
+    def __init__(self, path, save_path, grid_size=500, r=32):
+        """Initialize the dataset."""
         self.writer = MyPredictionWriter(save_path)
         self.path = path
+        self.r = r
+        self.load_mesh(path)
+
         self.grid_size = grid_size
         self.grids_to_process = self.init_grids_to_process(path, grid_size)
         
-        
-    def init_grids_to_process(self, path, grid_size):
-        grids_to_process = []
+    def load_mesh(self, path):
+        """Load the mesh from the given path and extract the vertices, normals, triangles, and UV coordinates."""
+        # Get the working path and base name
+        working_path = os.path.dirname(path)
+        base_name = os.path.splitext(os.path.basename(path))[0]
 
-        # TODO
+        # Construct the potential paths for the .tif and .png files
+        tif_path = os.path.join(working_path, f"{base_name}.tif")
+        png_path = os.path.join(working_path, f"{base_name}.png")
+
+        # Check if the .tif version exists
+        if os.path.exists(tif_path):
+            image_path = tif_path
+            print(f"Found TIF image at: {image_path}", end="\n")
+        # If not, check if the .png version exists
+        elif os.path.exists(png_path):
+            image_path = png_path
+            print(f"Found PNG image at: {image_path}", end="\n")
+        # If neither exists, handle the case (e.g., error message)
+        else:
+            image_path = None
+            print("No corresponding TIF or PNG image found.", end="\n")
+        
+        # Open the image file
+        with Image.open(image_path) as img:
+            # Get dimensions
+            y_size, x_size = img.size
+        print(f"Y-size: {y_size}, X-size: {x_size}", end="\n")
+
+        self.mesh = o3d.io.read_triangle_mesh(path)
+        print(f"Loaded mesh from {path}", end="\n")
+
+        self.vertices = np.asarray(self.mesh.vertices)
+        self.vertices_normals = np.asarray(self.mesh.vertex_normals)
+        self.triangles = np.asarray(self.mesh.triangles)
+        uv = np.asarray(self.mesh.triangle_uvs)
+        # scale numpy UV coordinates to the image size
+        self.uv = uv * np.array([y_size, x_size])
+
+        # vertices of triangles
+        self.triangles_vertices = self.vertices[self.triangles]
+        
+    def init_grids_to_process(self):
+        # Set up the vertices and triangles
+        triangles_vertices_grid_index_raw = self.triangles_vertices / self.grid_size
+        triangles_vertices_grid_index_rounded = np.round(triangles_vertices_grid_index_raw).astype(int)
+        triangles_vertices_grid_index_mask_r = np.abs(triangles_vertices_grid_index_raw - triangles_vertices_grid_index_rounded) < self.r
+        triangles_vertices_grid_index_r = self.triangles_vertices[triangles_vertices_grid_index_mask_r]
+
+        # find all grids that have vertices in a r-padded bounding box
+        triangles_vertices_grid_index_r_000 = np.floor(triangles_vertices_grid_index_raw).astype(int)
+
+        triangles_vertices_grid_index_r_001 = np.floor((triangles_vertices_grid_index_r + np.array([0, 0, self.r])) / self.grid_size).astype(int)
+        triangles_vertices_grid_index_r_010 = np.floor((triangles_vertices_grid_index_r + np.array([0, self.r, 0])) / self.grid_size).astype(int)
+        triangles_vertices_grid_index_r_100 = np.floor((triangles_vertices_grid_index_r + np.array([self.r, 0, 0])) / self.grid_size).astype(int)
+        triangles_vertices_grid_index_r_011 = np.floor((triangles_vertices_grid_index_r + np.array([0, self.r, self.r])) / self.grid_size).astype(int)
+        triangles_vertices_grid_index_r_101 = np.floor((triangles_vertices_grid_index_r + np.array([self.r, 0, self.r])) / self.grid_size).astype(int)
+        triangles_vertices_grid_index_r_110 = np.floor((triangles_vertices_grid_index_r + np.array([self.r, self.r, 0])) / self.grid_size).astype(int)
+        triangles_vertices_grid_index_r_111 = np.floor((triangles_vertices_grid_index_r + np.array([self.r, self.r, self.r])) / self.grid_size).astype(int)
+        triangles_vertices_grid_index_r_002 = np.floor((triangles_vertices_grid_index_r + np.array([0, 0, -self.r])) / self.grid_size).astype(int)
+        triangles_vertices_grid_index_r_020 = np.floor((triangles_vertices_grid_index_r + np.array([0, -self.r, 0])) / self.grid_size).astype(int)
+        triangles_vertices_grid_index_r_200 = np.floor((triangles_vertices_grid_index_r + np.array([-self.r, 0, 0])) / self.grid_size).astype(int)
+        triangles_vertices_grid_index_r_022 = np.floor((triangles_vertices_grid_index_r + np.array([0, -self.r, -self.r])) / self.grid_size).astype(int)
+        triangles_vertices_grid_index_r_202 = np.floor((triangles_vertices_grid_index_r + np.array([-self.r, 0, -self.r])) / self.grid_size).astype(int)
+        triangles_vertices_grid_index_r_220 = np.floor((triangles_vertices_grid_index_r + np.array([-self.r, -self.r, 0])) / self.grid_size).astype(int)
+        triangles_vertices_grid_index_r_222 = np.floor((triangles_vertices_grid_index_r + np.array([-self.r, -self.r, -self.r])) / self.grid_size).astype(int)
+
+        triangles_vertices_grid_index_r_012 = np.floor((triangles_vertices_grid_index_r + np.array([0, self.r, -self.r])) / self.grid_size).astype(int)
+        triangles_vertices_grid_index_r_021 = np.floor((triangles_vertices_grid_index_r + np.array([0, -self.r, self.r])) / self.grid_size).astype(int)
+        triangles_vertices_grid_index_r_102 = np.floor((triangles_vertices_grid_index_r + np.array([self.r, 0, -self.r])) / self.grid_size).astype(int)
+        triangles_vertices_grid_index_r_201 = np.floor((triangles_vertices_grid_index_r + np.array([-self.r, self.r, 0])) / self.grid_size).astype(int)
+        triangles_vertices_grid_index_r_120 = np.floor((triangles_vertices_grid_index_r + np.array([self.r, -self.r, 0])) / self.grid_size).astype(int)
+        triangles_vertices_grid_index_r_210 = np.floor((triangles_vertices_grid_index_r + np.array([-self.r, 0, self.r])) / self.grid_size).astype(int)
+
+        triangles_vertices_grid_index = np.concatenate([triangles_vertices_grid_index_r_000, triangles_vertices_grid_index_r_001, triangles_vertices_grid_index_r_010, triangles_vertices_grid_index_r_100, triangles_vertices_grid_index_r_011, triangles_vertices_grid_index_r_101, triangles_vertices_grid_index_r_110, triangles_vertices_grid_index_r_111, triangles_vertices_grid_index_r_002, triangles_vertices_grid_index_r_020, triangles_vertices_grid_index_r_200, triangles_vertices_grid_index_r_022, triangles_vertices_grid_index_r_202, triangles_vertices_grid_index_r_220, triangles_vertices_grid_index_r_222, triangles_vertices_grid_index_r_012, triangles_vertices_grid_index_r_021, triangles_vertices_grid_index_r_102, triangles_vertices_grid_index_r_201, triangles_vertices_grid_index_r_120, triangles_vertices_grid_index_r_210])
+
+        # grids that contain at least one triangle
+        grids_to_process = set(map(tuple, triangles_vertices_grid_index.reshape(-1, 3)))
         
         grids_to_process = sorted(list(grids_to_process)) # Sort the blocks to process for deterministic behavior
         return grids_to_process
@@ -49,11 +128,30 @@ class ObjDataset(Dataset):
     def get_writer(self):
         return self.writer
     
+    def extract_triangles_mask(self, grid_index):
+        # select all triangles that have at least one vertice in the grid with a r-padded bounding box
+        selected_triangles_mask_padded = np.any(np.abs(self.triangles_vertices / self.grid_size - np.array(grid_index)) < self.r, axis=2)
+        selected_triangles_mask_floored = np.any(np.floor(self.triangles_vertices / self.grid_size) == np.array(grid_index), axis=2)
+        selected_triangles_mask = np.logical_or(selected_triangles_mask_padded, selected_triangles_mask_floored)
+        return selected_triangles_mask
+    
     def __len__(self):
         return len(self.grids_to_process)
 
     def __getitem__(self, idx):
-        grid_path = self.grids_to_process[idx]
+        grid_index = self.grids_to_process[idx]
+        triangles_mask = self.extract_triangles_mask(grid_index)
+        # UV of vertices in triangles that have at least one vertice in the grid with a r-padded bounding box
+        uv = self.uv[triangles_mask]
+        # find 2D uv bounding box for each triangle
+        uv_min = np.min(uv, axis=1)
+        uv_max = np.max(uv, axis=1)
+        
+        # generate the meshgrid for the uv triangles
+        x = np.arange(np.floor(uv_min[0, 0]), np.ceil(uv_max[0, 0]), 1)
+        y = np.arange(np.floor(uv_min[0, 1]), np.ceil(uv_max[0, 1]), 1)
+        grid_x, grid_y = np.meshgrid(x, y)
+
         # TODO
         return None
 
@@ -67,7 +165,7 @@ class PPMAndTextureModel(pl.LightningModule):
         return None
     
 def ppm_and_texture(obj_path, grid_size=500, gpus=1, batch_size=1):
-    dataset = ObjDataset(obj_path, obj_path, grid_size=grid_size)
+    dataset = MeshDataset(obj_path, obj_path, grid_size=grid_size)
     num_threads = multiprocessing.cpu_count() // int(1.5 * int(gpus))
     num_treads_for_gpus = 5
     num_workers = min(num_threads, num_treads_for_gpus)
