@@ -1,5 +1,5 @@
 ## Giorgio Angelotti - 2024
-## Based on ppm_to_layers by Julian Schilinger
+## Based on ppm_to_layers by Julian Schilliger
 
 from rendering_utils.interpolate_image_3d import extract_from_image_3d, insert_into_image_3d
 from grid_to_pointcloud import load_grid
