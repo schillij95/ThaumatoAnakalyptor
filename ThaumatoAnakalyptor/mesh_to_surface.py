@@ -1,5 +1,6 @@
 ### Julian Schilliger - ThaumatoAnakalyptor - 2023
 
+import multiprocessing
 import open3d as o3d
 import argparse
 import gc
@@ -21,18 +22,15 @@ class MyPredictionWriter(BasePredictionWriter):
     
     def write_on_batch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, prediction, batch_indices, batch, batch_idx: int, dataloader_idx: int) -> None:
         if prediction is None:
-            # print("Prediction is None")
             return
-        # print(f"On batch end, len: {len(prediction)}")
         if len(prediction) == 0:
-            # print("Prediction is empty")
             return
 
         indexes_2d, values = prediction
         # TODO: Save the prediction to the save_path
         
         
-class GridDataset(Dataset):
+class ObjDataset(Dataset):
     def __init__(self, path, save_path, grid_size=500):
         self.writer = MyPredictionWriter(save_path)
         self.path = path
@@ -59,7 +57,7 @@ class GridDataset(Dataset):
         # TODO
         return None
 
-class PointCloudModel(pl.LightningModule):
+class PPMAndTextureModel(pl.LightningModule):
     def __init__(self):
         print("instantiating model")
         super().__init__()
@@ -68,22 +66,22 @@ class PointCloudModel(pl.LightningModule):
         # TODO
         return None
     
-def grid_inference(pointcloud_base, start_block, path_template, save_template_v, save_template_r, umbilicus_points, umbilicus_points_old, grid_block_size=200, recompute=False, fix_umbilicus=False, maximum_distance=-1, batch_size=1):
-    dataset = GridDataset(pointcloud_base, start_block, path_template, save_template_v, save_template_r, umbilicus_points, umbilicus_points_old, grid_block_size=grid_block_size, recompute=recompute, fix_umbilicus=fix_umbilicus, maximum_distance=maximum_distance)
-    num_threads = multiprocessing.cpu_count() // int(1.5 * int(CFG['GPUs']))
+def ppm_and_texture(obj_path, grid_size=500, gpus=1, batch_size=1):
+    dataset = ObjDataset(obj_path, obj_path, grid_size=grid_size)
+    num_threads = multiprocessing.cpu_count() // int(1.5 * int(gpus))
     num_treads_for_gpus = 5
     num_workers = min(num_threads, num_treads_for_gpus)
     num_workers = max(num_workers, 1)
-    dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=custom_collate_fn, shuffle=False, num_workers=num_workers, prefetch_factor=3)
-    model = PointCloudModel()
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, prefetch_factor=3)
+    model = PPMAndTextureModel()
     
     writer = dataset.get_writer()
-    trainer = pl.Trainer(callbacks=[writer], gpus=int(CFG['GPUs']), strategy="ddp")
+    trainer = pl.Trainer(callbacks=[writer], gpus=int(gpus), strategy="ddp")
     
-    print("Start prediction")
-    # Run prediction
+    print("Start Rendering")
+    # Run Rendering
     trainer.predict(model, dataloaders=dataloader, return_predictions=False)
-    print("Prediction done")
+    print("Rendering done")
     
     return
 
