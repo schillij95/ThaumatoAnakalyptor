@@ -12,7 +12,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import BasePredictionWriter
 from PIL import Image
 Image.MAX_IMAGE_PIXELS = None
-
+from .grid_to_pointcloud import load_grid
 
 
 class MyPredictionWriter(BasePredictionWriter):
@@ -33,10 +33,11 @@ class MyPredictionWriter(BasePredictionWriter):
         
 class MeshDataset(Dataset):
     """Dataset class for rendering a mesh."""
-    def __init__(self, path, save_path, grid_size=500, r=32):
+    def __init__(self, path, grid_cell_template, grid_size=500, r=32):
         """Initialize the dataset."""
-        self.writer = MyPredictionWriter(save_path)
+        self.writer = MyPredictionWriter(os.join(path, "layers"))
         self.path = path
+        self.grid_cell_template = grid_cell_template
         self.r = r
         self.load_mesh(path)
 
@@ -76,7 +77,7 @@ class MeshDataset(Dataset):
         print(f"Loaded mesh from {path}", end="\n")
 
         self.vertices = np.asarray(self.mesh.vertices)
-        self.vertices_normals = np.asarray(self.mesh.vertex_normals)
+        self.normals = np.asarray(self.mesh.vertex_normals)
         self.triangles = np.asarray(self.mesh.triangles)
         uv = np.asarray(self.mesh.triangle_uvs)
         # scale numpy UV coordinates to the image size
@@ -84,6 +85,7 @@ class MeshDataset(Dataset):
 
         # vertices of triangles
         self.triangles_vertices = self.vertices[self.triangles]
+        self.triangles_normals = self.normals[self.triangles]
         
     def init_grids_to_process(self):
         # Set up the vertices and triangles
@@ -135,25 +137,27 @@ class MeshDataset(Dataset):
         selected_triangles_mask = np.logical_or(selected_triangles_mask_padded, selected_triangles_mask_floored)
         return selected_triangles_mask
     
+    def load_grid_cell(self, grid_index, uint8=False):
+        # load grid cell from disk
+        grid_cell = load_grid(self.grid_cell_template, grid_index, grid_block_size=self.grid_size, grid_block_size=self.grid_size, uint8=uint8)
+        return grid_cell
+    
     def __len__(self):
         return len(self.grids_to_process)
 
     def __getitem__(self, idx):
         grid_index = self.grids_to_process[idx]
         triangles_mask = self.extract_triangles_mask(grid_index)
+        # Vertices and normals in triangles that have at least one vertice in the grid with a r-padded bounding box
+        vertices = self.triangles_vertices[triangles_mask]
+        normals = self.triangles_normals[triangles_mask]
         # UV of vertices in triangles that have at least one vertice in the grid with a r-padded bounding box
         uv = self.uv[triangles_mask]
-        # find 2D uv bounding box for each triangle
-        uv_min = np.min(uv, axis=1)
-        uv_max = np.max(uv, axis=1)
-        
-        # generate the meshgrid for the uv triangles
-        x = np.arange(np.floor(uv_min[0, 0]), np.ceil(uv_max[0, 0]), 1)
-        y = np.arange(np.floor(uv_min[0, 1]), np.ceil(uv_max[0, 1]), 1)
-        grid_x, grid_y = np.meshgrid(x, y)
 
-        # TODO
-        return None
+        # load grid cell from disk
+        grid_cell = self.load_grid_cell(grid_index)
+
+        return grid_cell, vertices, normals, uv
 
 class PPMAndTextureModel(pl.LightningModule):
     def __init__(self):
