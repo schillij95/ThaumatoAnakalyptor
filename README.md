@@ -97,7 +97,7 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
 
     ```
     ```bash
-    docker run --gpus all --shm-size=10g -it --rm \
+    docker run --gpus all --shm-size=100g -it --rm \
     -v <path_to_scroll>:/scroll.volpkg \
     -v <optional_alternative_path_to_scroll>:/scroll_alternative.volpkg \
     -v $(pwd)/:/workspace \
@@ -134,7 +134,7 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
     python3 -m ThaumatoAnakalyptor.grid_to_pointcloud --base_path "" --volume_subpath "<scroll-path>/PHerc0332.volpkg/volumes/2dtifs_8um_grids" --disk_load_save "" "" --pointcloud_subpath "<scroll-path>/scroll3_surface_points/point_cloud" --num_threads 4 --gpus 1
     ```
     ```bash
-    python3 -m ThaumatoAnakalyptor.pointcloud_to_instances --path "<scroll-path>/scroll3_surface_points" --dest "<scroll-path>/scroll3_surface_points" --umbilicus_path "<scroll-path>/PHerc0332.volpkg/volumes/umbilicus.txt" --main_drive "" --alternative_ply_drives "" --max_umbilicus_dist -1
+    python3 -m ThaumatoAnakalyptor.pointcloud_to_instances --path "<scroll-path>/scroll3_surface_points" --dest "<scroll-path>/scroll3_surface_points" --umbilicus_path "<scroll-path>/PHerc0332.volpkg/volumes/umbilicus.txt" --main_drive "" --alternative_ply_drives "" --max_umbilicus_dist -1 --gpus 1
     ```
 
 - **Segmentation Steps:** Additional details for each segmentation step are provided in the [instructions](ThaumatoAnakalyptor/instructions.txt) document.

@@ -84,13 +84,56 @@ def get_parameters(cfg: DictConfig):
 
 def init(num_gpus=1):
     set_num_gpus(num_gpus)
-    return init_()
+    # clear al sys args
+    temp_argv = sys.argv
+    sys.argv = [sys.argv[0]]  # Keep only the script name, remove all other arguments
+    print("Sys ARGV:", sys.argv)
+    res = init_()
+    sys.argv = temp_argv
+    return res
+
+def load_and_merge_configs(base_config_path, config_dir="conf"):
+    # Load the base configuration
+    base_cfg = OmegaConf.load(base_config_path)
+
+    # Extract the defaults list from the base configuration
+    defaults_list = base_cfg.get("defaults", [])
+
+    # Recursive function to merge additional configurations
+    def merge_configs(cfg, defaults):
+        for default in defaults:
+            for key, config_name in default.items():
+                # Construct the path to the configuration file
+                config_path = os.path.join(config_dir, key, f"{config_name}.yaml")
+
+                # Load the additional configuration
+                additional_cfg = OmegaConf.load(config_path)
+
+                # Check if the additional configuration has its own defaults
+                if "defaults" in additional_cfg:
+                    # Merge the defaults of the additional configuration
+                    additional_cfg = merge_configs(additional_cfg, additional_cfg.pop("defaults"))
+
+                # Merge the additional configuration into the base configuration
+                cfg[key] = OmegaConf.merge(cfg.get(key, {}), additional_cfg)
+
+        return cfg
+
+    # Merge the additional configurations specified in the defaults list
+    cfg = merge_configs(base_cfg, defaults_list)
+
+    return cfg
+
 
 @hydra.main(
     config_path="conf", config_name="config_base_instance_segmentation.yaml"
 )
 def init_(cfg: DictConfig):
-    print("cfg", cfg, "gpus", num_gpus)
+# def init_():
+#     base_config_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "conf", "config_base_instance_segmentation.yaml")
+#     config_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "conf")
+#     cfg = load_and_merge_configs(base_config_path, config_dir)
+    # print("cfg", cfg, "gpus", num_gpus)
     global models
     global initialized
     if initialized:
@@ -108,6 +151,7 @@ def init_(cfg: DictConfig):
     OmegaConf.set_struct(cfg, False)
     cfg.general.experiment_name = f'validation_query_{CURR_QUERY}_topk_{CURR_TOPK}_dbscan_{CURR_DBSCAN}_size_{CURR_SIZE}'
     cfg.general.project_name = "stpls3d_test"
+    # print("stpl cfg", stpls3d_config)
     cfg.data = OmegaConf.merge(cfg.data, stpls3d_config)
     cfg.general.num_targets = 2
     cfg.data.num_labels = 2

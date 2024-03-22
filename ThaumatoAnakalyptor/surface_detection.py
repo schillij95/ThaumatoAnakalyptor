@@ -2,7 +2,7 @@
 
 # surface points extraction
 import torch
-torch.set_float32_matmul_precision('medium')
+# torch.set_float32_matmul_precision('medium')
 import torch.nn as nn
 import torch.nn.functional as F
 # test
@@ -66,7 +66,7 @@ def sobel_filter_3d(input, chunks=4, overlap=3, device=None):
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
-    return vectors.half().squeeze(0).squeeze(0).to(device)
+    return vectors.squeeze(0).squeeze(0).to(device)
 
 ## own code
 
@@ -75,7 +75,7 @@ def get_uniform_kernel(size=3, channels=1):
     # Create a 3D kernel filled with ones and normalize it
     kernel = torch.ones((size, size, size))
     kernel = kernel / torch.sum(kernel)
-    return kernel.half()
+    return kernel
 
 # Function to create a 3D convolution layer with a Uniform kernel
 def uniform_blur3d(channels=1, size=3, device=None):
@@ -90,7 +90,7 @@ def uniform_blur3d(channels=1, size=3, device=None):
     blur_layer.weight.data = nn.Parameter(kernel)
     # Make the layer non-trainable
     blur_layer.weight.requires_grad = False
-    blur_layer.half().to(device)
+    blur_layer.to(device)
     return blur_layer
 
 # Function to normalize vectors to unit length
@@ -245,11 +245,11 @@ def subsample_uniform(points, n_samples):
     return points[indices]
 
 # Function to detect surface points in a 3D volume
-def surface_detection(volume, global_reference_vector, blur_size=3, sobel_chunks=4, sobel_overlap=3, window_size=20, stride=20, threshold_der=0.1, threshold_der2=0.001):
+def surface_detection(volume, global_reference_vector, blur_size=3, sobel_chunks=4, sobel_overlap=3, window_size=20, stride=20, threshold_der=0.1, threshold_der2=0.001, convert_to_numpy=True):
     # device
     device = volume.device
     # using half percision to save memory
-    volume = volume.half()
+    volume = volume
     # Blur the volume
     blur = uniform_blur3d(channels=1, size=blur_size, device=device)
     blurred_volume = blur(volume.unsqueeze(0).unsqueeze(0)).squeeze(0).squeeze(0)
@@ -262,19 +262,19 @@ def surface_detection(volume, global_reference_vector, blur_size=3, sobel_chunks
     sobel_vectors_subsampled = sobel_vectors[::sobel_stride, ::sobel_stride, ::sobel_stride, :]
     
     # Apply vector convolution to the Sobel vectors
-    vector_conv = vector_convolution(sobel_vectors_subsampled, window_size=window_size, stride=stride, device=device).half()
+    vector_conv = vector_convolution(sobel_vectors_subsampled, window_size=window_size, stride=stride, device=device)
 
     # Adjust vectors to the global direction
-    adjusted_vectors = adjust_vectors_to_global_direction(vector_conv, global_reference_vector).half()
+    adjusted_vectors = adjust_vectors_to_global_direction(vector_conv, global_reference_vector)
 
     # Interpolate the adjusted vectors to the original size
-    adjusted_vectors_interp = interpolate_to_original(sobel_vectors, adjusted_vectors).half()
+    adjusted_vectors_interp = interpolate_to_original(sobel_vectors, adjusted_vectors)
 
     # Project the Sobel result onto the adjusted vectors and calculate the norm
-    first_derivative = adjusted_norm(sobel_vectors, adjusted_vectors_interp).half()
+    first_derivative = adjusted_norm(sobel_vectors, adjusted_vectors_interp)
     fshape = first_derivative.shape
     
-    first_derivative = scale_to_0_1(first_derivative).half()
+    first_derivative = scale_to_0_1(first_derivative)
 
     # Apply Sobel filter to the first derivative, project it onto the adjusted vectors, and calculate the norm
     sobel_vectors_derivative = sobel_filter_3d(first_derivative, chunks=sobel_chunks, overlap=sobel_overlap, device=device)
@@ -295,11 +295,8 @@ def surface_detection(volume, global_reference_vector, blur_size=3, sobel_chunks
     
     # Cluster the surface points
     coords_normals = adjusted_vectors_interp[coords[:, 0], coords[:, 1], coords[:, 2]]
-    
-    coords = coords.cpu().numpy()
 
     coords_normals = coords_normals / torch.norm(coords_normals, dim=1, keepdim=True)
-    coords_normals = coords_normals.cpu().numpy()
 
     # Generate verso side of sheet
     # Create a mask for the conditions on the first and second derivatives
@@ -311,9 +308,14 @@ def surface_detection(volume, global_reference_vector, blur_size=3, sobel_chunks
     
     # Cluster the surface points
     coords_normals_verso = adjusted_vectors_interp[coords_verso[:, 0], coords_verso[:, 1], coords_verso[:, 2]]
-    coords_verso = coords_verso.cpu().numpy()
     coords_normals_verso = coords_normals_verso / torch.norm(coords_normals_verso, dim=1, keepdim=True)
-    coords_normals_verso = coords_normals_verso.cpu().numpy()
+    
+    if convert_to_numpy:
+        coords = coords.cpu().numpy()
+        coords_normals = coords_normals.cpu().numpy()
+        
+        coords_verso = coords_verso.cpu().numpy()
+        coords_normals_verso = coords_normals_verso.cpu().numpy()
 
     return (coords, coords_normals), (coords_verso, coords_normals_verso)
 

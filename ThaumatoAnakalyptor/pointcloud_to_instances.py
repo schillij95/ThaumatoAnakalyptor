@@ -215,7 +215,7 @@ def load_plys(src_folder, main_drive, alternative_drives, start, size, grid_bloc
             for z in range(start[2], start[2]+size[2]):
                 ply_files.append(os.path.join(src_folder, path_template.format(x,y,z)))
 
-    if executor:
+    if executor and load_multithreaded:
         # Prepare the tasks
         tasks = [(ply_file, grid_block_size, main_drive, alternative_drives) for ply_file in ply_files]
         # Schedule the tasks and collect the futures
@@ -433,18 +433,18 @@ class MyPredictionWriter(BasePredictionWriter):
     
     def write_on_batch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, prediction, batch_indices, batch, batch_idx: int, dataloader_idx: int) -> None:
         if prediction is None:
-            print("Prediction is None")
+            # print("Prediction is None")
             return
-        print(f"On batch end, len: {len(prediction)}")
+        # print(f"On batch end, len: {len(prediction)}")
         if len(prediction) == 0:
-            print("Prediction is empty")
+            # print("Prediction is empty")
             return
 
         items_pytorch, points_batch, normals_batch, colors_batch, names_batch, indxs = batch
 
         # Use a multiprocessing pool to handle post processing in parallel
         self.post_process(indxs, prediction, items_pytorch, points_batch, normals_batch, colors_batch, names_batch, use_multiprocessing=True)
-        print(f"On batch end, len: {len(prediction)} ... finished")
+        # print(f"On batch end, len: {len(prediction)} ... finished")
 
     def post_process(self, indxs, res, items_pytorch, points_batch, normals_batch, colors_batch, names_batch, use_multiprocessing=False, distance_threshold=10.0, n=4, alpha = 1000.0, slope_alpha = 0.1):
         # print GPU memory usage
@@ -481,7 +481,7 @@ class MyPredictionWriter(BasePredictionWriter):
 
 
 class PointCloudDataset(Dataset):
-    def __init__(self, path="/media/julian/FastSSD/scroll3_surface_points", folder="point_cloud_colorized", dest="/media/julian/HDD8TB/scroll3_surface_points", main_drive="", alternative_drives=[], fix_umbilicus=True, umbilicus_points_path="", start=[0, 0, 0], stop=[16, 17, 29], size = [3, 3, 3], umbilicus_distance_threshold=1500, score_threshold=0.5, batch_size=4, gpus=1, num_processes=3):
+    def __init__(self, path="/media/julian/FastSSD/scroll3_surface_points", folder="point_cloud_colorized", dest="/media/julian/HDD8TB/scroll3_surface_points", main_drive="", alternative_drives=[], fix_umbilicus=True, umbilicus_points_path="", start=[0, 0, 0], stop=[16, 17, 29], size = [3, 3, 3], umbilicus_distance_threshold=1500, score_threshold=0.5, batch_size=4, gpus=1, num_processes=3, recompute=False):
         self.writer = MyPredictionWriter(path, folder, dest, main_drive, alternative_drives, fix_umbilicus, umbilicus_points_path, start, stop, size, umbilicus_distance_threshold, score_threshold, batch_size, gpus, num_processes)
 
         self.path = path
@@ -520,7 +520,7 @@ class PointCloudDataset(Dataset):
         self.progress_file = os.path.join(dest, "progress.json")
         self.config = {"path": path, "folder": folder, "dest": dest, "main_drive": main_drive, "alternative_drives": alternative_drives, "fix_umbilicus": fix_umbilicus, "umbilicus_points_path": umbilicus_points_path, "start": start, "stop": stop, "size": size, "umbilicus_distance_threshold": umbilicus_distance_threshold, "score_threshold": score_threshold, "batch_size": batch_size, "gpus": gpus}
         nr_total_indices = len(self.to_compute_indices)
-        if os.path.exists(self.progress_file):
+        if os.path.exists(self.progress_file) and (not recompute):
             with open(self.progress_file, 'r') as file:
                 progress = json.load(file)
                 if 'config' in progress:
@@ -549,7 +549,7 @@ class PointCloudDataset(Dataset):
         start = start[[0,2,1]]
         min_coord = start * subvolume_size
         # size is size = original size + 1, we want original size * 2 subvolume blocks that overlap
-        ranges = ((size - 1) * 2) * (subvolume_size // 2) # -1 because we want to include the last subvolume for tiling operation from later calls starting at the last subvolume but not save one half filled block
+        ranges = (size - 1) * subvolume_size # -1 because we want to include the last subvolume for tiling operation from later calls starting at the last subvolume but not save one half filled block
         subvolumes_points = []
         subvolumes_normals = []
         subvolumes_colors = []
@@ -561,17 +561,18 @@ class PointCloudDataset(Dataset):
         min_coords = np.min(points, axis=0)
         max_coords = np.max(points, axis=0)
 
-        start = np.floor(min_coords / (subvolume_size//2)) * (subvolume_size//2)
+        start_ = np.floor(min_coords / (subvolume_size//2)) * (subvolume_size//2)
         # Swap axes
         # Max between start and min_coord
-        start = np.maximum(start, min_coord)
+        start = np.maximum(start_, min_coord)
 
         stop_coord = min_coord + ranges
 
-        stop_max_coords = np.ceil(max_coords / (subvolume_size//2)) * (subvolume_size//2) - 1
+        stop_max_coords = np.ceil(max_coords / (subvolume_size//2)) * (subvolume_size//2)
         # Min between stop and max_coord
-        # print(f"Stop_max_coords: {stop_max_coords}, Stop: {stop_coord}, Range: {ranges}")
         stop = np.minimum(stop_max_coords, stop_coord)
+        # print(f"Start_: {start_}, min_coord {min_coord}, Stop_max_coords: {stop_max_coords}, Stop: {stop_coord}, Range: {ranges}, Stop: {stop}")
+        # time.sleep(15)
         # Make blocks of size '50x50x50'
         for x in range(int(start[0]), int(stop[0]), subvolume_size[0] // 2):
             for y in range(int(start[1]), int(stop[1]), subvolume_size[1] // 2):
@@ -667,13 +668,13 @@ def custom_collate_fn(batches):
     # Return a single batch containing all aggregated items
     return items_pytorch_agg, points_batch_agg, normals_batch_agg, colors_batch_agg, names_batch_agg, indxs_agg
 
-def pointcloud_inference(path, folder, dest, main_drive, alternative_drives, fix_umbilicus, umbilicus_points_path, start, stop, size, umbilicus_distance_threshold, score_threshold, batch_size, gpus):
+def pointcloud_inference(path, folder, dest, main_drive, alternative_drives, fix_umbilicus, umbilicus_points_path, start, stop, size, umbilicus_distance_threshold, score_threshold, batch_size, gpus, recompute):
     init()
     model = get_model()
     # model = torch.nn.DataParallel(model)
     # model.to('cuda')  # Move model to GPU
 
-    dataset = PointCloudDataset(path, folder, dest, main_drive, alternative_drives, fix_umbilicus, umbilicus_points_path, start, stop, size, umbilicus_distance_threshold, score_threshold, batch_size)
+    dataset = PointCloudDataset(path, folder, dest, main_drive, alternative_drives, fix_umbilicus, umbilicus_points_path, start, stop, size, umbilicus_distance_threshold, score_threshold, batch_size, recompute=recompute)
     dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=custom_collate_fn, shuffle=False, num_workers=12, prefetch_factor=2)  # Adjust num_workers as per your system
 
     writer = dataset.get_writer()
@@ -715,9 +716,10 @@ def main():
     parser.add_argument("--pointcloud_size", type=int, help="Size of the pointcloud", default=pointcloud_size)
     parser.add_argument("--batch_size", type=int, help="Batch size for Mask3D", default=batch_size)
     parser.add_argument("--gpus", type=int, help="Number of GPUs to use", default=gpus)
+    parser.add_argument("--recompute", action='store_true', help="Flag, recompute all blocks, even if they already exist")
 
     # Parse the arguments
-    args = parser.parse_args()
+    args, unknown = parser.parse_known_args()
     path = args.path
     folder = args.folder
     dest = args.dest
@@ -730,13 +732,14 @@ def main():
     pointcloud_size = args.pointcloud_size
     batch_size = args.batch_size
     gpus = args.gpus
+    recompute = args.recompute
 
-    import sys
-    # Remove command-line arguments for later internal calls to Mask3D
-    sys.argv = [sys.argv[0]]
+    # import sys
+    # # Remove command-line arguments for later internal calls to Mask3D
+    # sys.argv = [sys.argv[0]]
 
     # Compute the surface patches
-    pointcloud_inference(path, folder, dest, main_drive, alternative_ply_drives, fix_umbilicus, umbilicus_points_path, [0, 0, 0], [100, 100, 100], [pointcloud_size, pointcloud_size, pointcloud_size], umbilicus_distance_threshold, score_threshold, batch_size, gpus)
+    pointcloud_inference(path, folder, dest, main_drive, alternative_ply_drives, fix_umbilicus, umbilicus_points_path, [0, 0, 0], [100, 100, 100], [pointcloud_size, pointcloud_size, pointcloud_size], umbilicus_distance_threshold, score_threshold, batch_size, gpus, recompute)
     
 if __name__ == "__main__":
     main()
