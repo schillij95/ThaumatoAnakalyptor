@@ -447,6 +447,8 @@ class GridDataset(Dataset):
             with open(os.path.join("/", pointcloud_base, "computed_blocks.txt"), "r") as f:
                 # load saved tuples with 3 elements
                 computed_blocks = set([eval(line.strip()) for line in f])
+        except FileNotFoundError:
+            print("[INFO]: No computed blocks found.")
         except Exception as e:
             print(f"Error loading computed blocks: {e}")
         return computed_blocks
