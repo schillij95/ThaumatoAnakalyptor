@@ -89,40 +89,13 @@ class MeshDataset(Dataset):
         
     def init_grids_to_process(self):
         # Set up the vertices and triangles
-        triangles_vertices_grid_index_raw = self.triangles_vertices / self.grid_size
-        triangles_vertices_grid_index_rounded = np.round(triangles_vertices_grid_index_raw).astype(int)
-        triangles_vertices_grid_index_mask_r = np.abs(triangles_vertices_grid_index_raw - triangles_vertices_grid_index_rounded) < self.r
-        triangles_vertices_grid_index_r = self.triangles_vertices[triangles_vertices_grid_index_mask_r]
-
-        # find all grids that have vertices in a r-padded bounding box
-        triangles_vertices_grid_index_r_000 = np.floor(triangles_vertices_grid_index_raw).astype(int)
-
-        triangles_vertices_grid_index_r_001 = np.floor((triangles_vertices_grid_index_r + np.array([0, 0, self.r])) / self.grid_size).astype(int)
-        triangles_vertices_grid_index_r_010 = np.floor((triangles_vertices_grid_index_r + np.array([0, self.r, 0])) / self.grid_size).astype(int)
-        triangles_vertices_grid_index_r_100 = np.floor((triangles_vertices_grid_index_r + np.array([self.r, 0, 0])) / self.grid_size).astype(int)
-        triangles_vertices_grid_index_r_011 = np.floor((triangles_vertices_grid_index_r + np.array([0, self.r, self.r])) / self.grid_size).astype(int)
-        triangles_vertices_grid_index_r_101 = np.floor((triangles_vertices_grid_index_r + np.array([self.r, 0, self.r])) / self.grid_size).astype(int)
-        triangles_vertices_grid_index_r_110 = np.floor((triangles_vertices_grid_index_r + np.array([self.r, self.r, 0])) / self.grid_size).astype(int)
-        triangles_vertices_grid_index_r_111 = np.floor((triangles_vertices_grid_index_r + np.array([self.r, self.r, self.r])) / self.grid_size).astype(int)
-        triangles_vertices_grid_index_r_002 = np.floor((triangles_vertices_grid_index_r + np.array([0, 0, -self.r])) / self.grid_size).astype(int)
-        triangles_vertices_grid_index_r_020 = np.floor((triangles_vertices_grid_index_r + np.array([0, -self.r, 0])) / self.grid_size).astype(int)
-        triangles_vertices_grid_index_r_200 = np.floor((triangles_vertices_grid_index_r + np.array([-self.r, 0, 0])) / self.grid_size).astype(int)
-        triangles_vertices_grid_index_r_022 = np.floor((triangles_vertices_grid_index_r + np.array([0, -self.r, -self.r])) / self.grid_size).astype(int)
-        triangles_vertices_grid_index_r_202 = np.floor((triangles_vertices_grid_index_r + np.array([-self.r, 0, -self.r])) / self.grid_size).astype(int)
-        triangles_vertices_grid_index_r_220 = np.floor((triangles_vertices_grid_index_r + np.array([-self.r, -self.r, 0])) / self.grid_size).astype(int)
-        triangles_vertices_grid_index_r_222 = np.floor((triangles_vertices_grid_index_r + np.array([-self.r, -self.r, -self.r])) / self.grid_size).astype(int)
-
-        triangles_vertices_grid_index_r_012 = np.floor((triangles_vertices_grid_index_r + np.array([0, self.r, -self.r])) / self.grid_size).astype(int)
-        triangles_vertices_grid_index_r_021 = np.floor((triangles_vertices_grid_index_r + np.array([0, -self.r, self.r])) / self.grid_size).astype(int)
-        triangles_vertices_grid_index_r_102 = np.floor((triangles_vertices_grid_index_r + np.array([self.r, 0, -self.r])) / self.grid_size).astype(int)
-        triangles_vertices_grid_index_r_201 = np.floor((triangles_vertices_grid_index_r + np.array([-self.r, self.r, 0])) / self.grid_size).astype(int)
-        triangles_vertices_grid_index_r_120 = np.floor((triangles_vertices_grid_index_r + np.array([self.r, -self.r, 0])) / self.grid_size).astype(int)
-        triangles_vertices_grid_index_r_210 = np.floor((triangles_vertices_grid_index_r + np.array([-self.r, 0, self.r])) / self.grid_size).astype(int)
-
-        triangles_vertices_grid_index = np.concatenate([triangles_vertices_grid_index_r_000, triangles_vertices_grid_index_r_001, triangles_vertices_grid_index_r_010, triangles_vertices_grid_index_r_100, triangles_vertices_grid_index_r_011, triangles_vertices_grid_index_r_101, triangles_vertices_grid_index_r_110, triangles_vertices_grid_index_r_111, triangles_vertices_grid_index_r_002, triangles_vertices_grid_index_r_020, triangles_vertices_grid_index_r_200, triangles_vertices_grid_index_r_022, triangles_vertices_grid_index_r_202, triangles_vertices_grid_index_r_220, triangles_vertices_grid_index_r_222, triangles_vertices_grid_index_r_012, triangles_vertices_grid_index_r_021, triangles_vertices_grid_index_r_102, triangles_vertices_grid_index_r_201, triangles_vertices_grid_index_r_120, triangles_vertices_grid_index_r_210])
-
-        # grids that contain at least one triangle
-        grids_to_process = set(map(tuple, triangles_vertices_grid_index.reshape(-1, 3)))
+        triangles_vertices_grid_index = self.triangles_vertices / self.grid_size
+        
+        grids_to_process = set()
+        for x in range(-1, 2):
+            for y in range(-1, 2):
+                for z in range(-1, 2):
+                    grids_to_process.update(map(tuple, np.floor((triangles_vertices_grid_index + np.array([x*self.r, y*self.r, z*self.r])) / self.grid_size).astype(int).reshape(-1, 3)))
         
         grids_to_process = sorted(list(grids_to_process)) # Sort the blocks to process for deterministic behavior
         return grids_to_process
@@ -132,9 +105,9 @@ class MeshDataset(Dataset):
     
     def extract_triangles_mask(self, grid_index):
         # select all triangles that have at least one vertice in the grid with a r-padded bounding box
-        selected_triangles_mask_padded = np.any(np.abs(self.triangles_vertices / self.grid_size - np.array(grid_index)) <= self.r, axis=2)
-        selected_triangles_mask_floored = np.any(np.floor(self.triangles_vertices / self.grid_size) == np.array(grid_index), axis=2)
-        selected_triangles_mask = np.logical_or(selected_triangles_mask_padded, selected_triangles_mask_floored)
+        # grid_size * grid_index - r <= vertice <= grid_size * grid_index + r
+        selected_triangles_mask = np.any(np.all(np.logical_and(self.triangles_vertices >= np.array(grid_index) * self.grid_size - self.r, self.triangles_vertices <= np.array(grid_index) * self.grid_size + self.r), axis=2), axis=1)
+
         return selected_triangles_mask
     
     def load_grid_cell(self, grid_index, uint8=False):
