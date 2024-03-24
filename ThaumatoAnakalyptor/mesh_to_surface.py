@@ -12,7 +12,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import BasePredictionWriter
 from PIL import Image
 Image.MAX_IMAGE_PIXELS = None
-from .grid_to_pointcloud import load_grid
+import tifffile
 
 
 class MyPredictionWriter(BasePredictionWriter):
@@ -132,14 +132,25 @@ class MeshDataset(Dataset):
     
     def extract_triangles_mask(self, grid_index):
         # select all triangles that have at least one vertice in the grid with a r-padded bounding box
-        selected_triangles_mask_padded = np.any(np.abs(self.triangles_vertices / self.grid_size - np.array(grid_index)) < self.r, axis=2)
+        selected_triangles_mask_padded = np.any(np.abs(self.triangles_vertices / self.grid_size - np.array(grid_index)) <= self.r, axis=2)
         selected_triangles_mask_floored = np.any(np.floor(self.triangles_vertices / self.grid_size) == np.array(grid_index), axis=2)
         selected_triangles_mask = np.logical_or(selected_triangles_mask_padded, selected_triangles_mask_floored)
         return selected_triangles_mask
     
     def load_grid_cell(self, grid_index, uint8=False):
-        # load grid cell from disk
-        grid_cell = load_grid(self.grid_cell_template, grid_index, grid_block_size=self.grid_size, grid_block_size=self.grid_size, uint8=uint8)
+        path = self.grid_cell_template.format(grid_index[0]+1, grid_index[1]+1, grid_index[2]+1)
+
+        # Check if the file exists
+        if not os.path.exists(path):
+            # print(f"File {path} does not exist.")
+            return None
+
+        # Read the image
+        with tifffile.TiffFile(path) as tif:
+            grid_cell = tif.asarray()
+
+        if uint8:
+            grid_cell = np.uint8(grid_cell//256)
         return grid_cell
     
     def __len__(self):
