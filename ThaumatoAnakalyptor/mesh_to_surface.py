@@ -174,52 +174,24 @@ class MeshDataset(Dataset):
         return grid_cell_tensor, vertices_tensor, normals_tensor, uv_tensor
 
 class PPMAndTextureModel(pl.LightningModule):
-    def __init__(self):
+    def __init__(self, r=32):
         print("instantiating model")
+        self.r = r
         super().__init__()
 
     def ppm(self, pts, tri):
-        # pts B x 2
-        # tri_pts 3 x 2
+        # pts T x W*H x 2
+        # tri_pts T x 3 x 2
         # triangles 3
-        v0 = tri[2, :] - tri[0, :]
-        v1 = tri[1, :] - tri[0, :]
-        v2 = pts - tri[0, :]
+        v0 = tri[:, 2, :].unsqueeze(1) - tri[:, 0, :].unsqueeze(1)
+        v1 = tri[:, 1, :].unsqueeze(1) - tri[:, 0, :].unsqueeze(1)
+        v2 = pts - tri[:, 0, :].unsqueeze(1)
 
-        dot00 = torch.dot(v0, v0)
-        dot01 = torch.dot(v0, v1)
-        dot11 = torch.dot(v1, v1)
-        dot02 = torch.dot(v0, v2)
-        dot12 = torch.dot(v1, v2)
-
-        invDenom = 1 / (dot00 * dot11 - dot01.pow(2))
-        u = (dot11 * dot02 - dot01 * dot12) * invDenom
-        v = (dot00 * dot12 - dot01 * dot02) * invDenom
-
-        is_inside = (u >= 0) & (v >= 0) & ((u + v) <= 1 )
-
-        u_vals = u[is_inside]
-        v_vals = v[is_inside]
-        w_vals = 1 - u_vals - v_vals
-
-        bary_coords = torch.stack([u_vals, v_vals, w_vals], dim=1)
-        bary_coords = normalize(bary_coords, p=1, dim=1)
-
-        return bary_coords
-
-    def points_in_triangles(self, pts, tri_pts):
-        # pts B x 2
-        # tri_pts tri x 3 x 2
-        # triangles tri x 3
-        v0 = tri_pts[:, 2, :] - tri_pts[:, 0, :]
-        v1 = tri_pts[:, 1, :] - tri_pts[:, 0, :]
-        v2 = pts - tri_pts[:, 0, :]
-
-        dot00 = v0.pow(2).sum(dim=1)
-        dot01 = (v0 * v1).sum(dim=1)
-        dot11 = v1.pow(2).sum(dim=1)
-        dot02 = (v2 * v0).sum(dim=1)
-        dot12 = (v2 * v1).sum(dim=1)
+        dot00 = v0.pow(2).sum(dim=2)
+        dot01 = (v0 * v1).sum(dim=2)
+        dot11 = v1.pow(2).sum(dim=2)
+        dot02 = (v2 * v0).sum(dim=2)
+        dot12 = (v2 * v1).sum(dim=2)
 
         invDenom = 1 / (dot00 * dot11 - dot01.pow(2))
         u = (dot11 * dot02 - dot01 * dot12) * invDenom
@@ -227,16 +199,12 @@ class PPMAndTextureModel(pl.LightningModule):
 
         is_inside = (u >= 0) & (v >= 0) & ((u + v) <= 1 )
 
-        bary_coords = torch.zeros((u.shape[0], 3), dtype=torch.float64, device=pts.device)
-        triangle_indices = torch.where(is_inside, is_inside.float().argmax(dim=0), torch.tensor(-1, device=pts.device, dtype=torch.int32))
-        inside_mask = triangle_indices != -1
+        w = 1 - u - v
 
-        u_vals = torch.gather(u[inside_mask], 0, triangle_indices[inside_mask])
-        v_vals = torch.gather(v[inside_mask], 0, triangle_indices[inside_mask])
-        w_vals = 1 - u_vals - v_vals
-        bary_coords[inside_mask] = torch.stack([u_vals, v_vals, w_vals], dim=1)
-        bary_coords = normalize(bary_coords, p=1, dim=1)
-        return triangle_indices, bary_coords
+        bary_coords = torch.stack([u, v, w], dim=2)
+        bary_coords = normalize(bary_coords, p=1, dim=2)
+
+        return bary_coords, is_inside
     
     def create_grid_points_tensor(self, starting_points, w, h):
         device = starting_points.device
@@ -262,7 +230,7 @@ class PPMAndTextureModel(pl.LightningModule):
 
     def forward(self, x):
         new_order = [2,1,0]
-        # grid_cell: B x W x W x W, vertices: B x T x 3 x 3, normals: B x T x 3 x 3, uv_coords_triangles: B x T x 3 x 2
+        # grid_cell: B x W x W x W, vertices: T x 3 x 3, normals: T x 3 x 3, uv_coords_triangles: T x 3 x 2, grid_index: T
         grid_cells, vertices, normals, uv_coords_triangles, grid_index = x
         
         # Handle the case where the grid cells are empty
@@ -291,42 +259,35 @@ class PPMAndTextureModel(pl.LightningModule):
         # print(f"Starting points: {starting_points.shape}", end="\n")
 
         # Step 2: Generate Meshgrids for All Triangles
-        # create grid points tensor
+        # create grid points tensor: T x W*H x 2
         grid_points = self.create_grid_points_tensor(min_uv, max_diff_uv[0], max_diff_uv[1])
 
-        # Step 3: Copmute Barycentric Coordinates for All Triangles
-        baryicentric_coords = self.ppm(grid_points, uv_coords_triangles)
+        # Step 3: Compute Barycentric Coordinates for all Triangles
+        baryicentric_coords, is_inside = self.ppm(grid_points, uv_coords_triangles)
+        # baryicentric_coords: T x W*H x 3, is_inside: T x W*H
 
+        print(f"Vertices: {vertices.shape}, Norms: {normals.shape}, Bary: {baryicentric_coords.shape}", end="\n")
+        # vertices: T x 3 x 3, normals: T x 3 x 3, baryicentric_coords: T x W*H x 3
+        coords = torch.einsum('ijk,isj->isk', vertices, baryicentric_coords).squeeze()
+        norms = normalize(torch.einsum('ijk,isj->isk', normals, baryicentric_coords).squeeze(),dim=1)
 
-        grid_indices = []  # List to collect the grid indices
+        # coords: T x W*H x 3, norms: T x W*H x 3
+        print(f"Coords: {coords.shape}, Norms: {norms.shape}", end="\n")
 
-        # # Step 2: Generate Meshgrids for All Triangles
-        # for i in range(grid_cell.shape[0]):
-        #     ppm_triangle = []  # List to collect all grid points
-        #     for u in range(uv_coords_triangles[i].shape[0]):
-        #         # Create a meshgrid of points within the AABB
-        #         u_range = torch.arange(start=min_uv[i][u][0], end=max_uv[i][u][0]).int()
-        #         v_range = torch.arange(start=min_uv[i][u][1], end=max_uv[i][u][1]).int()
-        #         U, V = torch.meshgrid(u_range, v_range, indexing='xy')
-        #         grid_points = torch.stack([U.flatten(), V.flatten()], dim=1)
+        # Step 4: Compute the 3D coordinates for every r
+        r_arange = torch.arange(-self.r, self.r+1, device=coords.device).reshape(1, 1, -1, 1)
 
-        #         baryicentric_coords = self.ppm(grid_points, uv_coords_triangles[i])
-
-        #         coords = torch.einsum('ij,i->i', vertices[i][u], baryicentric_coords)
-        #         norms = normalize(torch.einsum('ij,i->i', normals[i][u], baryicentric_coords),dim=1)
-                
-        #         ppm_triangle.append(baryicentric_coords)
+        # coords_r: T x W*H x 2*r+1 x 3
+        coords_r = coords.unsqueeze(-2) + r_arange * norms.unsqueeze(-2)
             
-            
+        # Step 5: Extract the values from the grid cells
 
 
-        # # Combine all points into a single tensor
-        # combined_points = torch.cat(all_points, dim=0)
 
-        # # Step 3: Remove Duplicate Points
-        # unique_points, _ = torch.unique(combined_points, dim=0, return_inverse=True)
+        # Step 6: Flatten and filter out the points that are outside the triangles or outside the images
 
-        # TODO
+
+        # Return the 3D Surface Volume coordinates and the values
         return None
     
 # Custom collation function
@@ -365,15 +326,15 @@ def custom_collate_fn(batch):
     return grid_cells, vertices, normals, uv_coords_triangles, grid_index
     
     
-def ppm_and_texture(obj_path, grid_cell_path, grid_size=500, gpus=1, batch_size=1):
+def ppm_and_texture(obj_path, grid_cell_path, grid_size=500, gpus=1, batch_size=1, r=32):
     grid_cell_template = os.path.join(grid_cell_path, "cell_yxz_{:03}_{:03}_{:03}.tif")
-    dataset = MeshDataset(obj_path, grid_cell_template, grid_size=grid_size)
+    dataset = MeshDataset(obj_path, grid_cell_template, grid_size=grid_size, r=r)
     num_threads = multiprocessing.cpu_count() // int(1.5 * int(gpus))
     num_treads_for_gpus = 5
     num_workers = min(num_threads, num_treads_for_gpus)
     num_workers = max(num_workers, 1)
     dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=custom_collate_fn, shuffle=False, num_workers=num_workers, prefetch_factor=3)
-    model = PPMAndTextureModel()
+    model = PPMAndTextureModel(r)
     
     writer = dataset.get_writer()
     trainer = pl.Trainer(callbacks=[writer], gpus=int(gpus), strategy="ddp")
@@ -434,6 +395,7 @@ if __name__ == '__main__':
     parser.add_argument('obj', type=str)
     parser.add_argument('grid_cell', type=str)
     parser.add_argument('--gpus', type=int, default=1)
+    parser.add_argument('--r', type=int, default=32)
     args = parser.parse_args()
 
-    ppm_and_texture(args.obj, gpus=args.gpus, grid_cell_path=args.grid_cell)
+    ppm_and_texture(args.obj, gpus=args.gpus, grid_cell_path=args.grid_cell, r=args.r)
