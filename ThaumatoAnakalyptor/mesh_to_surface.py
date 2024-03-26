@@ -11,15 +11,20 @@ from torch.utils.data import Dataset, DataLoader
 from torch.nn.functional import normalize
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import BasePredictionWriter
+from .rendering_utils.interpolate_image_3d import extract_from_image_4d
 from PIL import Image
 Image.MAX_IMAGE_PIXELS = None
 import tifffile
 
 
 class MyPredictionWriter(BasePredictionWriter):
-    def __init__(self, save_path):
+    def __init__(self, save_path, image_size, r):
         super().__init__(write_interval="batch")  # or "epoch" for end of an epoch
         self.save_path = save_path
+        self.image_size = image_size
+        self.r = r
+        # self.mmap_npz = np.memmap(os.path.join(os.path.dirname(save_path), "prediction.npz"), mode='w+', shape=(0, 3), dtype=np.float32)
+        self.surface_volume_np = np.zeros((2*r+1, image_size[0], image_size[1]), dtype=np.float32)
     
     def write_on_batch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, prediction, batch_indices, batch, batch_idx: int, dataloader_idx: int) -> None:
         if prediction is None:
@@ -27,20 +32,35 @@ class MyPredictionWriter(BasePredictionWriter):
         if len(prediction) == 0:
             return
 
-        indexes_2d, values = prediction
+        values, indexes_3d = prediction
+        indexes_3d = indexes_3d.cpu().numpy().astype(np.int32)
+        values = values.cpu().numpy().astype(np.float32)
+        if len(indexes_3d) == 0:
+            return
+
+        # print(f"Writing with shapes {indexes_3d.shape}, {values.shape}", end="\n")
+        # print(f"Maximum Coordinates: {np.max(indexes_3d, axis=0)}, Surface volume size: {self.surface_volume_np.shape}", end="\n")
+        # save into surface_volume_np
+        # for i in range(indexes_3d.shape[0]):
+        #     x, y, z = indexes_3d[i]
+        #     self.surface_volume_np[z, x, y] = values[i]
+        print("now vectorized")
+        # vectorized version
+        self.surface_volume_np[indexes_3d[:, 2], indexes_3d[:, 0], indexes_3d[:, 1]] = values
         print("Writing prediction to disk")
-        # TODO: Save the prediction to the save_path
-        
+        # print(f"Sum of values: {np.sum(values)}, sum of surface volume: {np.sum(self.surface_volume_np)}", end="\n")
+        # print(f"Sum of values: {np.sum(values)}", end="\n")
         
 class MeshDataset(Dataset):
     """Dataset class for rendering a mesh."""
-    def __init__(self, path, grid_cell_template, grid_size=500, r=32):
+    def __init__(self, path, grid_cell_template, grid_size=500, r=32, max_side_triangle=20):
         """Initialize the dataset."""
-        self.writer = MyPredictionWriter(os.path.join(path, "layers"))
         self.path = path
         self.grid_cell_template = grid_cell_template
         self.r = r
+        self.max_side_triangle = max_side_triangle
         self.load_mesh(path)
+        self.writer = MyPredictionWriter(os.path.join(path, "layers"), self.image_size, r)
 
         self.grid_size = grid_size
         self.grids_to_process = self.init_grids_to_process()
@@ -104,10 +124,146 @@ class MeshDataset(Dataset):
         uv = np.asarray(self.mesh.triangle_uvs).reshape(-1, 3, 2)
         # scale numpy UV coordinates to the image size
         self.uv = uv * np.array([y_size, x_size])
+        self.image_size = (y_size, x_size)
 
         # vertices of triangles
         self.triangles_vertices = self.vertices[self.triangles]
         self.triangles_normals = self.normals[self.triangles]
+
+        self.adjust_triangle_sizes()
+
+    def adjust_triangle_sizes(self):
+        triangles_vertices = self.triangles_vertices
+        triangles_normals = self.triangles_normals
+        uv = self.uv
+
+        print(f"Original triangles: {triangles_vertices.shape[0]}, {triangles_normals.shape[0]}, {uv.shape[0]}", end="\n")
+        # split the triangles that are too big as per the max_side_triangle parameter
+        # compute the size of each triangle in x and y
+        # side lengths for all triangles: T x 3
+        uv_good = []
+        triangles_vertices_good = []
+        triangles_normals_good = []
+
+        while True:
+            triangle_min_uv = np.min(uv, axis=1)
+            triangle_max_uv = np.max(uv, axis=1)
+            side_lengths = triangle_max_uv - triangle_min_uv
+            print(f"Side lengths: {side_lengths.shape}", end="\n")
+            mask_large_side = np.any(side_lengths > self.max_side_triangle, axis=1)
+            # if no triangle is too large, we are done
+            if not np.any(mask_large_side):
+                break
+
+            uv_good_ = uv[np.logical_not(mask_large_side)]
+            triangles_vertices_good_ = triangles_vertices[np.logical_not(mask_large_side)]
+            triangles_normals_good_ = triangles_normals[np.logical_not(mask_large_side)]
+
+            # Hold on to the triangles that are good
+            uv_good.append(uv_good_)
+            triangles_vertices_good.append(triangles_vertices_good_)
+            triangles_normals_good.append(triangles_normals_good_)
+
+            uv_large = uv[mask_large_side]
+            side_lengths = side_lengths[mask_large_side]
+            triangle_min_uv = np.expand_dims(triangle_min_uv[mask_large_side], axis=1)
+            triangle_max_uv = np.expand_dims(triangle_max_uv[mask_large_side], axis=1)
+            triangles_vertices_large = triangles_vertices[mask_large_side]
+            triangles_normals_large = triangles_normals[mask_large_side]
+
+            mask_larger_side_x = side_lengths[:, 0] >= side_lengths[:, 1]
+            mask_larger_side_y = np.logical_not(mask_larger_side_x)
+
+            assert np.sum(mask_larger_side_x) + np.sum(mask_larger_side_y) == side_lengths.shape[0], "All triangles should be classified"
+
+            mask_uv_x_min = uv_large[:, :, 0] == triangle_min_uv[:, :, 0]
+            mask_uv_x_max = uv_large[:, :, 0] == triangle_max_uv[:, :, 0]
+            mask_uv_y_min = uv_large[:, :, 1] == triangle_min_uv[:, :, 1]
+            mask_uv_y_max = uv_large[:, :, 1] == triangle_max_uv[:, :, 1]
+
+            assert np.all(np.sum(mask_uv_x_min, axis=1) >= 1), "At least one vertex should be selected per triangle"
+            assert np.all(np.sum(mask_uv_x_max, axis=1) >= 1), "At least one vertex should be selected per triangle"
+            assert np.all(np.sum(mask_uv_y_min, axis=1) >= 1), "At least one vertex should be selected per triangle"
+            assert np.all(np.sum(mask_uv_y_max, axis=1) >= 1), "At least one vertex should be selected per triangle"
+
+            mask_x_min = np.logical_and(mask_larger_side_x[:, None], mask_uv_x_min)
+            mask_x_max = np.logical_and(mask_larger_side_x[:, None], mask_uv_x_max)
+            mask_y_min = np.logical_and(mask_larger_side_y[:, None], mask_uv_y_min)
+            mask_y_max = np.logical_and(mask_larger_side_y[:, None], mask_uv_y_max)
+
+            # maximum one true value per triangle
+            # Identify the first vertex that meets the condition in each triangle
+            idx_x_min = np.argmax(mask_x_min, axis=1)
+            idx_x_max = np.argmax(mask_x_max, axis=1)
+            idx_y_min = np.argmax(mask_y_min, axis=1)
+            idx_y_max = np.argmax(mask_y_max, axis=1)
+
+            ix = np.arange(mask_x_min.shape[0])
+
+            mask_x_min_ = np.zeros_like(mask_x_min)
+            mask_x_max_ = np.zeros_like(mask_x_max)
+            mask_y_min_ = np.zeros_like(mask_y_min)
+            mask_y_max_ = np.zeros_like(mask_y_max)
+
+            mask_x_min_[ix, idx_x_min] = True
+            mask_x_max_[ix, idx_x_max] = True
+            mask_y_min_[ix, idx_y_min] = True
+            mask_y_max_[ix, idx_y_max] = True
+
+            assert np.all(np.sum(mask_x_min_, axis=1) >= 1), "Exactly one vertex should be selected per triangle"
+            assert np.all(np.sum(mask_x_max_, axis=1) >= 1), "Exactly one vertex should be selected per triangle"
+            assert np.all(np.sum(mask_y_min_, axis=1) >= 1), "Exactly one vertex should be selected per triangle"
+            assert np.all(np.sum(mask_y_max_, axis=1) >= 1), "Exactly one vertex should be selected per triangle"
+
+            mask_x_min__ = np.logical_and(mask_x_min, mask_x_min_)
+            mask_x_max__ = np.logical_and(mask_x_max, mask_x_max_)
+            mask_y_min__ = np.logical_and(mask_y_min, mask_y_min_)
+            mask_y_max__ = np.logical_and(mask_y_max, mask_y_max_)
+
+            assert np.all(np.sum(mask_x_min__, axis=1) <= 1), "At most one vertex should be selected per triangle"
+            assert np.all(np.sum(mask_x_max__, axis=1) <= 1), "At most one vertex should be selected per triangle"
+            assert np.all(np.sum(mask_y_min__, axis=1) <= 1), "At most one vertex should be selected per triangle"
+            assert np.all(np.sum(mask_y_max__, axis=1) <= 1), "At most one vertex should be selected per triangle"
+
+            mask_x = np.logical_or(mask_x_min__, mask_x_max__)
+            mask_y = np.logical_or(mask_y_min__, mask_y_max__)
+            mask_min = np.logical_or(mask_x_min__, mask_y_min__)
+            mask_max = np.logical_or(mask_x_max__, mask_y_max__)
+
+            mask = np.logical_or(mask_x, mask_y)
+
+            assert np.all(np.sum(mask, axis=1) == 2), "Exactly two vertices should be selected per triangle"
+
+            # Create new vertices and normals and uvs
+            new_vertices = (triangles_vertices_large[mask_min] + triangles_vertices_large[mask_max]) / 2
+            new_normals = (triangles_normals_large[mask_min] + triangles_normals_large[mask_max]) / 2
+            new_uv = (uv_large[mask_min] + uv_large[mask_max]) / 2
+
+            new_triangles_vertices_0 = np.copy(triangles_vertices_large)
+            new_triangles_vertices_0[mask_min] = new_vertices
+            new_triangles_normals_0 = np.copy(triangles_normals_large)
+            new_triangles_normals_0[mask_min] = new_normals
+
+            new_triangles_vertices_1 = np.copy(triangles_vertices_large)
+            new_triangles_vertices_1[mask_max] = new_vertices
+            new_triangles_normals_1 = np.copy(triangles_normals_large)
+            new_triangles_normals_1[mask_max] = new_normals
+
+            new_uv_0 = np.copy(uv_large)
+            new_uv_0[mask_min] = new_uv
+            new_uv_1 = np.copy(uv_large)
+            new_uv_1[mask_max] = new_uv
+
+            # Set up for the next iteration
+            triangles_vertices = np.concatenate((new_triangles_vertices_0, new_triangles_vertices_1), axis=0)
+            triangles_normals = np.concatenate((new_triangles_normals_0, new_triangles_normals_1), axis=0)
+            uv = np.concatenate((new_uv_0, new_uv_1), axis=0)
+
+        self.triangles_vertices = np.concatenate(triangles_vertices_good, axis=0)
+        self.triangles_normals = np.concatenate(triangles_normals_good, axis=0)
+        self.uv = np.concatenate(uv_good, axis=0)
+
+        print(f"Adjusted triangles: {self.triangles_vertices.shape[0]}, {self.triangles_normals.shape[0]}, {self.uv.shape[0]}", end="\n")
         
     def init_grids_to_process(self):
         grids_to_process = set()
@@ -161,7 +317,7 @@ class MeshDataset(Dataset):
         # load grid cell from disk
         grid_cell = self.load_grid_cell(grid_index)
         if grid_cell is None:
-            return None, None, None, None
+            return None, None, None, None, None
         grid_cell = grid_cell.astype(np.float32)
 
         # Convert NumPy arrays to PyTorch tensors
@@ -169,8 +325,9 @@ class MeshDataset(Dataset):
         normals_tensor = torch.tensor(normals, dtype=torch.float32)
         uv_tensor = torch.tensor(uv, dtype=torch.float32)
         grid_cell_tensor = torch.tensor(grid_cell, dtype=torch.float32)
+        grid_coord = torch.tensor(np.array(grid_index) * self.grid_size, dtype=torch.int32)
 
-        return grid_cell_tensor, vertices_tensor, normals_tensor, uv_tensor
+        return grid_coord, grid_cell_tensor, vertices_tensor, normals_tensor, uv_tensor
 
 class PPMAndTextureModel(pl.LightningModule):
     def __init__(self, r=32):
@@ -227,13 +384,15 @@ class PPMAndTextureModel(pl.LightningModule):
         
         return grid_points
 
-    def extract_from_image_3d(self, image, coordinates, grid_index):
-        return None
+    def extract_from_image_4d(self, image, grid_index, coordinates):
+        # image: T x W x H x D, coordinates: S x 4
+        values = extract_from_image_4d(image, grid_index, coordinates)
+        return values
 
     def forward(self, x):
         new_order = [2,1,0]
         # grid_cell: B x W x W x W, vertices: T x 3 x 3, normals: T x 3 x 3, uv_coords_triangles: T x 3 x 2, grid_index: T
-        grid_cells, vertices, normals, uv_coords_triangles, grid_index = x
+        grid_coords, grid_cells, vertices, normals, uv_coords_triangles, grid_index = x
         
         # Handle the case where the grid cells are empty
         if grid_cells is None:
@@ -279,31 +438,50 @@ class PPMAndTextureModel(pl.LightningModule):
         # broadcast grid index to T x W*H -> S
         grid_index = grid_index.unsqueeze(-1).expand(-1, baryicentric_coords.shape[1])
         grid_index = grid_index[is_inside]
+        # broadcast grid_coords to T x W*H x 3 -> S x 3
+        grid_coords = grid_coords.unsqueeze(-2).expand(-1, baryicentric_coords.shape[1], -1)
+        grid_coords = grid_coords[is_inside]
+
         del baryicentric_coords
         # coords: S x 3, norms: S x 3
         coords = coords[is_inside]
         norms = norms[is_inside]
 
+        grid_coords_end = grid_coords + torch.tensor(grid_cells.shape[1:4], device=grid_coords.device).unsqueeze(0).expand(grid_coords.shape[0], -1)
 
-        # Step 4: Compute the 3D coordinates for every r
+        # Step 4: Filter out the points that are outside the grid_cells
+        mask_coords = (coords[:, 0] >= grid_coords[:, 0]) & (coords[:, 0] < grid_coords_end[:, 0]) & (coords[:, 1] >= grid_coords[:, 1]) & (coords[:, 1] < grid_coords_end[:, 1]) & (coords[:, 2] >= grid_coords[:, 2]) & (coords[:, 2] < grid_coords_end[:, 2])
+
+        # coords: S' x 3, norms: S' x 3
+        coords = coords[mask_coords]
+        norms = norms[mask_coords]
+        grid_points = grid_points[mask_coords] # S' x 2
+        grid_index = grid_index[mask_coords] # S'
+        grid_coords = grid_coords[mask_coords] # S' x 3
+
+        # Step 5: Compute the 3D coordinates for every r
+        coords = coords - grid_coords
         r_arange = torch.arange(-self.r, self.r+1, device=coords.device).reshape(1, -1, 1)
 
         # coords_r: S x 2*r+1 x 3, grid_points: S x 2 -> S x 3
-        coords = coords.unsqueeze(-2) + r_arange * norms.unsqueeze(-2)
+        coords = coords.unsqueeze(-2).expand(-1, 2*self.r+1, -1) + r_arange * norms.unsqueeze(-2).expand(-1, 2*self.r+1, -1)
+        # Combine Coordinates and Grid Index into S' x 4
+        grid_index = grid_index.unsqueeze(-1).unsqueeze(-1).expand(-1, 2*self.r+1, -1)
+
         # Expand and add 3rd dimension to grid points
         grid_points = grid_points.unsqueeze(-2).expand(-1, 2*self.r+1, -1)
         r_arange = self.r+r_arange.expand(grid_points.shape[0], -1, -1)
         grid_points = torch.cat((grid_points, r_arange), dim=-1)
         print(f"Coords: {coords.shape}, Grid Points: {grid_points.shape}", end="\n")
-        del norms, r_arange
+        del norms, r_arange, is_inside
 
         # Step 5: Extract the values from the grid cells
-        values = self.extract_from_image_3d(grid_cells, coords, grid_index)
+        values = self.extract_from_image_4d(grid_cells, grid_index, coords)
         del coords, grid_cells
 
-        # Step 6: Flatten and filter out the points that are outside the images
-        values = values
-        grid_points = grid_points
+        # Step 6: Return the 3D Surface Volume coordinates and the values
+        values = values.reshape(-1)
+        grid_points = grid_points.reshape(-1, 3)
 
         # Return the 3D Surface Volume coordinates and the values
         return values, grid_points
@@ -316,12 +494,13 @@ def custom_collate_fn(batch):
     normals = []
     uv_coords_triangles = []
     grid_index = []
+    grid_coords = []
 
     # Loop through each batch and aggregate its items
     for i, items in enumerate(batch):
         if items is None:
             continue
-        grid_cell, vertice, normal, uv_coords_triangle = items
+        grid_coord, grid_cell, vertice, normal, uv_coords_triangle = items
         if grid_cell is None:
             continue
         grid_cells.append(grid_cell)
@@ -329,9 +508,11 @@ def custom_collate_fn(batch):
         normals.append(normal)
         uv_coords_triangles.append(uv_coords_triangle)
         grid_index.extend([i]*vertice.shape[0])
+        grid_coord = grid_coord.unsqueeze(0).expand(vertice.shape[0], -1)
+        grid_coords.extend(grid_coord)
         
     if len(grid_cells) == 0:
-        return None, None, None, None
+        return None, None, None, None, None, None
         
     # Turn the lists into tensors
     grid_cells = torch.stack(grid_cells, dim=0)
@@ -339,19 +520,20 @@ def custom_collate_fn(batch):
     normals = torch.concat(normals, dim=0)
     uv_coords_triangles = torch.concat(uv_coords_triangles, dim=0)
     grid_index = torch.tensor(grid_index, dtype=torch.int32)
+    grid_coords = torch.stack(grid_coords, dim=0)
 
     # Return a single batch containing all aggregated items
-    return grid_cells, vertices, normals, uv_coords_triangles, grid_index
+    return grid_coords, grid_cells, vertices, normals, uv_coords_triangles, grid_index
     
     
 def ppm_and_texture(obj_path, grid_cell_path, grid_size=500, gpus=1, batch_size=1, r=32):
     grid_cell_template = os.path.join(grid_cell_path, "cell_yxz_{:03}_{:03}_{:03}.tif")
     dataset = MeshDataset(obj_path, grid_cell_template, grid_size=grid_size, r=r)
     num_threads = multiprocessing.cpu_count() // int(1.5 * int(gpus))
-    num_treads_for_gpus = 5
+    num_treads_for_gpus = 12
     num_workers = min(num_threads, num_treads_for_gpus)
     num_workers = max(num_workers, 1)
-    dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=custom_collate_fn, shuffle=False, num_workers=num_workers, prefetch_factor=3)
+    dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=custom_collate_fn, shuffle=False, num_workers=num_workers, prefetch_factor=2)
     model = PPMAndTextureModel(r)
     
     writer = dataset.get_writer()
