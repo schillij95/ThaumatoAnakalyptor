@@ -15,7 +15,7 @@ from .rendering_utils.interpolate_image_3d import extract_from_image_4d
 from PIL import Image
 Image.MAX_IMAGE_PIXELS = None
 import tifffile
-
+import cv2
 
 class MyPredictionWriter(BasePredictionWriter):
     def __init__(self, save_path, image_size, r):
@@ -24,9 +24,10 @@ class MyPredictionWriter(BasePredictionWriter):
         self.image_size = image_size
         self.r = r
         # self.mmap_npz = np.memmap(os.path.join(os.path.dirname(save_path), "prediction.npz"), mode='w+', shape=(0, 3), dtype=np.float32)
-        self.surface_volume_np = np.zeros((2*r+1, image_size[0], image_size[1]), dtype=np.float32)
+        self.surface_volume_np = np.zeros((2*r+1, image_size[0], image_size[1]), dtype=np.uint16)
     
     def write_on_batch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, prediction, batch_indices, batch, batch_idx: int, dataloader_idx: int) -> None:
+        # print("Writing to Numpy")
         if prediction is None:
             return
         if len(prediction) == 0:
@@ -34,22 +35,31 @@ class MyPredictionWriter(BasePredictionWriter):
 
         values, indexes_3d = prediction
         indexes_3d = indexes_3d.cpu().numpy().astype(np.int32)
-        values = values.cpu().numpy().astype(np.float32)
-        if len(indexes_3d) == 0:
+        values = values.cpu().numpy().astype(np.uint16)
+        if indexes_3d.shape[0] == 0:
             return
 
-        # print(f"Writing with shapes {indexes_3d.shape}, {values.shape}", end="\n")
-        # print(f"Maximum Coordinates: {np.max(indexes_3d, axis=0)}, Surface volume size: {self.surface_volume_np.shape}", end="\n")
         # save into surface_volume_np
-        # for i in range(indexes_3d.shape[0]):
-        #     x, y, z = indexes_3d[i]
-        #     self.surface_volume_np[z, x, y] = values[i]
-        print("now vectorized")
-        # vectorized version
-        self.surface_volume_np[indexes_3d[:, 2], indexes_3d[:, 0], indexes_3d[:, 1]] = values
+        self.surface_volume_np[indexes_3d[:, 0], indexes_3d[:, 1], indexes_3d[:, 2]] = values
+
+        # display progress cv2.imshow
+        image = (self.surface_volume_np[self.r].astype(np.float32) / 65535)
+        image = cv2.resize(image, (1000, (1000 * image.shape[0])//image.shape[1]))
+        image = image.T
+        image = image[::-1, :]
+        cv2.imshow("Surface Volume", image)
+        cv2.waitKey(1)
+
+    def write_to_disk(self):
         print("Writing prediction to disk")
-        # print(f"Sum of values: {np.sum(values)}, sum of surface volume: {np.sum(self.surface_volume_np)}", end="\n")
-        # print(f"Sum of values: {np.sum(values)}", end="\n")
+        # Make folder if it does not exist
+        os.makedirs(self.save_path, exist_ok=True)
+        # save to disk each layer as tif
+        for i in range(self.surface_volume_np.shape[0]):
+            if i != 32: continue
+            # string 0 padded to len of str(self.surface_volume_np.shape[0])
+            i_str = str(i).zfill(len(str(self.surface_volume_np.shape[0])))
+            tifffile.imsave(os.path.join(self.save_path, f"{i_str}.tif"), self.surface_volume_np[i])
         
 class MeshDataset(Dataset):
     """Dataset class for rendering a mesh."""
@@ -60,10 +70,13 @@ class MeshDataset(Dataset):
         self.r = r
         self.max_side_triangle = max_side_triangle
         self.load_mesh(path)
-        self.writer = MyPredictionWriter(os.path.join(path, "layers"), self.image_size, r)
+        write_path = os.path.join(os.path.dirname(path), "layers")
+        self.writer = MyPredictionWriter(write_path, self.image_size, r)
 
         self.grid_size = grid_size
         self.grids_to_process = self.init_grids_to_process()
+
+        self.adjust_triangle_sizes()
 
     def parse_mtl_for_texture_filenames(self, mtl_filepath):
         texture_filenames = []
@@ -129,8 +142,6 @@ class MeshDataset(Dataset):
         # vertices of triangles
         self.triangles_vertices = self.vertices[self.triangles]
         self.triangles_normals = self.normals[self.triangles]
-
-        self.adjust_triangle_sizes()
 
     def adjust_triangle_sizes(self):
         triangles_vertices = self.triangles_vertices
@@ -266,14 +277,22 @@ class MeshDataset(Dataset):
         print(f"Adjusted triangles: {self.triangles_vertices.shape[0]}, {self.triangles_normals.shape[0]}, {self.uv.shape[0]}", end="\n")
         
     def init_grids_to_process(self):
-        grids_to_process = set()
+        triangles_vertices = self.triangles_vertices.reshape(-1, 3)
+        grids_to_process = set(map(tuple, (triangles_vertices / self.grid_size).astype(int)))
+
+        mask_changing_vertices = np.floor(((triangles_vertices - self.r) / self.grid_size).astype(int)) != np.floor(((triangles_vertices + self.r) / self.grid_size).astype(int))
+        mask_changing_vertices = np.any(mask_changing_vertices, axis=1)
+        changing_vertices = triangles_vertices[mask_changing_vertices]
+
         for x in range(-1, 2):
             for y in range(-1, 2):
                 for z in range(-1, 2):
-                    grids_to_process.update(map(tuple, np.floor((self.triangles_vertices + np.array([x*self.r, y*self.r, z*self.r])) / self.grid_size).astype(int).reshape(-1, 3)))
+                    grids_to_process.update(set(map(tuple, np.floor((changing_vertices + np.array([x*self.r, y*self.r, z*self.r])) / self.grid_size).astype(int).reshape(-1, 3))))
         
         grids_to_process = sorted(list(grids_to_process)) # Sort the blocks to process for deterministic behavior
         print(f"Number of grids to process: {len(grids_to_process)}")
+
+        grids_to_process = grids_to_process[:50] # debug
         return grids_to_process
     
     def get_writer(self):
@@ -287,7 +306,8 @@ class MeshDataset(Dataset):
         return selected_triangles_mask
     
     def load_grid_cell(self, grid_index, uint8=False):
-        path = self.grid_cell_template.format(grid_index[0]+1, grid_index[1]+1, grid_index[2]+1)
+        grid_index_ = np.asarray(grid_index)[[1, 0, 2]] # swap axis for 'special' grid cell naming ...
+        path = self.grid_cell_template.format(grid_index_[0]+1, grid_index_[1]+1, grid_index_[2]+1)
 
         # Check if the file exists
         if not os.path.exists(path):
@@ -333,6 +353,7 @@ class PPMAndTextureModel(pl.LightningModule):
     def __init__(self, r=32):
         print("instantiating model")
         self.r = r
+        self.new_order = [2,1,0] # [2,1,0], [2,0,1], [0,2,1], [0,1,2], [1,2,0], [1,0,2]
         super().__init__()
 
     def ppm(self, pts, tri):
@@ -384,24 +405,14 @@ class PPMAndTextureModel(pl.LightningModule):
         
         return grid_points
 
-    def extract_from_image_4d(self, image, grid_index, coordinates):
-        # image: T x W x H x D, coordinates: S x 4
-        values = extract_from_image_4d(image, grid_index, coordinates)
-        return values
-
     def forward(self, x):
-        new_order = [2,1,0]
         # grid_cell: B x W x W x W, vertices: T x 3 x 3, normals: T x 3 x 3, uv_coords_triangles: T x 3 x 2, grid_index: T
         grid_coords, grid_cells, vertices, normals, uv_coords_triangles, grid_index = x
         
         # Handle the case where the grid cells are empty
         if grid_cells is None:
             return None
-        
-        # vertices = vertices[:, new_order, :]
-        # normals = normals[:, new_order, :]
-        print(f"Vertices: {vertices.shape}, Normals: {normals.shape}, UV: {uv_coords_triangles.shape}", end="\n")
-        
+                
         # Step 1: Compute AABBs for each triangle
         min_uv, _ = torch.min(uv_coords_triangles, dim=1)
         max_uv, _ = torch.max(uv_coords_triangles, dim=1)
@@ -409,15 +420,8 @@ class PPMAndTextureModel(pl.LightningModule):
         min_uv = torch.floor(min_uv)
         max_uv = torch.ceil(max_uv)
 
-        print(f"Scaled min UV: {min_uv.shape}, Scaled max UV: {max_uv.shape}", end="\n")
-
         # Find largest max-min difference for each 2d axis
         max_diff_uv, _ = torch.max(max_uv - min_uv, dim=0)
-        # max_diff, _ = torch.max(max_diff_uv, dim=0)
-        print(f"Max diff: {max_diff_uv}", end="\n")
-
-        # starting_points = torch.flatten(min_uv, start_dim=0, end_dim=-2)
-        # print(f"Starting points: {starting_points.shape}", end="\n")
 
         # Step 2: Generate Meshgrids for All Triangles
         # create grid points tensor: T x W*H x 2
@@ -440,12 +444,16 @@ class PPMAndTextureModel(pl.LightningModule):
         grid_index = grid_index[is_inside]
         # broadcast grid_coords to T x W*H x 3 -> S x 3
         grid_coords = grid_coords.unsqueeze(-2).expand(-1, baryicentric_coords.shape[1], -1)
-        grid_coords = grid_coords[is_inside]
 
         del baryicentric_coords
         # coords: S x 3, norms: S x 3
         coords = coords[is_inside]
         norms = norms[is_inside]
+        grid_coords = grid_coords[is_inside] # S x 3
+        # adjust to new_order
+        grid_coords = grid_coords[:, self.new_order]
+        coords = coords[:, self.new_order]
+        norms = norms[:, self.new_order]
 
         grid_coords_end = grid_coords + torch.tensor(grid_cells.shape[1:4], device=grid_coords.device).unsqueeze(0).expand(grid_coords.shape[0], -1)
 
@@ -472,16 +480,18 @@ class PPMAndTextureModel(pl.LightningModule):
         grid_points = grid_points.unsqueeze(-2).expand(-1, 2*self.r+1, -1)
         r_arange = self.r+r_arange.expand(grid_points.shape[0], -1, -1)
         grid_points = torch.cat((grid_points, r_arange), dim=-1)
-        print(f"Coords: {coords.shape}, Grid Points: {grid_points.shape}", end="\n")
         del norms, r_arange, is_inside
 
         # Step 5: Extract the values from the grid cells
-        values = self.extract_from_image_4d(grid_cells, grid_index, coords)
+        # grid_cells: T x W x H x D, coords: S x 3, grid_index: S x 1
+        values = extract_from_image_4d(grid_cells, grid_index, coords)
         del coords, grid_cells
 
         # Step 6: Return the 3D Surface Volume coordinates and the values
         values = values.reshape(-1)
-        grid_points = grid_points.reshape(-1, 3)
+        grid_points = grid_points.reshape(-1, 3) # grid_points: S x 3
+        # reorder grid_points = grid_points[:, [2, 0, 1]]
+        grid_points = grid_points[:, [2, 0, 1]]
 
         # Return the 3D Surface Volume coordinates and the values
         return values, grid_points
@@ -543,6 +553,7 @@ def ppm_and_texture(obj_path, grid_cell_path, grid_size=500, gpus=1, batch_size=
     # Run Rendering
     trainer.predict(model, dataloaders=dataloader, return_predictions=False)
     print("Rendering done")
+    writer.write_to_disk()
     
     return
 

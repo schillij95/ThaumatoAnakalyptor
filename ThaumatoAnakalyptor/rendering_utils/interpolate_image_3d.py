@@ -124,12 +124,9 @@ def extract_from_image_4d(
         padding_mode='border',  # this increases sampling fidelity at edges
         align_corners=True,
     )
-    print(f"Samples shape: {samples.shape}")
     samples = einops.rearrange(samples, 'b complex 1 1 1 -> b complex')
-    print(f"Samples shape 2: {samples.shape}")
     # extract the image_index
     samples = samples[torch.arange(n_samples), image_index]
-    print(f"Samples shape 3: {samples.shape}")
 
     # zero out samples from outside of volume
     coordinates = einops.rearrange(coordinates, 'b 1 1 1 zyx -> b zyx')
