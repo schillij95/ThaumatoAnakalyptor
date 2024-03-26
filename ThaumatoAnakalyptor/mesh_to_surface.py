@@ -153,7 +153,6 @@ class MeshDataset(Dataset):
         grid_index = self.grids_to_process[idx]
         triangles_mask = self.extract_triangles_mask(grid_index)
         # Vertices and normals in triangles that have at least one vertice in the grid with a r-padded bounding box
-        print(f"Shape of triangles mask: {triangles_mask.shape}, shape of triangles vertices: {self.triangles_vertices.shape}, shape of UV: {self.uv.shape}")
         vertices = self.triangles_vertices[triangles_mask]
         normals = self.triangles_normals[triangles_mask]
         # UV of vertices in triangles that have at least one vertice in the grid with a r-padded bounding box
@@ -228,6 +227,9 @@ class PPMAndTextureModel(pl.LightningModule):
         
         return grid_points
 
+    def extract_from_image_3d(self, image, coordinates, grid_index):
+        return None
+
     def forward(self, x):
         new_order = [2,1,0]
         # grid_cell: B x W x W x W, vertices: T x 3 x 3, normals: T x 3 x 3, uv_coords_triangles: T x 3 x 2, grid_index: T
@@ -261,34 +263,50 @@ class PPMAndTextureModel(pl.LightningModule):
         # Step 2: Generate Meshgrids for All Triangles
         # create grid points tensor: T x W*H x 2
         grid_points = self.create_grid_points_tensor(min_uv, max_diff_uv[0], max_diff_uv[1])
+        del min_uv, max_uv, max_diff_uv
 
         # Step 3: Compute Barycentric Coordinates for all Triangles
         baryicentric_coords, is_inside = self.ppm(grid_points, uv_coords_triangles)
         # baryicentric_coords: T x W*H x 3, is_inside: T x W*H
+        grid_points = grid_points[is_inside] # S x 2
 
-        print(f"Vertices: {vertices.shape}, Norms: {normals.shape}, Bary: {baryicentric_coords.shape}", end="\n")
         # vertices: T x 3 x 3, normals: T x 3 x 3, baryicentric_coords: T x W*H x 3
         coords = torch.einsum('ijk,isj->isk', vertices, baryicentric_coords).squeeze()
         norms = normalize(torch.einsum('ijk,isj->isk', normals, baryicentric_coords).squeeze(),dim=1)
+        del vertices, normals, uv_coords_triangles
+        
 
-        # coords: T x W*H x 3, norms: T x W*H x 3
-        print(f"Coords: {coords.shape}, Norms: {norms.shape}", end="\n")
+        # broadcast grid index to T x W*H -> S
+        grid_index = grid_index.unsqueeze(-1).expand(-1, baryicentric_coords.shape[1])
+        grid_index = grid_index[is_inside]
+        del baryicentric_coords
+        # coords: S x 3, norms: S x 3
+        coords = coords[is_inside]
+        norms = norms[is_inside]
+
 
         # Step 4: Compute the 3D coordinates for every r
-        r_arange = torch.arange(-self.r, self.r+1, device=coords.device).reshape(1, 1, -1, 1)
+        r_arange = torch.arange(-self.r, self.r+1, device=coords.device).reshape(1, -1, 1)
 
-        # coords_r: T x W*H x 2*r+1 x 3
-        coords_r = coords.unsqueeze(-2) + r_arange * norms.unsqueeze(-2)
-            
+        # coords_r: S x 2*r+1 x 3, grid_points: S x 2 -> S x 3
+        coords = coords.unsqueeze(-2) + r_arange * norms.unsqueeze(-2)
+        # Expand and add 3rd dimension to grid points
+        grid_points = grid_points.unsqueeze(-2).expand(-1, 2*self.r+1, -1)
+        r_arange = self.r+r_arange.expand(grid_points.shape[0], -1, -1)
+        grid_points = torch.cat((grid_points, r_arange), dim=-1)
+        print(f"Coords: {coords.shape}, Grid Points: {grid_points.shape}", end="\n")
+        del norms, r_arange
+
         # Step 5: Extract the values from the grid cells
+        values = self.extract_from_image_3d(grid_cells, coords, grid_index)
+        del coords, grid_cells
 
-
-
-        # Step 6: Flatten and filter out the points that are outside the triangles or outside the images
-
+        # Step 6: Flatten and filter out the points that are outside the images
+        values = values
+        grid_points = grid_points
 
         # Return the 3D Surface Volume coordinates and the values
-        return None
+        return values, grid_points
     
 # Custom collation function
 def custom_collate_fn(batch):
@@ -303,14 +321,14 @@ def custom_collate_fn(batch):
     for i, items in enumerate(batch):
         if items is None:
             continue
-        grid_cell, vertic, normal, uv_coords_triangle = items
+        grid_cell, vertice, normal, uv_coords_triangle = items
         if grid_cell is None:
             continue
         grid_cells.append(grid_cell)
-        vertices.append(vertic)
+        vertices.append(vertice)
         normals.append(normal)
         uv_coords_triangles.append(uv_coords_triangle)
-        grid_index.append([i]*grid_cell.shape[0])
+        grid_index.extend([i]*vertice.shape[0])
         
     if len(grid_cells) == 0:
         return None, None, None, None
