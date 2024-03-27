@@ -1,4 +1,4 @@
-### Julian Schilliger - ThaumatoAnakalyptor - 2023
+### Julian Schilliger - ThaumatoAnakalyptor - 2024
 
 import multiprocessing
 import open3d as o3d
@@ -16,6 +16,7 @@ from PIL import Image
 Image.MAX_IMAGE_PIXELS = None
 import tifffile
 import cv2
+import zarr
 
 class MyPredictionWriter(BasePredictionWriter):
     def __init__(self, save_path, image_size, r):
@@ -23,7 +24,6 @@ class MyPredictionWriter(BasePredictionWriter):
         self.save_path = save_path
         self.image_size = image_size
         self.r = r
-        # self.mmap_npz = np.memmap(os.path.join(os.path.dirname(save_path), "prediction.npz"), mode='w+', shape=(0, 3), dtype=np.float32)
         self.surface_volume_np = np.zeros((2*r+1, image_size[0], image_size[1]), dtype=np.uint16)
     
     def write_on_batch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, prediction, batch_indices, batch, batch_idx: int, dataloader_idx: int) -> None:
@@ -44,25 +44,77 @@ class MyPredictionWriter(BasePredictionWriter):
 
         # display progress cv2.imshow
         image = (self.surface_volume_np[self.r].astype(np.float32) / 65535)
-        image = cv2.resize(image, (1000, (1000 * image.shape[0])//image.shape[1]))
+        image = cv2.resize(image, ((1000 * image.shape[1])//image.shape[1], 1000))
         image = image.T
         image = image[::-1, :]
         cv2.imshow("Surface Volume", image)
         cv2.waitKey(1)
 
-    def write_to_disk(self):
+    def write_to_disk(self, flag='jpg'):
         print("Writing prediction to disk")
         # Make folder if it does not exist
         os.makedirs(self.save_path, exist_ok=True)
+
+        if flag == 'tif':
+            self.write_tif()
+        elif flag == 'jpg':
+            self.write_jpg()
+        elif flag == 'memmap':
+            self.write_memmap()
+        elif flag == 'npz':
+            self.write_npz()
+        elif flag == 'zarr':
+            self.write_zarr()
+        else:
+            print("Invalid flag. Choose between 'tif', 'jpg', 'memmap', 'npz', 'zarr'")
+            return
+        print("Prediction written to disk")
+
+    def write_tif(self):
         # save to disk each layer as tif
         for i in range(self.surface_volume_np.shape[0]):
-            # if i != 32 and i != 0 and i != 64: continue # debug
             # string 0 padded to len of str(self.surface_volume_np.shape[0])
             i_str = str(i).zfill(len(str(self.surface_volume_np.shape[0])))
             image = self.surface_volume_np[i]
             image = image.T
             image = image[::-1, :]
             tifffile.imsave(os.path.join(self.save_path, f"{i_str}.tif"), image)
+
+    def write_jpg(self, quality=60):  # You can adjust the default quality value as needed
+        # save to disk each layer as jpg with specified compression quality
+        for i in range(self.surface_volume_np.shape[0]):
+            # string 0 padded to the length of str(self.surface_volume_np.shape[0])
+            i_str = str(i).zfill(len(str(self.surface_volume_np.shape[0])))
+            image = 255 * self.surface_volume_np[i].astype(np.float32) / 65535
+            image = image.T
+            image = image[::-1, :]
+            jpg_filename = os.path.join(self.save_path, f"{i_str}.jpg")
+            # Set the compression quality
+            cv2.imwrite(jpg_filename, image, [cv2.IMWRITE_JPEG_QUALITY, quality])
+
+    def write_memmap(self):
+        # save to disk as memmap
+        memmap_path = os.path.join(self.save_path, "surface_volume")
+        memmap = np.memmap(memmap_path, dtype='uint16', mode='w+', shape=self.surface_volume_np.shape)
+        memmap[:] = self.surface_volume_np[:]
+        del memmap
+
+    def write_npz(self):
+        # save to disk as npz
+        npz_path = os.path.join(self.save_path, "surface_volume.npz")
+        np.savez_compressed(npz_path, surface_volume=self.surface_volume_np)
+
+    def write_zarr(self):
+        # Define the chunk size
+        chunk_size = (16, 16, 16)  # Example: Modify according to your needs
+
+        # Define compression options
+        compressor = zarr.Blosc(cname='zstd', clevel=3, shuffle=zarr.Blosc.SHUFFLE)  # Example compression
+
+        # save to disk as zarr with chunks and compression
+        zarr_path = os.path.join(self.save_path, "surface_volume.zarr")
+        z = zarr.open(zarr_path, mode='w', shape=self.surface_volume_np.shape, dtype='uint16', chunks=chunk_size, compressor=compressor)
+        z[:] = self.surface_volume_np
         
 class MeshDataset(Dataset):
     """Dataset class for rendering a mesh."""
@@ -90,6 +142,14 @@ class MeshDataset(Dataset):
                     if len(parts) > 1:
                         texture_filenames.append(parts[1])  # The second part is the filename
         return texture_filenames
+    
+    def generate_mask_png(self):
+        mask = np.zeros(self.image_size[::-1], dtype=np.uint8)
+        for triangle in self.uv:
+            triangle = triangle.astype(np.int32)
+            cv2.fillPoly(mask, [triangle], 255)
+        mask = mask[::-1, :]
+        cv2.imwrite(os.path.join(os.path.dirname(self.path), os.path.basename(self.path) + "_mask.png"), mask)
         
     def load_mesh(self, path):
         """Load the mesh from the given path and extract the vertices, normals, triangles, and UV coordinates."""
@@ -141,6 +201,9 @@ class MeshDataset(Dataset):
         # scale numpy UV coordinates to the image size
         self.uv = uv * np.array([y_size, x_size])
         self.image_size = (y_size, x_size)
+
+        # Generate the mask image for foreground/background separation
+        self.generate_mask_png()
 
         # vertices of triangles
         self.triangles_vertices = self.vertices[self.triangles]
@@ -294,6 +357,8 @@ class MeshDataset(Dataset):
         
         grids_to_process = sorted(list(grids_to_process)) # Sort the blocks to process for deterministic behavior
         print(f"Number of grids to process: {len(grids_to_process)}")
+
+        # grids_to_process = grids_to_process[:30] # Debugging
 
         return grids_to_process
     
@@ -535,8 +600,7 @@ def custom_collate_fn(batch):
     # Return a single batch containing all aggregated items
     return grid_coords, grid_cells, vertices, normals, uv_coords_triangles, grid_index
     
-    
-def ppm_and_texture(obj_path, grid_cell_path, grid_size=500, gpus=1, batch_size=1, r=32):
+def ppm_and_texture(obj_path, grid_cell_path, grid_size=500, gpus=1, batch_size=1, r=32, format='jpg'):
     grid_cell_template = os.path.join(grid_cell_path, "cell_yxz_{:03}_{:03}_{:03}.tif")
     dataset = MeshDataset(obj_path, grid_cell_template, grid_size=grid_size, r=r)
     num_threads = multiprocessing.cpu_count() // int(1.5 * int(gpus))
@@ -553,7 +617,7 @@ def ppm_and_texture(obj_path, grid_cell_path, grid_size=500, gpus=1, batch_size=
     # Run Rendering
     trainer.predict(model, dataloaders=dataloader, return_predictions=False)
     print("Rendering done")
-    writer.write_to_disk()
+    writer.write_to_disk(format)
     
     return
 
@@ -563,6 +627,7 @@ if __name__ == '__main__':
     parser.add_argument('grid_cell', type=str)
     parser.add_argument('--gpus', type=int, default=1)
     parser.add_argument('--r', type=int, default=32)
+    parser.add_argument('--format', type=str, default='jpg')
     args = parser.parse_known_args()[0]
 
-    ppm_and_texture(args.obj, gpus=args.gpus, grid_cell_path=args.grid_cell, r=args.r)
+    ppm_and_texture(args.obj, gpus=args.gpus, grid_cell_path=args.grid_cell, r=args.r, format=args.format)
