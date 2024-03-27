@@ -6,6 +6,7 @@ import argparse
 import os
 import numpy as np
 from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.functional import normalize
@@ -17,6 +18,7 @@ Image.MAX_IMAGE_PIXELS = None
 import tifffile
 import cv2
 import zarr
+from multiprocessing import cpu_count
 
 class MyPredictionWriter(BasePredictionWriter):
     def __init__(self, save_path, image_size, r):
@@ -25,6 +27,7 @@ class MyPredictionWriter(BasePredictionWriter):
         self.image_size = image_size
         self.r = r
         self.surface_volume_np = np.zeros((2*r+1, image_size[0], image_size[1]), dtype=np.uint16)
+        self.num_workers = cpu_count()
     
     def write_on_batch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, prediction, batch_indices, batch, batch_idx: int, dataloader_idx: int) -> None:
         # print("Writing to Numpy")
@@ -44,14 +47,16 @@ class MyPredictionWriter(BasePredictionWriter):
 
         # display progress cv2.imshow
         image = (self.surface_volume_np[self.r].astype(np.float32) / 65535)
-        image = cv2.resize(image, ((1000 * image.shape[1])//image.shape[1], 1000))
+        screen_y = 2560
+
+        image = cv2.resize(image, ((screen_y * image.shape[1])//image.shape[0], screen_y))
         image = image.T
         image = image[::-1, :]
         cv2.imshow("Surface Volume", image)
         cv2.waitKey(1)
 
     def write_to_disk(self, flag='jpg'):
-        print("Writing prediction to disk")
+        print("Writing Segment to disk")
         # Make folder if it does not exist
         os.makedirs(self.save_path, exist_ok=True)
 
@@ -68,29 +73,45 @@ class MyPredictionWriter(BasePredictionWriter):
         else:
             print("Invalid flag. Choose between 'tif', 'jpg', 'memmap', 'npz', 'zarr'")
             return
-        print("Prediction written to disk")
+        print("Segment written to disk")
 
     def write_tif(self):
-        # save to disk each layer as tif
-        for i in range(self.surface_volume_np.shape[0]):
-            # string 0 padded to len of str(self.surface_volume_np.shape[0])
-            i_str = str(i).zfill(len(str(self.surface_volume_np.shape[0])))
+        def save_tif(i, filename):
             image = self.surface_volume_np[i]
             image = image.T
             image = image[::-1, :]
-            tifffile.imsave(os.path.join(self.save_path, f"{i_str}.tif"), image)
+            tifffile.imsave(filename, image)
 
-    def write_jpg(self, quality=60):  # You can adjust the default quality value as needed
-        # save to disk each layer as jpg with specified compression quality
-        for i in range(self.surface_volume_np.shape[0]):
-            # string 0 padded to the length of str(self.surface_volume_np.shape[0])
-            i_str = str(i).zfill(len(str(self.surface_volume_np.shape[0])))
-            image = 255 * self.surface_volume_np[i].astype(np.float32) / 65535
+        with ThreadPoolExecutor(self.num_workers) as executor:
+            futures = []
+            for i in range(self.surface_volume_np.shape[0]):
+                i_str = str(i).zfill(len(str(self.surface_volume_np.shape[0])))
+                filename = os.path.join(self.save_path, f"{i_str}.tif")
+                futures.append(executor.submit(save_tif, i, filename))
+
+            # Wait for all futures to complete if needed
+            for future in tqdm(as_completed(futures), desc="Writing TIF"):
+                future.result()
+
+    def write_jpg(self, quality=60):  # Adjust the default quality value as needed
+        def save_jpg(i, filename):
+            image = self.surface_volume_np[i]
+            # Normalize to 0-1, then scale to 0-255
+            image = (image / 256).astype(np.uint8)
             image = image.T
             image = image[::-1, :]
-            jpg_filename = os.path.join(self.save_path, f"{i_str}.jpg")
-            # Set the compression quality
-            cv2.imwrite(jpg_filename, image, [cv2.IMWRITE_JPEG_QUALITY, quality])
+            cv2.imwrite(filename, image, [cv2.IMWRITE_JPEG_QUALITY, quality])
+
+        with ThreadPoolExecutor(self.num_workers) as executor:
+            futures = []
+            for i in range(self.surface_volume_np.shape[0]):
+                i_str = str(i).zfill(len(str(self.surface_volume_np.shape[0])))
+                filename = os.path.join(self.save_path, f"{i_str}.jpg")
+                futures.append(executor.submit(save_jpg, i, filename))
+
+            # Wait for all futures to complete if needed
+            for future in tqdm(as_completed(futures), desc="Writing JPG"):
+                future.result()
 
     def write_memmap(self):
         # save to disk as memmap

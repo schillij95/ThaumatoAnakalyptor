@@ -10,7 +10,7 @@ def ply_to_obj(ply_path, obj_path):
     mesh = o3d.geometry.TriangleMesh()
     # Write vertices to mesh
     mesh.vertices = pcd.points
-    vertices = np.asarray(mesh.vertices)
+    vertices = np.asarray(mesh.vertices) - 500
     vertices = vertices[:, axis_indices]
     mesh.vertices = o3d.utility.Vector3dVector(vertices)
     # Write triangles to mesh
