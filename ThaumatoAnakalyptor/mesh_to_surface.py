@@ -3,9 +3,9 @@
 import multiprocessing
 import open3d as o3d
 import argparse
-import gc
 import os
 import numpy as np
+from tqdm import tqdm
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.functional import normalize
@@ -159,119 +159,119 @@ class MeshDataset(Dataset):
         triangles_vertices_good = []
         triangles_normals_good = []
 
-        while True:
-            triangle_min_uv = np.min(uv, axis=1)
-            triangle_max_uv = np.max(uv, axis=1)
-            side_lengths = triangle_max_uv - triangle_min_uv
-            print(f"Side lengths: {side_lengths.shape}", end="\n")
-            mask_large_side = np.any(side_lengths > self.max_side_triangle, axis=1)
-            # if no triangle is too large, we are done
-            if not np.any(mask_large_side):
-                break
+        with tqdm(total=100, desc="Adjusting triangle sizes") as pbar:
+            start = None
+            while True:
+                triangle_min_uv = np.min(uv, axis=1)
+                triangle_max_uv = np.max(uv, axis=1)
+                side_lengths = triangle_max_uv - triangle_min_uv
+                max_side_lengths = np.max(side_lengths, axis=0)
 
-            uv_good_ = uv[np.logical_not(mask_large_side)]
-            triangles_vertices_good_ = triangles_vertices[np.logical_not(mask_large_side)]
-            triangles_normals_good_ = triangles_normals[np.logical_not(mask_large_side)]
+                def current_progress(maxS):
+                    return np.log(2) - np.log(self.max_side_triangle / maxS)
 
-            # Hold on to the triangles that are good
-            uv_good.append(uv_good_)
-            triangles_vertices_good.append(triangles_vertices_good_)
-            triangles_normals_good.append(triangles_normals_good_)
+                if start is None:
+                    # ln_{max_side_triangle}(max_side_lengths)
+                    start = current_progress(max_side_lengths[0]) + current_progress(max_side_lengths[1])
+                else:
+                    now = current_progress(max_side_lengths[0]) + current_progress(max_side_lengths[1])
+                    progress = max(1 - now / start, 0)
+                    pbar.n = int(progress * 100)
+                    pbar.refresh()
 
-            uv_large = uv[mask_large_side]
-            side_lengths = side_lengths[mask_large_side]
-            triangle_min_uv = np.expand_dims(triangle_min_uv[mask_large_side], axis=1)
-            triangle_max_uv = np.expand_dims(triangle_max_uv[mask_large_side], axis=1)
-            triangles_vertices_large = triangles_vertices[mask_large_side]
-            triangles_normals_large = triangles_normals[mask_large_side]
+                mask_large_side = np.any(side_lengths > self.max_side_triangle, axis=1)
+                # if no triangle is too large, we are done
+                if not np.any(mask_large_side):
+                    break
 
-            mask_larger_side_x = side_lengths[:, 0] >= side_lengths[:, 1]
-            mask_larger_side_y = np.logical_not(mask_larger_side_x)
+                uv_good_ = uv[np.logical_not(mask_large_side)]
+                triangles_vertices_good_ = triangles_vertices[np.logical_not(mask_large_side)]
+                triangles_normals_good_ = triangles_normals[np.logical_not(mask_large_side)]
 
-            assert np.sum(mask_larger_side_x) + np.sum(mask_larger_side_y) == side_lengths.shape[0], "All triangles should be classified"
+                # Hold on to the triangles that are good
+                uv_good.append(uv_good_)
+                triangles_vertices_good.append(triangles_vertices_good_)
+                triangles_normals_good.append(triangles_normals_good_)
 
-            mask_uv_x_min = uv_large[:, :, 0] == triangle_min_uv[:, :, 0]
-            mask_uv_x_max = uv_large[:, :, 0] == triangle_max_uv[:, :, 0]
-            mask_uv_y_min = uv_large[:, :, 1] == triangle_min_uv[:, :, 1]
-            mask_uv_y_max = uv_large[:, :, 1] == triangle_max_uv[:, :, 1]
+                uv_large = uv[mask_large_side]
+                side_lengths = side_lengths[mask_large_side]
+                triangle_min_uv = np.expand_dims(triangle_min_uv[mask_large_side], axis=1)
+                triangle_max_uv = np.expand_dims(triangle_max_uv[mask_large_side], axis=1)
+                triangles_vertices_large = triangles_vertices[mask_large_side]
+                triangles_normals_large = triangles_normals[mask_large_side]
 
-            assert np.all(np.sum(mask_uv_x_min, axis=1) >= 1), "At least one vertex should be selected per triangle"
-            assert np.all(np.sum(mask_uv_x_max, axis=1) >= 1), "At least one vertex should be selected per triangle"
-            assert np.all(np.sum(mask_uv_y_min, axis=1) >= 1), "At least one vertex should be selected per triangle"
-            assert np.all(np.sum(mask_uv_y_max, axis=1) >= 1), "At least one vertex should be selected per triangle"
+                mask_larger_side_x = side_lengths[:, 0] >= side_lengths[:, 1]
+                mask_larger_side_y = np.logical_not(mask_larger_side_x)
 
-            mask_x_min = np.logical_and(mask_larger_side_x[:, None], mask_uv_x_min)
-            mask_x_max = np.logical_and(mask_larger_side_x[:, None], mask_uv_x_max)
-            mask_y_min = np.logical_and(mask_larger_side_y[:, None], mask_uv_y_min)
-            mask_y_max = np.logical_and(mask_larger_side_y[:, None], mask_uv_y_max)
+                mask_uv_x_min = uv_large[:, :, 0] == triangle_min_uv[:, :, 0]
+                mask_uv_x_max = uv_large[:, :, 0] == triangle_max_uv[:, :, 0]
+                mask_uv_y_min = uv_large[:, :, 1] == triangle_min_uv[:, :, 1]
+                mask_uv_y_max = uv_large[:, :, 1] == triangle_max_uv[:, :, 1]
 
-            # maximum one true value per triangle
-            # Identify the first vertex that meets the condition in each triangle
-            idx_x_min = np.argmax(mask_x_min, axis=1)
-            idx_x_max = np.argmax(mask_x_max, axis=1)
-            idx_y_min = np.argmax(mask_y_min, axis=1)
-            idx_y_max = np.argmax(mask_y_max, axis=1)
+                mask_x_min = np.logical_and(mask_larger_side_x[:, None], mask_uv_x_min)
+                mask_x_max = np.logical_and(mask_larger_side_x[:, None], mask_uv_x_max)
+                mask_y_min = np.logical_and(mask_larger_side_y[:, None], mask_uv_y_min)
+                mask_y_max = np.logical_and(mask_larger_side_y[:, None], mask_uv_y_max)
 
-            ix = np.arange(mask_x_min.shape[0])
+                # maximum one true value per triangle
+                # Identify the first vertex that meets the condition in each triangle
+                idx_x_min = np.argmax(mask_x_min, axis=1)
+                idx_x_max = np.argmax(mask_x_max, axis=1)
+                idx_y_min = np.argmax(mask_y_min, axis=1)
+                idx_y_max = np.argmax(mask_y_max, axis=1)
 
-            mask_x_min_ = np.zeros_like(mask_x_min)
-            mask_x_max_ = np.zeros_like(mask_x_max)
-            mask_y_min_ = np.zeros_like(mask_y_min)
-            mask_y_max_ = np.zeros_like(mask_y_max)
+                ix = np.arange(mask_x_min.shape[0])
 
-            mask_x_min_[ix, idx_x_min] = True
-            mask_x_max_[ix, idx_x_max] = True
-            mask_y_min_[ix, idx_y_min] = True
-            mask_y_max_[ix, idx_y_max] = True
+                mask_x_min_ = np.zeros_like(mask_x_min)
+                mask_x_max_ = np.zeros_like(mask_x_max)
+                mask_y_min_ = np.zeros_like(mask_y_min)
+                mask_y_max_ = np.zeros_like(mask_y_max)
 
-            assert np.all(np.sum(mask_x_min_, axis=1) >= 1), "Exactly one vertex should be selected per triangle"
-            assert np.all(np.sum(mask_x_max_, axis=1) >= 1), "Exactly one vertex should be selected per triangle"
-            assert np.all(np.sum(mask_y_min_, axis=1) >= 1), "Exactly one vertex should be selected per triangle"
-            assert np.all(np.sum(mask_y_max_, axis=1) >= 1), "Exactly one vertex should be selected per triangle"
+                mask_x_min_[ix, idx_x_min] = True
+                mask_x_max_[ix, idx_x_max] = True
+                mask_y_min_[ix, idx_y_min] = True
+                mask_y_max_[ix, idx_y_max] = True
 
-            mask_x_min__ = np.logical_and(mask_x_min, mask_x_min_)
-            mask_x_max__ = np.logical_and(mask_x_max, mask_x_max_)
-            mask_y_min__ = np.logical_and(mask_y_min, mask_y_min_)
-            mask_y_max__ = np.logical_and(mask_y_max, mask_y_max_)
+                mask_x_min__ = np.logical_and(mask_x_min, mask_x_min_)
+                mask_x_max__ = np.logical_and(mask_x_max, mask_x_max_)
+                mask_y_min__ = np.logical_and(mask_y_min, mask_y_min_)
+                mask_y_max__ = np.logical_and(mask_y_max, mask_y_max_)
 
-            assert np.all(np.sum(mask_x_min__, axis=1) <= 1), "At most one vertex should be selected per triangle"
-            assert np.all(np.sum(mask_x_max__, axis=1) <= 1), "At most one vertex should be selected per triangle"
-            assert np.all(np.sum(mask_y_min__, axis=1) <= 1), "At most one vertex should be selected per triangle"
-            assert np.all(np.sum(mask_y_max__, axis=1) <= 1), "At most one vertex should be selected per triangle"
+                mask_x = np.logical_or(mask_x_min__, mask_x_max__)
+                mask_y = np.logical_or(mask_y_min__, mask_y_max__)
+                mask_min = np.logical_or(mask_x_min__, mask_y_min__)
+                mask_max = np.logical_or(mask_x_max__, mask_y_max__)
 
-            mask_x = np.logical_or(mask_x_min__, mask_x_max__)
-            mask_y = np.logical_or(mask_y_min__, mask_y_max__)
-            mask_min = np.logical_or(mask_x_min__, mask_y_min__)
-            mask_max = np.logical_or(mask_x_max__, mask_y_max__)
+                mask = np.logical_or(mask_x, mask_y)
 
-            mask = np.logical_or(mask_x, mask_y)
+                # Create new vertices and normals and uvs
+                new_vertices = (triangles_vertices_large[mask_min] + triangles_vertices_large[mask_max]) / 2
+                new_normals = (triangles_normals_large[mask_min] + triangles_normals_large[mask_max]) / 2
+                new_uv = (uv_large[mask_min] + uv_large[mask_max]) / 2
 
-            assert np.all(np.sum(mask, axis=1) == 2), "Exactly two vertices should be selected per triangle"
+                new_triangles_vertices_0 = np.copy(triangles_vertices_large)
+                new_triangles_vertices_0[mask_min] = new_vertices
+                new_triangles_normals_0 = np.copy(triangles_normals_large)
+                new_triangles_normals_0[mask_min] = new_normals
 
-            # Create new vertices and normals and uvs
-            new_vertices = (triangles_vertices_large[mask_min] + triangles_vertices_large[mask_max]) / 2
-            new_normals = (triangles_normals_large[mask_min] + triangles_normals_large[mask_max]) / 2
-            new_uv = (uv_large[mask_min] + uv_large[mask_max]) / 2
+                new_triangles_vertices_1 = np.copy(triangles_vertices_large)
+                new_triangles_vertices_1[mask_max] = new_vertices
+                new_triangles_normals_1 = np.copy(triangles_normals_large)
+                new_triangles_normals_1[mask_max] = new_normals
 
-            new_triangles_vertices_0 = np.copy(triangles_vertices_large)
-            new_triangles_vertices_0[mask_min] = new_vertices
-            new_triangles_normals_0 = np.copy(triangles_normals_large)
-            new_triangles_normals_0[mask_min] = new_normals
+                new_uv_0 = np.copy(uv_large)
+                new_uv_0[mask_min] = new_uv
+                new_uv_1 = np.copy(uv_large)
+                new_uv_1[mask_max] = new_uv
 
-            new_triangles_vertices_1 = np.copy(triangles_vertices_large)
-            new_triangles_vertices_1[mask_max] = new_vertices
-            new_triangles_normals_1 = np.copy(triangles_normals_large)
-            new_triangles_normals_1[mask_max] = new_normals
+                # Set up for the next iteration
+                triangles_vertices = np.concatenate((new_triangles_vertices_0, new_triangles_vertices_1), axis=0)
+                triangles_normals = np.concatenate((new_triangles_normals_0, new_triangles_normals_1), axis=0)
+                uv = np.concatenate((new_uv_0, new_uv_1), axis=0)
 
-            new_uv_0 = np.copy(uv_large)
-            new_uv_0[mask_min] = new_uv
-            new_uv_1 = np.copy(uv_large)
-            new_uv_1[mask_max] = new_uv
-
-            # Set up for the next iteration
-            triangles_vertices = np.concatenate((new_triangles_vertices_0, new_triangles_vertices_1), axis=0)
-            triangles_normals = np.concatenate((new_triangles_normals_0, new_triangles_normals_1), axis=0)
-            uv = np.concatenate((new_uv_0, new_uv_1), axis=0)
+            # Show the final progress
+            pbar.n = 100
+            pbar.refresh()
 
         self.triangles_vertices = np.concatenate(triangles_vertices_good, axis=0)
         self.triangles_normals = np.concatenate(triangles_normals_good, axis=0)
@@ -452,13 +452,13 @@ class PPMAndTextureModel(pl.LightningModule):
         coords = coords - grid_coords # Reorient coordinate system origin to 0 for extraction on grid_cells
         del baryicentric_coords, grid_coords
 
-        # Poper axis order
-        coords = coords[:, self.new_order]
-        norms = norms[:, self.new_order]
-
         # coords: S x 3, norms: S x 3
         coords = coords[is_inside]
         norms = norms[is_inside]
+
+        # Poper axis order
+        coords = coords[:, self.new_order]
+        norms = norms[:, self.new_order]
 
         # Step 4: Compute the 3D coordinates for every r slice
         r_arange = torch.arange(-self.r, self.r+1, device=coords.device).reshape(1, -1, 1)
@@ -557,56 +557,12 @@ def ppm_and_texture(obj_path, grid_cell_path, grid_size=500, gpus=1, batch_size=
     
     return
 
-def main(args):
-    working_path = os.path.dirname(args.obj_path)
-    base_name = os.path.splitext(os.path.basename(args.obj_path))[0]
-    surface_path = os.path.join(working_path, f"{base_name}.memmap")
-
-    # Construct the potential paths for the .tif and .png files
-    tif_path = os.path.join(working_path, f"{base_name}.tif")
-    png_path = os.path.join(working_path, f"{base_name}.png")
-
-    # Check if the .tif version exists
-    if os.path.exists(tif_path):
-        image_path = tif_path
-        print(f"Found TIF image at: {image_path}", end="\n")
-    # If not, check if the .png version exists
-    elif os.path.exists(png_path):
-        image_path = png_path
-        print(f"Found PNG image at: {image_path}", end="\n")
-    # If neither exists, handle the case (e.g., error message)
-    else:
-        image_path = None
-        print("No corresponding TIF or PNG image found.", end="\n")
-    
-    # Open the image file
-    with Image.open(image_path) as img:
-        # Get dimensions
-        y_size, x_size = img.size
-    print(f"Y-size: {y_size}, X-size: {x_size}", end="\n")
-
-    mesh = o3d.io.read_triangle_mesh(args.obj_path)
-    print(f"Loaded mesh from {args.obj_path}", end="\n")
-
-    V = torch.tensor(np.asarray(mesh.vertices))
-    N = torch.tensor(np.asarray(mesh.vertex_normals))
-    UV = torch.tensor(np.asarray(mesh.triangle_uvs))  # Ensure your mesh has UV coordinates
-    F = torch.tensor(np.asarray(mesh.triangles))
-
-    # Adjust UV coordinates as per the requirement
-    UV_scaled = UV * torch.tensor([y_size, x_size])
-
-    del mesh, x, y, grid_x, grid_y, UV
-    gc.collect()
-
-    print(f"Computing coordinates...", end="\n")
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('obj', type=str)
     parser.add_argument('grid_cell', type=str)
     parser.add_argument('--gpus', type=int, default=1)
     parser.add_argument('--r', type=int, default=32)
-    args = parser.parse_args()
+    args = parser.parse_known_args()[0]
 
     ppm_and_texture(args.obj, gpus=args.gpus, grid_cell_path=args.grid_cell, r=args.r)
