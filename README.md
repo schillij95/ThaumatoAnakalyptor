@@ -201,7 +201,8 @@ Make sure to download the provided training data ```3d_instance_segmentation_tra
 - Starting points should be at the very bottom side of the sheet in a z slice trough the scroll.
 
 ## TODO
-- Test Multi GPU
+- Multi GPU Rendering
+- Find and implement better sheet stitching algorithm
 
 ## Contribution and Support
 - As this software is in active development, users are encouraged to report any encountered issues. I'm happy to help and answer questions.

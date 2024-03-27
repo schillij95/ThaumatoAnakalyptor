@@ -225,7 +225,8 @@ dependencies:
       - omegaconf==2.0.6
       - open3d==0.17.0
       - open3d-cpu==0.17.0
-      - opencv-python-headless==4.7.0.72
+      # - opencv-python-headless==4.7.0.72
+      - opencv-python==4.9.0.80
       - pandas==2.0.0
       - parso==0.8.3
       - pathspec==0.11.1
@@ -301,5 +302,6 @@ dependencies:
       - widgetsnbextension==4.0.7
       - yacs==0.1.8
       - yarl==1.8.2
+      - zarr==2.17.1
       - zipp==3.15.0
 prefix: /home/julian/anaconda3/envs/thaumato

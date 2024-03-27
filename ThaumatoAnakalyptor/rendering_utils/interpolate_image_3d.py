@@ -81,6 +81,64 @@ def extract_from_image_3d(
     [samples] = einops.unpack(samples, pattern='*', packed_shapes=ps)
     return samples  # (...)
 
+def extract_from_image_4d(
+    image: torch.Tensor,
+    image_index: torch.Tensor,
+    coordinates: torch.Tensor
+) -> torch.Tensor:
+    """Sample a volume with linear interpolation.
+
+    Parameters
+    ----------
+    image: torch.Tensor
+        `(n, d, h, w)` volume.
+    image_index: torch.Tensor
+        `(..., )` array of indices of the image to sample from.
+    coordinates: torch.Tensor
+        `(..., zyx)` array of coordinates at which `image` should be sampled.
+        Coordinates should be ordered zyx, aligned with image dimensions `(d, h, w)`.
+        Coordinates should be array coordinates, spanning `[0, N-1]` for a
+        dimension of length N.
+    Returns
+    -------
+    samples: torch.Tensor
+        `(..., )` array of complex valued samples from `image`.
+    """
+    device = image.device
+
+    # pack coordinates into shape (b, 4)
+    coordinates, ps = einops.pack([coordinates], pattern='* zyx')
+    n_samples = coordinates.shape[0]
+    # pack image_index into shape (b, 1)
+    image_index, _ = einops.pack([image_index], pattern='*')
+    image_index = image_index.long()  # Convert to long dtype
+
+    # sample dft at coordinates
+    image = einops.repeat(image, 'n d h w -> b n d h w', b=n_samples)  # b n d h w
+
+    coordinates = einops.rearrange(coordinates, 'b zyx -> b 1 1 1 zyx')  # b d h w zyx
+    samples = F.grid_sample(
+        input=image,
+        grid=array_to_grid_sample(coordinates, array_shape=image.shape[-3:]),
+        mode='bilinear',  # this is trilinear when input is volumetric
+        padding_mode='border',  # this increases sampling fidelity at edges
+        align_corners=True,
+    )
+    samples = einops.rearrange(samples, 'b complex 1 1 1 -> b complex')
+    # extract the image_index
+    samples = samples[torch.arange(n_samples), image_index]
+
+    # zero out samples from outside of volume
+    coordinates = einops.rearrange(coordinates, 'b 1 1 1 zyx -> b zyx')
+    volume_shape = torch.as_tensor(image.shape[-3:], device=device)
+    inside = torch.logical_and(coordinates >= 0, coordinates <= volume_shape)
+    inside = torch.all(inside, dim=-1)  # (b, d, h, w)
+    samples[~inside] *= 0
+
+    # pack data back up and return
+    [samples] = einops.unpack(samples, pattern='*', packed_shapes=ps)
+    return samples  # (...)
+
 
 def insert_into_image_3d(
     data: torch.Tensor,

@@ -11,7 +11,7 @@ def ply_to_obj(ply_path, obj_path):
     # Write vertices to mesh
     mesh.vertices = pcd.points
     vertices = np.asarray(mesh.vertices)
-    vertices = 4 * vertices[:, axis_indices]
+    vertices = vertices[:, axis_indices]
     mesh.vertices = o3d.utility.Vector3dVector(vertices)
     # Write triangles to mesh
     o3d.io.write_triangle_mesh(obj_path, mesh)
