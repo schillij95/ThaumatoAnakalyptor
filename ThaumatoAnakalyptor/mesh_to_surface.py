@@ -56,14 +56,14 @@ class MyPredictionWriter(BasePredictionWriter):
         os.makedirs(self.save_path, exist_ok=True)
         # save to disk each layer as tif
         for i in range(self.surface_volume_np.shape[0]):
-            if i != 32: continue
+            if i != 32 and i != 0 and i != 64: continue
             # string 0 padded to len of str(self.surface_volume_np.shape[0])
             i_str = str(i).zfill(len(str(self.surface_volume_np.shape[0])))
             tifffile.imsave(os.path.join(self.save_path, f"{i_str}.tif"), self.surface_volume_np[i])
         
 class MeshDataset(Dataset):
     """Dataset class for rendering a mesh."""
-    def __init__(self, path, grid_cell_template, grid_size=500, r=32, max_side_triangle=20):
+    def __init__(self, path, grid_cell_template, grid_size=500, r=32, max_side_triangle=10):
         """Initialize the dataset."""
         self.path = path
         self.grid_cell_template = grid_cell_template
@@ -292,7 +292,6 @@ class MeshDataset(Dataset):
         grids_to_process = sorted(list(grids_to_process)) # Sort the blocks to process for deterministic behavior
         print(f"Number of grids to process: {len(grids_to_process)}")
 
-        grids_to_process = grids_to_process[:50] # debug
         return grids_to_process
     
     def get_writer(self):
@@ -406,7 +405,7 @@ class PPMAndTextureModel(pl.LightningModule):
         return grid_points
 
     def forward(self, x):
-        # grid_cell: B x W x W x W, vertices: T x 3 x 3, normals: T x 3 x 3, uv_coords_triangles: T x 3 x 2, grid_index: T
+        # grid_coords: T x 3, grid_cell: B x W x W x W, vertices: T x 3 x 3, normals: T x 3 x 3, uv_coords_triangles: T x 3 x 2, grid_index: T
         grid_coords, grid_cells, vertices, normals, uv_coords_triangles, grid_index = x
         
         # Handle the case where the grid cells are empty
@@ -433,6 +432,11 @@ class PPMAndTextureModel(pl.LightningModule):
         # baryicentric_coords: T x W*H x 3, is_inside: T x W*H
         grid_points = grid_points[is_inside] # S x 2
 
+        # adjust to new_order
+        vertices = vertices[:, self.new_order, :]
+        normals = normals[:, self.new_order, :]
+        # grid_coords = grid_coords[:, self.new_order]
+
         # vertices: T x 3 x 3, normals: T x 3 x 3, baryicentric_coords: T x W*H x 3
         coords = torch.einsum('ijk,isj->isk', vertices, baryicentric_coords).squeeze()
         norms = normalize(torch.einsum('ijk,isj->isk', normals, baryicentric_coords).squeeze(),dim=1)
@@ -450,10 +454,6 @@ class PPMAndTextureModel(pl.LightningModule):
         coords = coords[is_inside]
         norms = norms[is_inside]
         grid_coords = grid_coords[is_inside] # S x 3
-        # adjust to new_order
-        grid_coords = grid_coords[:, self.new_order]
-        coords = coords[:, self.new_order]
-        norms = norms[:, self.new_order]
 
         grid_coords_end = grid_coords + torch.tensor(grid_cells.shape[1:4], device=grid_coords.device).unsqueeze(0).expand(grid_coords.shape[0], -1)
 
@@ -471,7 +471,8 @@ class PPMAndTextureModel(pl.LightningModule):
         coords = coords - grid_coords
         r_arange = torch.arange(-self.r, self.r+1, device=coords.device).reshape(1, -1, 1)
 
-        # coords_r: S x 2*r+1 x 3, grid_points: S x 2 -> S x 3
+        # coords: S x 2*r+1 x 3, grid_points: S x 2 -> S x 3
+        coords = coords[:, self.new_order]
         coords = coords.unsqueeze(-2).expand(-1, 2*self.r+1, -1) + r_arange * norms.unsqueeze(-2).expand(-1, 2*self.r+1, -1)
         # Combine Coordinates and Grid Index into S' x 4
         grid_index = grid_index.unsqueeze(-1).unsqueeze(-1).expand(-1, 2*self.r+1, -1)
