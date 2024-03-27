@@ -56,10 +56,13 @@ class MyPredictionWriter(BasePredictionWriter):
         os.makedirs(self.save_path, exist_ok=True)
         # save to disk each layer as tif
         for i in range(self.surface_volume_np.shape[0]):
-            if i != 32 and i != 0 and i != 64: continue
+            # if i != 32 and i != 0 and i != 64: continue # debug
             # string 0 padded to len of str(self.surface_volume_np.shape[0])
             i_str = str(i).zfill(len(str(self.surface_volume_np.shape[0])))
-            tifffile.imsave(os.path.join(self.save_path, f"{i_str}.tif"), self.surface_volume_np[i])
+            image = self.surface_volume_np[i]
+            image = image.T
+            image = image[::-1, :]
+            tifffile.imsave(os.path.join(self.save_path, f"{i_str}.tif"), image)
         
 class MeshDataset(Dataset):
     """Dataset class for rendering a mesh."""
@@ -67,7 +70,7 @@ class MeshDataset(Dataset):
         """Initialize the dataset."""
         self.path = path
         self.grid_cell_template = grid_cell_template
-        self.r = r
+        self.r = r+1
         self.max_side_triangle = max_side_triangle
         self.load_mesh(path)
         write_path = os.path.join(os.path.dirname(path), "layers")
@@ -427,71 +430,67 @@ class PPMAndTextureModel(pl.LightningModule):
         grid_points = self.create_grid_points_tensor(min_uv, max_diff_uv[0], max_diff_uv[1])
         del min_uv, max_uv, max_diff_uv
 
-        # Step 3: Compute Barycentric Coordinates for all Triangles
-        baryicentric_coords, is_inside = self.ppm(grid_points, uv_coords_triangles)
+        # Step 3: Compute Barycentric Coordinates for all Triangles grid_points
         # baryicentric_coords: T x W*H x 3, is_inside: T x W*H
+        baryicentric_coords, is_inside = self.ppm(grid_points, uv_coords_triangles)
         grid_points = grid_points[is_inside] # S x 2
 
         # adjust to new_order
         vertices = vertices[:, self.new_order, :]
         normals = normals[:, self.new_order, :]
-        # grid_coords = grid_coords[:, self.new_order]
 
         # vertices: T x 3 x 3, normals: T x 3 x 3, baryicentric_coords: T x W*H x 3
         coords = torch.einsum('ijk,isj->isk', vertices, baryicentric_coords).squeeze()
-        norms = normalize(torch.einsum('ijk,isj->isk', normals, baryicentric_coords).squeeze(),dim=1)
+        norms = normalize(torch.einsum('ijk,isj->isk', normals, baryicentric_coords).squeeze(),dim=2)
         del vertices, normals, uv_coords_triangles
-        
 
         # broadcast grid index to T x W*H -> S
         grid_index = grid_index.unsqueeze(-1).expand(-1, baryicentric_coords.shape[1])
         grid_index = grid_index[is_inside]
         # broadcast grid_coords to T x W*H x 3 -> S x 3
         grid_coords = grid_coords.unsqueeze(-2).expand(-1, baryicentric_coords.shape[1], -1)
+        coords = coords - grid_coords # Reorient coordinate system origin to 0 for extraction on grid_cells
+        del baryicentric_coords, grid_coords
 
-        del baryicentric_coords
+        # Poper axis order
+        coords = coords[:, self.new_order]
+        norms = norms[:, self.new_order]
+
         # coords: S x 3, norms: S x 3
         coords = coords[is_inside]
         norms = norms[is_inside]
-        grid_coords = grid_coords[is_inside] # S x 3
 
-        grid_coords_end = grid_coords + torch.tensor(grid_cells.shape[1:4], device=grid_coords.device).unsqueeze(0).expand(grid_coords.shape[0], -1)
-
-        # Step 4: Filter out the points that are outside the grid_cells
-        mask_coords = (coords[:, 0] >= grid_coords[:, 0]) & (coords[:, 0] < grid_coords_end[:, 0]) & (coords[:, 1] >= grid_coords[:, 1]) & (coords[:, 1] < grid_coords_end[:, 1]) & (coords[:, 2] >= grid_coords[:, 2]) & (coords[:, 2] < grid_coords_end[:, 2])
-
-        # coords: S' x 3, norms: S' x 3
-        coords = coords[mask_coords]
-        norms = norms[mask_coords]
-        grid_points = grid_points[mask_coords] # S' x 2
-        grid_index = grid_index[mask_coords] # S'
-        grid_coords = grid_coords[mask_coords] # S' x 3
-
-        # Step 5: Compute the 3D coordinates for every r
-        coords = coords - grid_coords
+        # Step 4: Compute the 3D coordinates for every r slice
         r_arange = torch.arange(-self.r, self.r+1, device=coords.device).reshape(1, -1, 1)
 
-        # coords: S x 2*r+1 x 3, grid_points: S x 2 -> S x 3
-        coords = coords[:, self.new_order]
+        # coords: S x 2*r+1 x 3, grid_index: S x 2*r+1 x 1
         coords = coords.unsqueeze(-2).expand(-1, 2*self.r+1, -1) + r_arange * norms.unsqueeze(-2).expand(-1, 2*self.r+1, -1)
-        # Combine Coordinates and Grid Index into S' x 4
         grid_index = grid_index.unsqueeze(-1).unsqueeze(-1).expand(-1, 2*self.r+1, -1)
 
         # Expand and add 3rd dimension to grid points
+        r_arange = r_arange.expand(grid_points.shape[0], -1, -1) + self.r # [0 to 2*r]
         grid_points = grid_points.unsqueeze(-2).expand(-1, 2*self.r+1, -1)
-        r_arange = self.r+r_arange.expand(grid_points.shape[0], -1, -1)
         grid_points = torch.cat((grid_points, r_arange), dim=-1)
-        del norms, r_arange, is_inside
+        del r_arange, is_inside
+
+        # Step 5: Filter out the points that are outside the grid_cells
+        mask_coords = (coords[:, :, 0] >= 0) & (coords[:, :, 0] < grid_cells.shape[1]) & (coords[:, :, 1] >= 0) & (coords[:, :, 1] < grid_cells.shape[2]) & (coords[:, :, 2] >= 0) & (coords[:, :, 2] < grid_cells.shape[3])
+
+        # coords: S' x 3, norms: S' x 3
+        coords = coords[mask_coords]
+        grid_points = grid_points[mask_coords] # S' x 2
+        grid_index = grid_index[mask_coords] # S'
 
         # Step 5: Extract the values from the grid cells
-        # grid_cells: T x W x H x D, coords: S x 3, grid_index: S x 1
+        # grid_cells: T x W x H x D, coords: S' x 3, grid_index: S' x 1
         values = extract_from_image_4d(grid_cells, grid_index, coords)
-        del coords, grid_cells
+        del coords, grid_cells, mask_coords
 
         # Step 6: Return the 3D Surface Volume coordinates and the values
         values = values.reshape(-1)
-        grid_points = grid_points.reshape(-1, 3) # grid_points: S x 3
-        # reorder grid_points = grid_points[:, [2, 0, 1]]
+        grid_points = grid_points.reshape(-1, 3) # grid_points: S' x 3
+        
+        # reorder grid_points
         grid_points = grid_points[:, [2, 0, 1]]
 
         # Return the 3D Surface Volume coordinates and the values
