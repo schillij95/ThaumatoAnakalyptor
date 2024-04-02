@@ -7,6 +7,7 @@ import os
 import numpy as np
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Semaphore
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.functional import normalize
@@ -21,15 +22,59 @@ import zarr
 from multiprocessing import cpu_count
 
 class MyPredictionWriter(BasePredictionWriter):
-    def __init__(self, save_path, image_size, r):
+    def __init__(self, save_path, image_size, r, max_queue_size=10, max_workers=1, display=True):
         super().__init__(write_interval="batch")  # or "epoch" for end of an epoch
         self.save_path = save_path
         self.image_size = image_size
+        self.display = display
+        self.image = None
         self.r = r
         self.surface_volume_np = np.zeros((2*r+1, image_size[0], image_size[1]), dtype=np.uint16)
+        self.max_queue_size = max(max_queue_size, max_workers)
+        self.executor = ThreadPoolExecutor(max_workers=max_workers)  # Adjust number of workers as needed
+        self.semaphore = Semaphore(self.max_queue_size)
+        self.futures = []
         self.num_workers = cpu_count()
     
     def write_on_batch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, prediction, batch_indices, batch, batch_idx: int, dataloader_idx: int) -> None:
+        self.semaphore.acquire()  # Wait for a slot to become available if necessary
+        future = self.executor.submit(self.process_and_write_data, prediction)
+        future.add_done_callback(lambda _future: self.semaphore.release())
+        self.futures.append(future)
+        # display progress
+        self.display_progress()
+
+    def process_display_progress(self):
+        if not self.display:
+            return
+        
+        try:
+            # display progress cv2.imshow
+            image = (self.surface_volume_np[self.r].astype(np.float32) / 65535)
+            screen_y = 2560
+
+            image = cv2.resize(image, ((screen_y * image.shape[1])//image.shape[0], screen_y))
+            image = image.T
+            image = image[::-1, :]
+            self.image = image
+        except Exception as e:
+            print(e)
+            pass
+
+    def display_progress(self):
+        if not self.display:
+            return
+        
+        try:
+            if self.image is None:
+                return
+            cv2.imshow("Surface Volume", self.image)
+            cv2.waitKey(1)
+        except Exception as e:
+            print(e)
+            pass
+
+    def process_and_write_data(self, prediction):
         # print("Writing to Numpy")
         if prediction is None:
             return
@@ -45,17 +90,18 @@ class MyPredictionWriter(BasePredictionWriter):
         # save into surface_volume_np
         self.surface_volume_np[indexes_3d[:, 0], indexes_3d[:, 1], indexes_3d[:, 2]] = values
 
-        # display progress cv2.imshow
-        image = (self.surface_volume_np[self.r].astype(np.float32) / 65535)
-        screen_y = 2560
+        # display progress
+        self.process_display_progress()
 
-        image = cv2.resize(image, ((screen_y * image.shape[1])//image.shape[0], screen_y))
-        image = image.T
-        image = image[::-1, :]
-        cv2.imshow("Surface Volume", image)
-        cv2.waitKey(1)
+    def wait_for_all_writes_to_complete(self):
+        # Wait for all queued tasks to complete
+        for future in tqdm(self.futures, desc="Finalizing writes"):
+            future.result()
 
     def write_to_disk(self, flag='jpg'):
+        # Make sure this method is called after the prediction loop is complete
+        print("Waiting for all writes to complete")
+        self.wait_for_all_writes_to_complete()
         print("Writing Segment to disk")
         # Make folder if it does not exist
         os.makedirs(self.save_path, exist_ok=True)
@@ -139,7 +185,7 @@ class MyPredictionWriter(BasePredictionWriter):
         
 class MeshDataset(Dataset):
     """Dataset class for rendering a mesh."""
-    def __init__(self, path, grid_cell_template, grid_size=500, r=32, max_side_triangle=10):
+    def __init__(self, path, grid_cell_template, grid_size=500, r=32, max_side_triangle=10, max_workers=1, display=False):
         """Initialize the dataset."""
         self.path = path
         self.grid_cell_template = grid_cell_template
@@ -147,7 +193,7 @@ class MeshDataset(Dataset):
         self.max_side_triangle = max_side_triangle
         self.load_mesh(path)
         write_path = os.path.join(os.path.dirname(path), "layers")
-        self.writer = MyPredictionWriter(write_path, self.image_size, r)
+        self.writer = MyPredictionWriter(write_path, self.image_size, r, max_workers=max_workers, display=display)
 
         self.grid_size = grid_size
         self.grids_to_process = self.init_grids_to_process()
@@ -231,43 +277,63 @@ class MeshDataset(Dataset):
         self.triangles_normals = self.normals[self.triangles]
 
     def adjust_triangle_sizes(self):
+        """
+        Adjusts the sizes of the triangles in the mesh based on the `max_side_triangle` parameter.
+
+        This method splits the triangles that are too big into smaller triangles. It computes the size of each triangle
+        in the x and y directions and compares it with the `max_side_triangle` parameter. If a triangle's side length
+        exceeds the `max_side_triangle`, it is split into two smaller triangles.
+
+        Returns:
+            None
+        """
         triangles_vertices = self.triangles_vertices
         triangles_normals = self.triangles_normals
         uv = self.uv
 
+        # Print the original number of triangles
         print(f"Original triangles: {triangles_vertices.shape[0]}, {triangles_normals.shape[0]}, {uv.shape[0]}", end="\n")
-        # split the triangles that are too big as per the max_side_triangle parameter
-        # compute the size of each triangle in x and y
-        # side lengths for all triangles: T x 3
+
+        # Split the triangles that are too big as per the max_side_triangle parameter
+        # Compute the size of each triangle in x and y
+        # Side lengths for all triangles: T x 3
         uv_good = []
         triangles_vertices_good = []
         triangles_normals_good = []
 
+        # Function to compute the current progress
+        def current_progress(maxS):
+            return np.log(2) - np.log(self.max_side_triangle / maxS)
+        # Iterate over the triangles and adjust the sizes, show progress with tqdm
         with tqdm(total=100, desc="Adjusting triangle sizes") as pbar:
             start = None
             while True:
+                # Compute the minimum and maximum UV coordinates for each triangle
                 triangle_min_uv = np.min(uv, axis=1)
                 triangle_max_uv = np.max(uv, axis=1)
-                side_lengths = triangle_max_uv - triangle_min_uv
+                # Compute the side lengths for each triangle, ceil the max and floor the min to get the integer side lengths
+                side_lengths = np.ceil(triangle_max_uv) - np.floor(triangle_min_uv)
                 max_side_lengths = np.max(side_lengths, axis=0)
 
-                def current_progress(maxS):
-                    return np.log(2) - np.log(self.max_side_triangle / maxS)
-
+                # Update the progress bar
                 if start is None:
-                    # ln_{max_side_triangle}(max_side_lengths)
+                    # Compute the starting progress value
                     start = current_progress(max_side_lengths[0]) + current_progress(max_side_lengths[1])
+                    progress = 0
                 else:
+                    # Compute the current progress and update the progress bar
                     now = current_progress(max_side_lengths[0]) + current_progress(max_side_lengths[1])
                     progress = max(1 - now / start, 0)
-                    pbar.n = int(progress * 100)
-                    pbar.refresh()
+                pbar.n = int(progress * 100)
+                pbar.refresh()
 
+                # Check if any triangle is too large
                 mask_large_side = np.any(side_lengths > self.max_side_triangle, axis=1)
-                # if no triangle is too large, we are done
+                # If no triangle is too large, we are done
                 if not np.any(mask_large_side):
                     break
 
+                # Keep the triangles that are not too large
                 uv_good_ = uv[np.logical_not(mask_large_side)]
                 triangles_vertices_good_ = triangles_vertices[np.logical_not(mask_large_side)]
                 triangles_normals_good_ = triangles_normals[np.logical_not(mask_large_side)]
@@ -277,6 +343,7 @@ class MeshDataset(Dataset):
                 triangles_vertices_good.append(triangles_vertices_good_)
                 triangles_normals_good.append(triangles_normals_good_)
 
+                # Get the triangles that are too large
                 uv_large = uv[mask_large_side]
                 side_lengths = side_lengths[mask_large_side]
                 triangle_min_uv = np.expand_dims(triangle_min_uv[mask_large_side], axis=1)
@@ -284,51 +351,53 @@ class MeshDataset(Dataset):
                 triangles_vertices_large = triangles_vertices[mask_large_side]
                 triangles_normals_large = triangles_normals[mask_large_side]
 
+                # Determine the larger side (x or y) for each triangle
                 mask_larger_side_x = side_lengths[:, 0] >= side_lengths[:, 1]
                 mask_larger_side_y = np.logical_not(mask_larger_side_x)
 
+                # Create masks for the minimum and maximum UV coordinates
                 mask_uv_x_min = uv_large[:, :, 0] == triangle_min_uv[:, :, 0]
                 mask_uv_x_max = uv_large[:, :, 0] == triangle_max_uv[:, :, 0]
                 mask_uv_y_min = uv_large[:, :, 1] == triangle_min_uv[:, :, 1]
                 mask_uv_y_max = uv_large[:, :, 1] == triangle_max_uv[:, :, 1]
 
+                # Create masks for the x and y directions
                 mask_x_min = np.logical_and(mask_larger_side_x[:, None], mask_uv_x_min)
                 mask_x_max = np.logical_and(mask_larger_side_x[:, None], mask_uv_x_max)
                 mask_y_min = np.logical_and(mask_larger_side_y[:, None], mask_uv_y_min)
                 mask_y_max = np.logical_and(mask_larger_side_y[:, None], mask_uv_y_max)
 
-                # maximum one true value per triangle
-                # Identify the first vertex that meets the condition in each triangle
+                # Create masks for the minimum and maximum sides
+                mask_x_min_ = np.zeros_like(mask_x_min)
+                mask_x_max_ = np.zeros_like(mask_x_max)
+                mask_y_min_ = np.zeros_like(mask_y_min)
+                mask_y_max_ = np.zeros_like(mask_y_max)
+
+                # Set the maximum value to True for each triangle
                 idx_x_min = np.argmax(mask_x_min, axis=1)
                 idx_x_max = np.argmax(mask_x_max, axis=1)
                 idx_y_min = np.argmax(mask_y_min, axis=1)
                 idx_y_max = np.argmax(mask_y_max, axis=1)
 
+                # Create an index array
                 ix = np.arange(mask_x_min.shape[0])
-
-                mask_x_min_ = np.zeros_like(mask_x_min)
-                mask_x_max_ = np.zeros_like(mask_x_max)
-                mask_y_min_ = np.zeros_like(mask_y_min)
-                mask_y_max_ = np.zeros_like(mask_y_max)
 
                 mask_x_min_[ix, idx_x_min] = True
                 mask_x_max_[ix, idx_x_max] = True
                 mask_y_min_[ix, idx_y_min] = True
                 mask_y_max_[ix, idx_y_max] = True
 
+                # Combine the masks for the minimum and maximum sides
                 mask_x_min__ = np.logical_and(mask_x_min, mask_x_min_)
                 mask_x_max__ = np.logical_and(mask_x_max, mask_x_max_)
                 mask_y_min__ = np.logical_and(mask_y_min, mask_y_min_)
                 mask_y_max__ = np.logical_and(mask_y_max, mask_y_max_)
 
-                mask_x = np.logical_or(mask_x_min__, mask_x_max__)
-                mask_y = np.logical_or(mask_y_min__, mask_y_max__)
+                # Combine the masks for the x and y directions
                 mask_min = np.logical_or(mask_x_min__, mask_y_min__)
                 mask_max = np.logical_or(mask_x_max__, mask_y_max__)
 
-                mask = np.logical_or(mask_x, mask_y)
-
-                # Create new vertices and normals and uvs
+                # Create new vertices, normals, and UV coordinates
                 new_vertices = (triangles_vertices_large[mask_min] + triangles_vertices_large[mask_max]) / 2
                 new_normals = (triangles_normals_large[mask_min] + triangles_normals_large[mask_max]) / 2
                 new_uv = (uv_large[mask_min] + uv_large[mask_max]) / 2
@@ -357,10 +426,12 @@ class MeshDataset(Dataset):
             pbar.n = 100
             pbar.refresh()
 
+        # Update the triangles, normals, and UV coordinates with the adjusted values
         self.triangles_vertices = np.concatenate(triangles_vertices_good, axis=0)
         self.triangles_normals = np.concatenate(triangles_normals_good, axis=0)
         self.uv = np.concatenate(uv_good, axis=0)
 
+        # Print the adjusted number of triangles
         print(f"Adjusted triangles: {self.triangles_vertices.shape[0]}, {self.triangles_normals.shape[0]}, {self.uv.shape[0]}", end="\n")
         
     def init_grids_to_process(self):
@@ -438,9 +509,10 @@ class MeshDataset(Dataset):
         return grid_coord, grid_cell_tensor, vertices_tensor, normals_tensor, uv_tensor
 
 class PPMAndTextureModel(pl.LightningModule):
-    def __init__(self, r=32):
+    def __init__(self, r: int = 32, max_side_triangle: int = 10):
         print("instantiating model")
         self.r = r
+        self.max_side_triangle = max_side_triangle
         self.new_order = [2,1,0] # [2,1,0], [2,0,1], [0,2,1], [0,1,2], [1,2,0], [1,0,2]
         super().__init__()
 
@@ -501,20 +573,15 @@ class PPMAndTextureModel(pl.LightningModule):
         if grid_cells is None:
             return None
                 
-        # Step 1: Compute AABBs for each triangle
+        # Step 1: Compute AABBs for each triangle (only starting points of AABB rectangles)
         min_uv, _ = torch.min(uv_coords_triangles, dim=1)
-        max_uv, _ = torch.max(uv_coords_triangles, dim=1)
         # Floor and ceil the UV coordinates
         min_uv = torch.floor(min_uv)
-        max_uv = torch.ceil(max_uv)
-
-        # Find largest max-min difference for each 2d axis
-        max_diff_uv, _ = torch.max(max_uv - min_uv, dim=0)
 
         # Step 2: Generate Meshgrids for All Triangles
         # create grid points tensor: T x W*H x 2
-        grid_points = self.create_grid_points_tensor(min_uv, max_diff_uv[0], max_diff_uv[1])
-        del min_uv, max_uv, max_diff_uv
+        grid_points = self.create_grid_points_tensor(min_uv, self.max_side_triangle, self.max_side_triangle)
+        del min_uv
 
         # Step 3: Compute Barycentric Coordinates for all Triangles grid_points
         # baryicentric_coords: T x W*H x 3, is_inside: T x W*H
@@ -621,15 +688,22 @@ def custom_collate_fn(batch):
     # Return a single batch containing all aggregated items
     return grid_coords, grid_cells, vertices, normals, uv_coords_triangles, grid_index
     
-def ppm_and_texture(obj_path, grid_cell_path, grid_size=500, gpus=1, batch_size=1, r=32, format='jpg'):
-    grid_cell_template = os.path.join(grid_cell_path, "cell_yxz_{:03}_{:03}_{:03}.tif")
-    dataset = MeshDataset(obj_path, grid_cell_template, grid_size=grid_size, r=r)
+def ppm_and_texture(obj_path, grid_cell_path, grid_size=500, gpus=1, batch_size=1, r=32, format='jpg', max_side_triangle: int = 10, display=False):
+    # Number of workers
     num_threads = multiprocessing.cpu_count() // int(1.5 * int(gpus))
     num_treads_for_gpus = 12
     num_workers = min(num_threads, num_treads_for_gpus)
     num_workers = max(num_workers, 1)
+    # Number of workers for the Writer
+    max_workers = max(1, min(multiprocessing.cpu_count()//2, 20))
+
+    # Template for the grid cell files
+    grid_cell_template = os.path.join(grid_cell_path, "cell_yxz_{:03}_{:03}_{:03}.tif")
+
+    # Initialize the dataset and dataloader
+    dataset = MeshDataset(obj_path, grid_cell_template, grid_size=grid_size, r=r, max_side_triangle=max_side_triangle, max_workers=max_workers, display=display)
     dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=custom_collate_fn, shuffle=False, num_workers=num_workers, prefetch_factor=2)
-    model = PPMAndTextureModel(r)
+    model = PPMAndTextureModel(r=r, max_side_triangle=max_side_triangle)
     
     writer = dataset.get_writer()
     trainer = pl.Trainer(callbacks=[writer], gpus=int(gpus), strategy="ddp")
@@ -649,6 +723,11 @@ if __name__ == '__main__':
     parser.add_argument('--gpus', type=int, default=1)
     parser.add_argument('--r', type=int, default=32)
     parser.add_argument('--format', type=str, default='jpg')
+    parser.add_argument('--display', action='store_true')
     args = parser.parse_known_args()[0]
 
-    ppm_and_texture(args.obj, gpus=args.gpus, grid_cell_path=args.grid_cell, r=args.r, format=args.format)
+    print(f"Rendering args: {args}")
+    if args.display:
+        print("[INFO]: Displaying the rendering image slows down the rendering process by about 20%.")
+
+    ppm_and_texture(args.obj, gpus=args.gpus, grid_cell_path=args.grid_cell, r=args.r, format=args.format, display=args.display)
