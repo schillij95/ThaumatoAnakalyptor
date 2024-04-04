@@ -196,28 +196,28 @@ def load_xyz_from_file(filename='umbilicus.txt'):
 
 def umbilicus(points_array):
     """
-    Interpolate between points in the provided 2D array based on y values.
+    Interpolate between points in the provided 2D array based on z values.
 
-    :param points_array: A 2D numpy array of shape (n, 3) with x, y, and z coordinates.
-    :return: A 2D numpy array with interpolated points for each 0.1 step in the y direction.
+    :param points_array: A 2D numpy array of shape (n, 3) with y, z, and x coordinates.
+    :return: A 2D numpy array with interpolated points for each 1 step in the z direction.
     """
 
     # Separate the coordinates
-    x, y, z = points_array.T
+    y, z, x = points_array.T
 
     # Create interpolation functions for x and y based on z
-    fx = interp1d(y, x, kind='linear', fill_value="extrapolate")
-    fz = interp1d(y, z, kind='linear', fill_value="extrapolate")
+    fx = interp1d(z, x, kind='linear', fill_value="extrapolate")
+    fy = interp1d(z, y, kind='linear', fill_value="extrapolate")
 
-    # Define new y values for interpolation
-    y_new = np.arange(y.min(), y.max(), 1)
+    # Define new z values for interpolation
+    z_new = np.arange(z.min(), z.max(), 1)
 
     # Calculate interpolated x and y values
-    x_new = fx(y_new)
-    z_new = fz(y_new)
+    x_new = fx(z_new)
+    y_new = fy(z_new)
 
-    # Return the combined x, y, and z values as a 2D array
-    return np.column_stack((x_new, y_new, z_new))
+    # Return the combined y, z, and x values as a 2D array
+    return np.column_stack((y_new, z_new, x_new))
 
 def umbilicus_xz_at_y(points_array, y_new):
     """
