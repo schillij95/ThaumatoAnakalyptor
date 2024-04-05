@@ -1015,7 +1015,6 @@ def build_main_sheet_from_patches_list(main_sheet_patches_list, subvolume_size, 
     
     return main_sheet, main_patches
 
-
 def build_main_sheet_patches_list(main_sheet_volume_ids, main_sheet):
     main_sheet_volume_patches = []
     for volume_id in main_sheet_volume_ids:
@@ -1033,9 +1032,9 @@ def winding_switch_sheet_score_raw_precomputed_surface(patch_start, patch, overl
     normal_vector = normals_start
     R = rotation_matrix_to_align_z_with_v(normal_vector)
 
-    # Fit other patch and main sheet together
-    min_ = - overlapp_threshold["max_sheet_clip_distance"]
-    max_ = overlapp_threshold["max_sheet_clip_distance"]
+    # Fit other patch and main sheet together, 10 to have reasonable range around max clip distance
+    min_ = - 10*overlapp_threshold["max_sheet_clip_distance"]
+    max_ = 10*overlapp_threshold["max_sheet_clip_distance"]
     points = patch["points"]
     distances_to_start_patch, patch_patch_start_direction_vector = distance_from_surface_clipped(points, R, n, coeff_start, min_, max_, return_direction=True)
 
