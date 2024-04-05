@@ -185,14 +185,15 @@ class MyPredictionWriter(BasePredictionWriter):
         
 class MeshDataset(Dataset):
     """Dataset class for rendering a mesh."""
-    def __init__(self, path, grid_cell_template, grid_size=500, r=32, max_side_triangle=10, max_workers=1, display=False):
+    def __init__(self, path, grid_cell_template, output_path=None, grid_size=500, r=32, max_side_triangle=10, max_workers=1, display=False):
         """Initialize the dataset."""
         self.path = path
         self.grid_cell_template = grid_cell_template
         self.r = r+1
         self.max_side_triangle = max_side_triangle
         self.load_mesh(path)
-        write_path = os.path.join(os.path.dirname(path), "layers")
+        output_path = os.path.dirname(path) if output_path is None else output_path
+        write_path = os.path.join(output_path, "layers")
         self.writer = MyPredictionWriter(write_path, self.image_size, r, max_workers=max_workers, display=display)
 
         self.grid_size = grid_size
@@ -688,7 +689,7 @@ def custom_collate_fn(batch):
     # Return a single batch containing all aggregated items
     return grid_coords, grid_cells, vertices, normals, uv_coords_triangles, grid_index
     
-def ppm_and_texture(obj_path, grid_cell_path, grid_size=500, gpus=1, batch_size=1, r=32, format='jpg', max_side_triangle: int = 10, display=False):
+def ppm_and_texture(obj_path, grid_cell_path, output_path=None, grid_size=500, gpus=1, batch_size=1, r=32, format='jpg', max_side_triangle: int = 10, display=False):
     # Number of workers
     num_threads = multiprocessing.cpu_count() // int(1.5 * int(gpus))
     num_treads_for_gpus = 12
@@ -701,7 +702,7 @@ def ppm_and_texture(obj_path, grid_cell_path, grid_size=500, gpus=1, batch_size=
     grid_cell_template = os.path.join(grid_cell_path, "cell_yxz_{:03}_{:03}_{:03}.tif")
 
     # Initialize the dataset and dataloader
-    dataset = MeshDataset(obj_path, grid_cell_template, grid_size=grid_size, r=r, max_side_triangle=max_side_triangle, max_workers=max_workers, display=display)
+    dataset = MeshDataset(obj_path, grid_cell_template, output_path=output_path, grid_size=grid_size, r=r, max_side_triangle=max_side_triangle, max_workers=max_workers, display=display)
     dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=custom_collate_fn, shuffle=False, num_workers=num_workers, prefetch_factor=2)
     model = PPMAndTextureModel(r=r, max_side_triangle=max_side_triangle)
     
@@ -720,6 +721,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('obj', type=str)
     parser.add_argument('grid_cell', type=str)
+    parser.add_argument('--output_path', type=str, default=None)
     parser.add_argument('--gpus', type=int, default=1)
     parser.add_argument('--r', type=int, default=32)
     parser.add_argument('--format', type=str, default='jpg')
@@ -730,4 +732,4 @@ if __name__ == '__main__':
     if args.display:
         print("[INFO]: Displaying the rendering image slows down the rendering process by about 20%.")
 
-    ppm_and_texture(args.obj, gpus=args.gpus, grid_cell_path=args.grid_cell, r=args.r, format=args.format, display=args.display)
+    ppm_and_texture(args.obj, gpus=args.gpus, grid_cell_path=args.grid_cell, output_path=args.output_path, r=args.r, format=args.format, display=args.display)
