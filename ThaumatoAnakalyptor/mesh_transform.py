@@ -33,7 +33,17 @@ def apply_transform_to_image(image_path, transform_matrix):
     new_size = int(image.width * scale_x), int(image.height * scale_y)
     return image.resize(new_size, Image.ANTIALIAS)
 
-def compute(transform_path, original_volume_id, target_volume_id, base_path):
+def parse_mtl_for_texture_filenames(mtl_filepath):
+    texture_filenames = []
+    with open(mtl_filepath, 'r') as file:
+        for line in file:
+            if line.strip().startswith('map_Kd'):  # This line indicates a texture file in MTL
+                parts = line.split()
+                if len(parts) > 1:
+                    texture_filenames.append(parts[1])  # The second part is the filename
+    return texture_filenames
+
+def compute(transform_path, original_volume_id, target_volume_id, mesh_path):
     # Load transform from original to canonical
     if not (original_volume_id is None):
         transform_to_canonical_path = glob.glob(f"{transform_path}/*-to-{original_volume_id}.json")
@@ -56,18 +66,24 @@ def compute(transform_path, original_volume_id, target_volume_id, base_path):
     # Combine the transformations
     combined_transform = combine_transforms(inverted_transform_to_canonical, transform_to_target)
     
-    # Find .obj
-    obj_name = sorted(glob.glob(f"{base_path}/*.obj"))[0][:-4]
-
     # Paths and application of transforms
-    mesh_path = f"{base_path}/{obj_name}.obj"
-    image_path = f"{base_path}/{obj_name}_0.png"
-    mtl_path = f"{base_path}/{obj_name}.mtl"
+    segment_name = str(os.path.basename(mesh_path)[:-4])
+    base_path = str(os.path.dirname(segment_name))
+    mtl_path = f"{base_path}/{segment_name}.mtl"
+
+    texture_filenames = parse_mtl_for_texture_filenames(mtl_path)
+    if len(texture_filenames) > 0:
+        image_path = os.path.join(base_path, texture_filenames[0])
+        print(f"Found material texture image at: {image_path}", end="\n")
+    else:
+        image_path = None
+        print("No corresponding TIF, PNG, or MTL image found.", end="\n")
+    print("Texture Image Name:", image_path)
 
     base_path_save = base_path + f"_{target_volume_id}"
-    mesh_save_path = f"{base_path_save}/{obj_name}.obj"
-    image_save_path = f"{base_path_save}/{obj_name}_0.png"
-    mtl_save_path = f"{base_path_save}/{obj_name}.mtl"
+    mesh_save_path = segment_name.replace(base_path, base_path_save)
+    mtl_save_path = mtl_path.replace(base_path, base_path_save)
+    image_save_path = image_path.replace(base_path, base_path_save)
 
     mesh = apply_transform_to_mesh(mesh_path, combined_transform)
     os.makedirs(os.path.dirname(mesh_save_path), exist_ok=True)
@@ -86,9 +102,9 @@ if __name__ == "__main__":
     parser.add_argument("--transform_path", type=str, required=True, help="Folder containing the transform .json files")
     parser.add_argument("--original_volume_id", type=str, required=True, help="Volume ID of the original scroll volume for the input mesh")
     parser.add_argument("--target_volume_id", type=str, required=True, help="Volume ID of the target scroll volume to transform the input mesh to")
-    parser.add_argument("--base_path", type=str, required=True, help="Path to your .obj file")
+    parser.add_argument("--obj_path", type=str, required=True, help="Path to your .obj file")
 
     args = parser.parse_args()
 
     print(f"Processing from {args.original_volume_id} to {args.target_volume_id}")
-    compute(args.transform_path, args.original_volume_id, args.target_volume_id, args.base_path)
+    compute(args.transform_path, args.original_volume_id, args.target_volume_id, args.obj_path)
