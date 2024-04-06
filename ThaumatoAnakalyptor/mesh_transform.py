@@ -59,9 +59,13 @@ def compute(transform_path, original_volume_id, target_volume_id, mesh_path):
     else:
         inverted_transform_to_canonical = np.eye(4)
     
-    # Load transform from canonical to target
-    transform_to_target_path = glob.glob(f"{transform_path}/*-to-{target_volume_id}.json")[0]
-    transform_to_target = load_transform(transform_to_target_path)
+    is_canonical = len(glob.glob(f"{transform_path}/{target_volume_id}-to-*.json")[0]) > 0
+    if not is_canonical:
+        # Load transform from canonical to target
+        transform_to_target_path = glob.glob(f"{transform_path}/*-to-{target_volume_id}.json")[0]
+        transform_to_target = load_transform(transform_to_target_path)
+    else:
+        transform_to_target = np.eye(4)
     
     # Combine the transformations
     combined_transform = combine_transforms(inverted_transform_to_canonical, transform_to_target)
