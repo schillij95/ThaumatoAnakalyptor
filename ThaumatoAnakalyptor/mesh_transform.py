@@ -29,6 +29,7 @@ def apply_transform_to_mesh(mesh_path, transform_matrix):
 
 def apply_transform_to_image(image_path, transform_matrix):
     image = Image.open(image_path)
+    image = image.convert('L')
     scale_x, scale_y = transform_matrix[0, 0], transform_matrix[1, 1]
     new_size = int(image.width * scale_x), int(image.height * scale_y)
     return image.resize(new_size, Image.ANTIALIAS)
