@@ -72,7 +72,7 @@ def compute(transform_path, original_volume_id, target_volume_id, mesh_path):
     
     # Paths and application of transforms
     segment_name = str(os.path.basename(mesh_path)[:-4])
-    base_path = str(os.path.dirname(segment_name))
+    base_path = str(os.path.dirname(mesh_path))
     mtl_path = f"{base_path}/{segment_name}.mtl"
 
     texture_filenames = parse_mtl_for_texture_filenames(mtl_path)
