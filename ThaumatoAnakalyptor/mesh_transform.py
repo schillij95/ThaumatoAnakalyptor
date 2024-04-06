@@ -85,7 +85,7 @@ def compute(transform_path, original_volume_id, target_volume_id, mesh_path):
     print("Texture Image Name:", image_path)
 
     base_path_save = base_path + f"_{target_volume_id}"
-    mesh_save_path = segment_name.replace(base_path, base_path_save)
+    mesh_save_path = mesh_path.replace(base_path, base_path_save)
     mtl_save_path = mtl_path.replace(base_path, base_path_save)
     image_save_path = image_path.replace(base_path, base_path_save)
 
