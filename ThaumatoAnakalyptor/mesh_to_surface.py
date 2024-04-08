@@ -38,6 +38,7 @@ class MyPredictionWriter(BasePredictionWriter):
         self.semaphore = Semaphore(self.max_queue_size)
         self.futures = []
         self.num_workers = cpu_count()
+        self.trainer_rank = None
     
     def write_on_batch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, prediction, batch_indices, batch, batch_idx: int, dataloader_idx: int) -> None:
         self.semaphore.acquire()  # Wait for a slot to become available if necessary
