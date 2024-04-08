@@ -101,7 +101,7 @@ class MyPredictionWriter(BasePredictionWriter):
                 values = values.cpu()
                 indexes_3d = indexes_3d.cpu()
                 
-            values = self.all_gather_nd(values)
+            values = self.all_gather_nd(values, trainer)
             indexes_3d = self.all_gather_nd(indexes_3d, trainer)
             rank_pred_dict =(values, indexes_3d)
 
