@@ -125,8 +125,8 @@ class MyPredictionWriter(BasePredictionWriter):
             values_stack.append(values.numpy().astype(np.uint16))
             indexes_3d_stack.append(indexes_3d.numpy().astype(np.int32))
 
-        indexes_3d = np.stack(indexes_3d_stack, axis=0)
-        values = np.stack(values_stack, axis=0)
+        indexes_3d = np.concatenate(indexes_3d_stack, axis=0)
+        values = np.concatenate(values_stack, axis=0)
         
         if indexes_3d.shape[0] == 0:
             return
