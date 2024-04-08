@@ -47,7 +47,6 @@ dependencies:
   - cyrus-sasl=2.1.28=h9c0eb46_1
   - dbus=1.13.18=hb2f20db_0
   - expat=2.5.0=h6a678d5_0
-  - ezdxf==1.2.0
   - fontconfig=2.14.1=h4c34cd2_2
   - freetype=2.12.1=h4a9f257_0
   - giflib=5.2.1=h5eee18b_3
@@ -164,6 +163,7 @@ dependencies:
       - docker-pycreds==0.4.0
       - einops==0.7.0
       - executing==1.2.0
+      - ezdxf==1.2.0
       - fastapi==0.95.1
       - fastjsonschema==2.16.3
       - fire==0.4.0
