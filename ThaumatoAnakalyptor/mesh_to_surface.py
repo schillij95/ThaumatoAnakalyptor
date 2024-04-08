@@ -83,7 +83,7 @@ class MyPredictionWriter(BasePredictionWriter):
         values_, indexes_3d_ = prediction
 
         values = [None] * trainer.world_size
-        torch.distributed.all_gather_object(values, values_.cpu())
+        torch.distributed.all_gather_object(values, values_)
         torch.distributed.barrier()
         if self.trainer_rank != 0:
             return
