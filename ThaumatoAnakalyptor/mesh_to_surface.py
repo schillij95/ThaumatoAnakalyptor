@@ -95,8 +95,8 @@ class MyPredictionWriter(BasePredictionWriter):
             else:
                 print(f"Rank {self.trainer_rank}, prediction is not empty")
                 values, indexes_3d = prediction
-                indexes_3d = indexes_3d.cpu()
-                values = values.cpu()
+                indexes_3d = indexes_3d.cpu().numpy().astype(np.int32)
+                values = values.cpu().numpy().astype(np.uint16)
                 rank_pred_dict = {str(self.trainer_rank): (values, indexes_3d)}
 
             # print(f"Rank {self.trainer_rank}, length of values: {len(rank_pred_dict)}")
@@ -123,8 +123,8 @@ class MyPredictionWriter(BasePredictionWriter):
         for rank, (values, indexes_3d) in rank_pred_dict.items():
             if values is None:
                 continue
-            values_stack.append(values.numpy().astype(np.uint16))
-            indexes_3d_stack.append(indexes_3d.numpy().astype(np.int32))
+            values_stack.append(values)
+            indexes_3d_stack.append(indexes_3d)
 
         indexes_3d = np.concatenate(indexes_3d_stack, axis=0)
         values = np.concatenate(values_stack, axis=0)
