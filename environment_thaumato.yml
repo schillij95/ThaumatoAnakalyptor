@@ -293,7 +293,7 @@ dependencies:
       - tornado==6.3
       - traitlets==5.9.0
       - trimesh==3.14.0
-      - typing-extensions==4.5.0
+      - typing-extensions==4.6.0
       - tzdata==2023.3
       - uvicorn==0.21.1
       - volumentations==0.1.8

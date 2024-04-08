@@ -10,7 +10,6 @@ from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Semaphore
 import torch
-from torch import dist
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.functional import normalize
 import pytorch_lightning as pl
