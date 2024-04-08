@@ -23,6 +23,7 @@ import cv2
 import zarr
 from multiprocessing import cpu_count, shared_memory
 import time
+import warnings
 
 class MyPredictionWriter(BasePredictionWriter):
     def __init__(self, save_path, image_size, r, max_queue_size=10, max_workers=1, display=True):
@@ -175,7 +176,10 @@ class MyPredictionWriter(BasePredictionWriter):
         if self.trainer_rank == 0:
             try:
                 self.shm.close()
-                self.shm.unlink()
+                # No warnings verbose
+                with warnings.catch_warnings(action="ignore"):
+                    self.shm.unlink()
+
             except Exception as e:
                 print(e)
         print("Segment written to disk")
