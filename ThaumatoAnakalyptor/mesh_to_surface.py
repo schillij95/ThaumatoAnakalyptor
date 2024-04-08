@@ -5,6 +5,7 @@ import open3d as o3d
 import argparse
 import os
 import numpy as np
+import torch.distributed
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Semaphore
@@ -129,7 +130,7 @@ class MyPredictionWriter(BasePredictionWriter):
         """
         local_size = torch.tensor(tensor.size(), device=tensor.device)
         all_sizes = [torch.zeros_like(local_size) for _ in range(trainer.world_size)]
-        dist.all_gather(all_sizes, local_size)
+        torch.distributed.all_gather(all_sizes, local_size)
 
         max_length = max(size[0] for size in all_sizes)
 
@@ -140,7 +141,7 @@ class MyPredictionWriter(BasePredictionWriter):
             tensor = torch.cat((tensor, padding))
 
         all_tensors_padded = [torch.zeros_like(tensor) for _ in range(trainer.world_size)]
-        dist.all_gather(all_tensors_padded, tensor)
+        torch.distributed.all_gather(all_tensors_padded, tensor)
         all_tensors = []
         for tensor_, size in zip(all_tensors_padded, all_sizes):
             all_tensors.append(tensor_[:size[0]])
