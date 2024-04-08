@@ -153,6 +153,7 @@ class MyPredictionWriter(BasePredictionWriter):
         self.wait_for_all_writes_to_complete()
         if self.trainer_rank != 0: # Only rank 0 should write to disk
             self.shm.close()
+            self.shm = None
             return
         print("Writing Segment to disk")
         # Make folder if it does not exist
@@ -179,7 +180,7 @@ class MyPredictionWriter(BasePredictionWriter):
                 # No warnings verbose
                 with warnings.catch_warnings(action="ignore"):
                     self.shm.unlink()
-
+                    self.shm = None
             except Exception as e:
                 print(e)
         print("Segment written to disk")
