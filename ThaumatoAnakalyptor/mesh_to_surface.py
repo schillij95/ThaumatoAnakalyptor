@@ -42,8 +42,19 @@ class MyPredictionWriter(BasePredictionWriter):
         self.trainer_rank = None
     
     def write_on_batch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, prediction, batch_indices, batch, batch_idx: int, dataloader_idx: int) -> None:
+        if self.trainer_rank is None: # Only set the rank once
+            self.trainer_rank = trainer.global_rank if trainer.world_size > 1 else 0
+
+        if self.surface_volume_np is None:
+            if trainer.global_rank == 0:
+                self.surface_volume_np, self.shm = self.create_shared_array((2*self.r+1, self.image_size[0], self.image_size[1]), np.uint16, name="surface_volume")
+                # Gather the shared memory name
+                torch.distributed.barrier()
+            else:
+                torch.distributed.barrier()
+                self.surface_volume_np, self.shm = self.attach_shared_array((2*self.r+1, self.image_size[0], self.image_size[1]), np.uint16, name="surface_volume")
         self.semaphore.acquire()  # Wait for a slot to become available if necessary
-        future = self.executor.submit(self.process_and_write_data, prediction, trainer)
+        future = self.executor.submit(self.process_and_write_data, prediction)
         future.add_done_callback(lambda _future: self.semaphore.release())
         self.futures.append(future)
         # display progress
@@ -106,20 +117,8 @@ class MyPredictionWriter(BasePredictionWriter):
             except FileNotFoundError:
                 time.sleep(0.2)
 
-    def process_and_write_data(self, prediction, trainer):
+    def process_and_write_data(self, prediction):
         try:
-            if self.trainer_rank is None: # Only set the rank once
-                self.trainer_rank = trainer.global_rank if trainer.world_size > 1 else 0
-
-            if self.surface_volume_np is None:
-                if trainer.global_rank == 0:
-                    self.surface_volume_np, self.shm = self.create_shared_array((2*self.r+1, self.image_size[0], self.image_size[1]), np.uint16, name="surface_volume")
-                    # Gather the shared memory name
-                    torch.distributed.barrier()
-                else:
-                    torch.distributed.barrier()
-                    self.surface_volume_np, self.shm = self.attach_shared_array((2*self.r+1, self.image_size[0], self.image_size[1]), np.uint16, name="surface_volume")
-
             # print("Writing to Numpy")
             if prediction is None:
                 return
