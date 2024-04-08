@@ -33,7 +33,6 @@ class MyPredictionWriter(BasePredictionWriter):
         self.max_queue_size = max(max_queue_size, max_workers)
         self.executor = ThreadPoolExecutor(max_workers=max_workers)  # Adjust number of workers as needed
         self.semaphore = Semaphore(self.max_queue_size) 
-        self.lock = Semaphore(1)
         self.futures = []
         self.num_workers = cpu_count()
         self.trainer_rank = None
@@ -99,7 +98,6 @@ class MyPredictionWriter(BasePredictionWriter):
             else: # Multi GPU
                 gathered_predictions = [None] * trainer.world_size
                 torch.distributed.all_gather_object(gathered_predictions, rank_pred_dict)
-                self.lock.release()
                 if self.trainer_rank != 0:
                     return None
                 return gathered_predictions
