@@ -32,17 +32,18 @@ class MyPredictionWriter(BasePredictionWriter):
         self.surface_volume_np = np.zeros((2*r+1, image_size[0], image_size[1]), dtype=np.uint16)
         self.max_queue_size = max(max_queue_size, max_workers)
         self.executor = ThreadPoolExecutor(max_workers=max_workers)  # Adjust number of workers as needed
-        self.semaphore = Semaphore(self.max_queue_size)
+        self.semaphore = Semaphore(self.max_queue_size) 
+        self.lock = Semaphore(1)
         self.futures = []
         self.num_workers = cpu_count()
         self.trainer_rank = None
 
     def write_on_batch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, prediction, batch_indices, batch, batch_idx: int, dataloader_idx: int) -> None:
-        # self.semaphore.acquire()  # Wait for a slot to become available if necessary
-        # future = self.executor.submit(self.process_and_write_data, prediction, trainer)
-        # future.add_done_callback(lambda _future: self.semaphore.release())
-        # self.futures.append(future)
-        self.process_and_write_data(prediction, trainer)
+        self.semaphore.acquire()  # Wait for a slot to become available if necessary
+        self.lock.acquire()
+        future = self.executor.submit(self.process_and_write_data, prediction, trainer)
+        future.add_done_callback(lambda _future: self.semaphore.release())
+        self.futures.append(future)
         # display progress
         self.display_progress()
 
@@ -97,11 +98,12 @@ class MyPredictionWriter(BasePredictionWriter):
             # print(f"Rank {self.trainer_rank}, length of values: {len(rank_pred_dict)}")
             gathered_predictions = [None] * trainer.world_size
             torch.distributed.all_gather_object(gathered_predictions, rank_pred_dict)
+            self.lock.release()
             if self.trainer_rank != 0:
                 print(f"Rank {self.trainer_rank}, returning")
                 return
 
-            print(f"Rank 0, length of values: {len(values)}")
+            print(f"Rank 0, length of values: {len(rank_pred_dict)}")
             return
         except Exception as e:
             print(e)
