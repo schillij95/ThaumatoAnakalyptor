@@ -9,6 +9,7 @@ from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Semaphore
 import torch
+from torch import dist
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.functional import normalize
 import pytorch_lightning as pl
@@ -86,33 +87,74 @@ class MyPredictionWriter(BasePredictionWriter):
                 self.trainer_rank = trainer.global_rank if trainer.world_size > 1 else 0
 
             if prediction is None:
-                rank_pred_dict = {str(self.trainer_rank): (None, None)}
+                # values tensor shape: (0, 1)
+                values = torch.zeros((0, 1))
+                # indexes_3d tensor shape: (0, 3)
+                indexes_3d = torch.zeros((0, 3))
             elif len(prediction) == 0:
-                rank_pred_dict = {str(self.trainer_rank): (None, None)}
+                # values tensor shape: (0, 1)
+                values = torch.zeros((0, 1))
+                # indexes_3d tensor shape: (0, 3)
+                indexes_3d = torch.zeros((0, 3))
             else:
                 values, indexes_3d = prediction
                 values = values.cpu()
                 indexes_3d = indexes_3d.cpu()
-                rank_pred_dict = {str(self.trainer_rank): (values, indexes_3d)}
+                
+            values = self.all_gather_nd(values)
+            indexes_3d = self.all_gather_nd(indexes_3d)
+            rank_pred_dict =(values, indexes_3d)
 
             if trainer.world_size == 1: # Single GPU
                 return rank_pred_dict
             else: # Multi GPU
-                gathered_predictions = [None] * trainer.world_size
-                torch.distributed.all_gather_object(gathered_predictions, rank_pred_dict)
                 if self.trainer_rank != 0:
                     return None
-                return gathered_predictions
+                return rank_pred_dict
         except Exception as e:
             print(e)
             return None
+        
+    def all_gather_nd(self, tensor):
+        """
+        Gathers tensor arrays of different lengths in a list.
+        The length dimension is 0. This supports any number of extra dimensions in the tensors.
+        All the other dimensions should be equal between the tensors.
+
+        Args:
+            tensor (Tensor): Tensor to be broadcast from current process.
+
+        Returns:
+            (Tensor): output list of tensors that can be of different sizes
+        """
+        world_size = dist.get_world_size()
+        local_size = torch.tensor(tensor.size(), device=tensor.device)
+        all_sizes = [torch.zeros_like(local_size) for _ in range(world_size)]
+        dist.all_gather(all_sizes, local_size)
+
+        max_length = max(size[0] for size in all_sizes)
+
+        length_diff = max_length.item() - local_size[0].item()
+        if length_diff:
+            pad_size = (length_diff, *tensor.size()[1:])
+            padding = torch.zeros(pad_size, device=tensor.device, dtype=tensor.dtype)
+            tensor = torch.cat((tensor, padding))
+
+        all_tensors_padded = [torch.zeros_like(tensor) for _ in range(world_size)]
+        dist.all_gather(all_tensors_padded, tensor)
+        all_tensors = []
+        for tensor_, size in zip(all_tensors_padded, all_sizes):
+            all_tensors.append(tensor_[:size[0]])
+        return all_tensors
 
     def process_and_write_data(self, rank_pred_dict):
-        print("Processing and writing data")
         if rank_pred_dict is None:
             return
         
-        for rank, (values, indexes_3d) in rank_pred_dict.items():
+        values_list, indexes_3d_list = rank_pred_dict
+        for i in range(len(values_list)):
+            values = values_list[i]
+            indexes_3d = indexes_3d_list[i]
             if values is None:
                 continue
             values = values.numpy().astype(np.uint16)
