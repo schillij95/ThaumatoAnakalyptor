@@ -85,12 +85,9 @@ class MyPredictionWriter(BasePredictionWriter):
             # Create a shared array
             shm = shared_memory.SharedMemory(create=True, size=array_size, name=name)
         except FileExistsError:
-            print(f"Shared memory with name {name} already exists. Please use a different name.")
+            print(f"Shared memory with name {name} already exists.")
             # Clean up the shared memory if it already exists
             shm = shared_memory.SharedMemory(create=False, size=array_size, name=name)
-            shm = shared_memory.SharedMemory(name=name)
-            shm.close()
-            shm.unlink()
 
         arr = np.ndarray(shape, dtype=dtype, buffer=shm.buf)
         arr.fill(0)  # Initialize the array with zeros
