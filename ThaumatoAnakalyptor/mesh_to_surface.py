@@ -173,8 +173,11 @@ class MyPredictionWriter(BasePredictionWriter):
         
         # Close the shared memory
         if self.trainer_rank == 0:
-            self.shm.close()
-            self.shm.unlink()
+            try:
+                self.shm.close()
+                self.shm.unlink()
+            except Exception as e:
+                print(e)
         print("Segment written to disk")
 
     def write_tif(self):
