@@ -177,7 +177,8 @@ class MyPredictionWriter(BasePredictionWriter):
             try:
                 self.shm.close()
                 # No warnings verbose
-                with warnings.catch_warnings(action="ignore"):
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
                     self.shm.unlink()
                     self.shm = None
             except Exception as e:
