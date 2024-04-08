@@ -79,11 +79,13 @@ class MyPredictionWriter(BasePredictionWriter):
         if self.trainer_rank is None: # Only set the rank once
             self.trainer_rank = trainer.global_rank if trainer.world_size > 1 else 0
 
+        values, indexes_3d = prediction
+        indexes_3d = indexes_3d.cpu().numpy().astype(np.int32)
+        values = values.cpu().numpy().astype(np.uint16)
+        rank_pred_dict = {self.trainer_rank: (values, indexes_3d)}
 
-        values_, indexes_3d_ = prediction
-
-        values = [None] * trainer.world_size
-        torch.distributed.all_gather_object(values, values_)
+        gathered_predictions = [None] * trainer.world_size
+        torch.distributed.all_gather_object(gathered_predictions, rank_pred_dict)
         if self.trainer_rank != 0:
             return
 
@@ -95,8 +97,6 @@ class MyPredictionWriter(BasePredictionWriter):
         if len(prediction) == 0:
             return
         
-        indexes_3d = indexes_3d.cpu().numpy().astype(np.int32)
-        values = values.cpu().numpy().astype(np.uint16)
         if indexes_3d.shape[0] == 0:
             return
 
