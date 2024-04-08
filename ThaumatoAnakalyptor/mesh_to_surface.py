@@ -99,10 +99,6 @@ class MyPredictionWriter(BasePredictionWriter):
                 gathered_predictions = [None] * trainer.world_size
                 torch.distributed.all_gather_object(gathered_predictions, rank_pred_dict)
                 if self.trainer_rank != 0:
-                    for key in gathered_predictions:
-                        if key is not None:
-                            del gathered_predictions[key][0]
-                            del gathered_predictions[key][1]
                     return None
                 return gathered_predictions
         except Exception as e:
