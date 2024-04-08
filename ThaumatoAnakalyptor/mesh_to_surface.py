@@ -778,6 +778,8 @@ def ppm_and_texture(obj_path, grid_cell_path, output_path=None, grid_size=500, g
     trainer.predict(model, dataloaders=dataloader, return_predictions=False)
     print("Rendering done")
     writer.write_to_disk(format)
+    # Sync up before exiting
+    torch.distributed.barrier()
     
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
