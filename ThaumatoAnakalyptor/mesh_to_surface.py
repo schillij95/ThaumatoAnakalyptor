@@ -35,7 +35,8 @@ class MyPredictionWriter(BasePredictionWriter):
         self.semaphore = Semaphore(self.max_queue_size)
         self.futures = []
         self.num_workers = cpu_count()
-    
+        self.trainer_rank = None
+
     def write_on_batch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, prediction, batch_indices, batch, batch_idx: int, dataloader_idx: int) -> None:
         self.semaphore.acquire()  # Wait for a slot to become available if necessary
         future = self.executor.submit(self.process_and_write_data, prediction, trainer)
@@ -75,22 +76,26 @@ class MyPredictionWriter(BasePredictionWriter):
             pass
 
     def process_and_write_data(self, prediction, trainer):
-        # print("Writing to Numpy")
-        if prediction is None:
-            return
-        if len(prediction) == 0:
-            return
+        if self.trainer_rank is None: # Only set the rank once
+            self.trainer_rank = trainer.global_rank if trainer.world_size > 1 else 0
+
 
         values_, indexes_3d_ = prediction
 
         values = [None] * trainer.world_size
         torch.distributed.all_gather_object(values, values_)
         torch.distributed.barrier()
-        if trainer.global_rank != 0:
+        if self.trainer_rank != 0:
             return
 
         print(f"Rank 0, length of values: {len(values)}")
         return
+        # print("Writing to Numpy")
+        if prediction is None:
+            return
+        if len(prediction) == 0:
+            return
+        
         indexes_3d = indexes_3d.cpu().numpy().astype(np.int32)
         values = values.cpu().numpy().astype(np.uint16)
         if indexes_3d.shape[0] == 0:
@@ -108,6 +113,9 @@ class MyPredictionWriter(BasePredictionWriter):
             future.result()
 
     def write_to_disk(self, flag='jpg'):
+        if self.trainer_rank != 0: # Only rank 0 should write to disk
+            return
+        
         # Make sure this method is called after the prediction loop is complete
         print("Waiting for all writes to complete")
         self.wait_for_all_writes_to_complete()
