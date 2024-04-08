@@ -159,9 +159,9 @@ class MyPredictionWriter(BasePredictionWriter):
             print("Invalid flag. Choose between 'tif', 'jpg', 'memmap', 'npz', 'zarr'")
             return
         
+        self.shm.close()
         # Close the shared memory
         if self.trainer_rank == 0:
-            self.shm.close()
             self.shm.unlink()
         print("Segment written to disk")
 
