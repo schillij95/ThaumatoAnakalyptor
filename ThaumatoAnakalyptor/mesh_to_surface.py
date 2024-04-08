@@ -32,7 +32,6 @@ class MyPredictionWriter(BasePredictionWriter):
         self.display = display
         self.image = None
         self.r = r
-        self.surface_volume_np = np.zeros((2*r+1, image_size[0], image_size[1]), dtype=np.uint16)
         self.surface_volume_np = None
         self.max_queue_size = max(max_queue_size, max_workers)
         self.executor = ThreadPoolExecutor(max_workers=max_workers)  # Adjust number of workers as needed
@@ -59,6 +58,11 @@ class MyPredictionWriter(BasePredictionWriter):
         self.futures.append(future)
         # display progress
         self.display_progress()
+
+    def write_on_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, predictions: argparse.Sequence[argparse.Any], batch_indices: argparse.Sequence[argparse.Any] | None) -> None:
+        print(f"End of prediction, close shared memory")
+        self.shm.close()
+        return super().write_on_epoch_end(trainer, pl_module, predictions, batch_indices)
 
     def process_display_progress(self):
         if not self.display:
@@ -169,7 +173,6 @@ class MyPredictionWriter(BasePredictionWriter):
             print("Invalid flag. Choose between 'tif', 'jpg', 'memmap', 'npz', 'zarr'")
             return
         
-        self.shm.close()
         # Close the shared memory
         if self.trainer_rank == 0:
             self.shm.unlink()
