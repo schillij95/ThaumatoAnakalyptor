@@ -79,11 +79,17 @@ class MyPredictionWriter(BasePredictionWriter):
         if self.trainer_rank is None: # Only set the rank once
             self.trainer_rank = trainer.global_rank if trainer.world_size > 1 else 0
 
-        values, indexes_3d = prediction
-        indexes_3d = indexes_3d.cpu().numpy().astype(np.int32)
-        values = values.cpu().numpy().astype(np.uint16)
-        rank_pred_dict = {self.trainer_rank: (values, indexes_3d)}
+        if prediction is None:
+            rank_pred_dict = {self.trainer_rank: (None, None)}
+        elif len(prediction) == 0:
+            rank_pred_dict = {self.trainer_rank: (None, None)}
+        else:
+            values, indexes_3d = prediction
+            indexes_3d = indexes_3d.cpu().numpy().astype(np.int32)
+            values = values.cpu().numpy().astype(np.uint16)
+            rank_pred_dict = {self.trainer_rank: (values, indexes_3d)}
 
+        print(f"Rank {self.trainer_rank}, length of values: {len(rank_pred_dict)}")
         gathered_predictions = [None] * trainer.world_size
         torch.distributed.all_gather_object(gathered_predictions, rank_pred_dict)
         if self.trainer_rank != 0:
@@ -92,10 +98,6 @@ class MyPredictionWriter(BasePredictionWriter):
         print(f"Rank 0, length of values: {len(values)}")
         return
         # print("Writing to Numpy")
-        if prediction is None:
-            return
-        if len(prediction) == 0:
-            return
         
         if indexes_3d.shape[0] == 0:
             return
