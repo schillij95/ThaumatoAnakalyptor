@@ -81,10 +81,13 @@ class MyPredictionWriter(BasePredictionWriter):
                 self.trainer_rank = trainer.global_rank if trainer.world_size > 1 else 0
 
             if prediction is None:
+                print(f"Rank {self.trainer_rank}, prediction is None")
                 rank_pred_dict = {str(self.trainer_rank): (None, None)}
             elif len(prediction) == 0:
+                print(f"Rank {self.trainer_rank}, prediction is empty")
                 rank_pred_dict = {str(self.trainer_rank): (None, None)}
             else:
+                print(f"Rank {self.trainer_rank}, prediction is not empty")
                 values, indexes_3d = prediction
                 indexes_3d = indexes_3d.cpu()
                 values = values.cpu().numpy()
