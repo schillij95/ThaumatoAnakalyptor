@@ -741,6 +741,7 @@ def ppm_and_texture(obj_path, grid_cell_path, output_path=None, grid_size=500, g
     num_workers = max(num_workers, 1)
     # Number of workers for the Writer
     max_workers = max(1, min(multiprocessing.cpu_count()//2, 20))
+    max_workers = min(max_workers, 20)
 
     # Template for the grid cell files
     grid_cell_template = os.path.join(grid_cell_path, "cell_yxz_{:03}_{:03}_{:03}.tif")
@@ -751,7 +752,7 @@ def ppm_and_texture(obj_path, grid_cell_path, output_path=None, grid_size=500, g
     model = PPMAndTextureModel(r=r, max_side_triangle=max_side_triangle)
     
     writer = dataset.get_writer()
-    trainer = pl.Trainer(callbacks=[writer], gpus=int(gpus), strategy="ddp")
+    trainer = pl.Trainer(callbacks=[writer], accelerator='gpu', devices=int(gpus), strategy="ddp")
     
     print("Start Rendering")
     # Run Rendering
