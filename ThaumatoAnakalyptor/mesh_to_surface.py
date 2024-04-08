@@ -38,10 +38,11 @@ class MyPredictionWriter(BasePredictionWriter):
         self.trainer_rank = None
 
     def write_on_batch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, prediction, batch_indices, batch, batch_idx: int, dataloader_idx: int) -> None:
-        self.semaphore.acquire()  # Wait for a slot to become available if necessary
-        future = self.executor.submit(self.process_and_write_data, prediction, trainer)
-        future.add_done_callback(lambda _future: self.semaphore.release())
-        self.futures.append(future)
+        # self.semaphore.acquire()  # Wait for a slot to become available if necessary
+        # future = self.executor.submit(self.process_and_write_data, prediction, trainer)
+        # future.add_done_callback(lambda _future: self.semaphore.release())
+        # self.futures.append(future)
+        self.process_and_write_data(prediction, trainer)
         # display progress
         self.display_progress()
 
