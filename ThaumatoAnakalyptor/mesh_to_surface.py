@@ -59,10 +59,9 @@ class MyPredictionWriter(BasePredictionWriter):
         # display progress
         self.display_progress()
 
-    def write_on_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, predictions: argparse.Sequence[argparse.Any], batch_indices: argparse.Sequence[argparse.Any] | None) -> None:
+    def write_on_epoch_end(self, trainer, pl_module, predictions, batch_indices):
         print(f"End of prediction, close shared memory")
         self.shm.close()
-        return super().write_on_epoch_end(trainer, pl_module, predictions, batch_indices)
 
     def process_display_progress(self):
         if not self.display:
