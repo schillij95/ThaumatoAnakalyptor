@@ -21,7 +21,7 @@ Image.MAX_IMAGE_PIXELS = None
 import tifffile
 import cv2
 import zarr
-from multiprocessing import cpu_count
+from multiprocessing import cpu_count, shared_memory
 
 class MyPredictionWriter(BasePredictionWriter):
     def __init__(self, save_path, image_size, r, max_queue_size=10, max_workers=1, display=True):
@@ -32,21 +32,16 @@ class MyPredictionWriter(BasePredictionWriter):
         self.image = None
         self.r = r
         self.surface_volume_np = np.zeros((2*r+1, image_size[0], image_size[1]), dtype=np.uint16)
+        self.surface_volume_np = None
         self.max_queue_size = max(max_queue_size, max_workers)
         self.executor = ThreadPoolExecutor(max_workers=max_workers)  # Adjust number of workers as needed
-        self.semaphore = Semaphore(self.max_queue_size) 
+        self.semaphore = Semaphore(self.max_queue_size)
         self.futures = []
         self.num_workers = cpu_count()
-        self.trainer_rank = None
-
+    
     def write_on_batch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, prediction, batch_indices, batch, batch_idx: int, dataloader_idx: int) -> None:
-        rank_pred_dict = self.gather_perdiction(prediction, trainer)
-        if rank_pred_dict is None:
-            return
-        
-        # Process on rank 0
         self.semaphore.acquire()  # Wait for a slot to become available if necessary
-        future = self.executor.submit(self.process_and_write_data, rank_pred_dict)
+        future = self.executor.submit(self.process_and_write_data, prediction, trainer)
         future.add_done_callback(lambda _future: self.semaphore.release())
         self.futures.append(future)
         # display progress
@@ -82,88 +77,56 @@ class MyPredictionWriter(BasePredictionWriter):
             print(e)
             pass
 
-    def gather_perdiction(self, prediction, trainer):
+    def create_shared_array(self, shape, dtype, name="shared_array"):
         try:
-            if self.trainer_rank is None: # Only set the rank once
-                self.trainer_rank = trainer.global_rank if trainer.world_size > 1 else 0
+            # Create a shared array
+            array_size = np.prod(shape) * np.dtype(dtype).itemsize
+            shm = shared_memory.SharedMemory(create=True, size=array_size, name=name)
+            arr = np.ndarray(shape, dtype=dtype, buffer=shm.buf)
+            arr.fill(0)  # Initialize the array with zeros
+        except FileExistsError:
+            print(f"Shared memory with name {name} already exists. Please use a different name.")
+            # Clean up the shared memory if it already exists
+            shm = shared_memory.SharedMemory(name=name)
+            shm.close()
+            shm.unlink()
+            # Try to create the shared memory again
+            arr, shm = self.create_shared_array(shape, dtype, name=name)
+        return arr, shm
+    
+    def attach_shared_array(self, shape, dtype, name="shared_array"):
+        # Attach to an existing shared array
+        shm = shared_memory.SharedMemory(name=name)
+        arr = np.ndarray(shape, dtype=dtype, buffer=shm.buf)
+        assert arr.shape == shape, f"Expected shape {shape} but got {arr.shape}"
+        assert arr.dtype == dtype, f"Expected dtype {dtype} but got {arr.dtype}"
+        return arr, shm
 
-            if prediction is None:
-                # values tensor shape: (0, 1)
-                values = torch.zeros((0, 1))
-                # indexes_3d tensor shape: (0, 3)
-                indexes_3d = torch.zeros((0, 3))
-            elif len(prediction) == 0:
-                # values tensor shape: (0, 1)
-                values = torch.zeros((0, 1))
-                # indexes_3d tensor shape: (0, 3)
-                indexes_3d = torch.zeros((0, 3))
+    def process_and_write_data(self, prediction, trainer):
+        if self.trainer_rank is None: # Only set the rank once
+            self.trainer_rank = trainer.global_rank if trainer.world_size > 1 else 0
+
+        if self.surface_volume_np is None:
+            if trainer.global_rank == 0:
+                self.surface_volume_np, self.shm = self.create_shared_array((2*self.r+1, self.image_size[0], self.image_size[1]), np.uint16, name="surface_volume")
             else:
-                values, indexes_3d = prediction
-                values = values.cpu()
-                indexes_3d = indexes_3d.cpu()
-                
-            values = self.all_gather_nd(values, trainer)
-            indexes_3d = self.all_gather_nd(indexes_3d, trainer)
-            rank_pred_dict =(values, indexes_3d)
+                self.surface_volume_np, self.shm = self.attach_shared_array((2*self.r+1, self.image_size[0], self.image_size[1]), np.uint16, name="surface_volume")
 
-            if trainer.world_size == 1: # Single GPU
-                return rank_pred_dict
-            else: # Multi GPU
-                if self.trainer_rank != 0:
-                    return None
-                return rank_pred_dict
-        except Exception as e:
-            print(e)
-            return None
-        
-    def all_gather_nd(self, tensor, trainer):
-        """
-        Gathers tensor arrays of different lengths in a list.
-        The length dimension is 0. This supports any number of extra dimensions in the tensors.
-        All the other dimensions should be equal between the tensors.
-
-        Args:
-            tensor (Tensor): Tensor to be broadcast from current process.
-
-        Returns:
-            (Tensor): output list of tensors that can be of different sizes
-        """
-        local_size = torch.tensor(tensor.size(), device=tensor.device)
-        all_sizes = [torch.zeros_like(local_size) for _ in range(trainer.world_size)]
-        torch.distributed.all_gather(all_sizes, local_size)
-
-        max_length = max(size[0] for size in all_sizes)
-
-        length_diff = max_length.item() - local_size[0].item()
-        if length_diff:
-            pad_size = (length_diff, *tensor.size()[1:])
-            padding = torch.zeros(pad_size, device=tensor.device, dtype=tensor.dtype)
-            tensor = torch.cat((tensor, padding))
-
-        all_tensors_padded = [torch.zeros_like(tensor) for _ in range(trainer.world_size)]
-        torch.distributed.all_gather(all_tensors_padded, tensor)
-        all_tensors = []
-        for tensor_, size in zip(all_tensors_padded, all_sizes):
-            all_tensors.append(tensor_[:size[0]])
-        return all_tensors
-
-    def process_and_write_data(self, rank_pred_dict):
-        if rank_pred_dict is None:
+        # print("Writing to Numpy")
+        if prediction is None:
             return
-        
-        values_list, indexes_3d_list = rank_pred_dict
-        for i in range(len(values_list)):
-            values = values_list[i]
-            indexes_3d = indexes_3d_list[i]
-            if values is None:
-                continue
-            values = values.numpy().astype(np.uint16)
-            indexes_3d = indexes_3d.numpy().astype(np.int32)
-            if indexes_3d.shape[0] == 0:
-                continue
-            # save into surface_volume_np
-            self.surface_volume_np[indexes_3d[:, 0], indexes_3d[:, 1], indexes_3d[:, 2]] = values
-        
+        if len(prediction) == 0:
+            return
+
+        values, indexes_3d = prediction
+        indexes_3d = indexes_3d.cpu().numpy().astype(np.int32)
+        values = values.cpu().numpy().astype(np.uint16)
+        if indexes_3d.shape[0] == 0:
+            return
+
+        # save into surface_volume_np
+        self.surface_volume_np[indexes_3d[:, 0], indexes_3d[:, 1], indexes_3d[:, 2]] = values
+
         # display progress
         self.process_display_progress()
 
@@ -175,7 +138,6 @@ class MyPredictionWriter(BasePredictionWriter):
     def write_to_disk(self, flag='jpg'):
         if self.trainer_rank != 0: # Only rank 0 should write to disk
             return
-        
         # Make sure this method is called after the prediction loop is complete
         print("Waiting for all writes to complete")
         self.wait_for_all_writes_to_complete()
