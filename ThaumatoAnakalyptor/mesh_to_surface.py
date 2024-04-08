@@ -91,6 +91,8 @@ class MyPredictionWriter(BasePredictionWriter):
                 rank_pred_dict = {str(self.trainer_rank): (None, None)}
             else:
                 values, indexes_3d = prediction
+                value = values.cpu()
+                indexes_3d = indexes_3d.cpu()
                 rank_pred_dict = {str(self.trainer_rank): (values, indexes_3d)}
 
             if trainer.world_size == 1: # Single GPU
@@ -113,8 +115,8 @@ class MyPredictionWriter(BasePredictionWriter):
         for rank, (values, indexes_3d) in rank_pred_dict.items():
             if values is None:
                 continue
-            values = values.cpu().numpy().astype(np.uint16)
-            indexes_3d = indexes_3d.cpu().numpy().astype(np.int32)
+            values = values.numpy().astype(np.uint16)
+            indexes_3d = indexes_3d.numpy().astype(np.int32)
             if indexes_3d.shape[0] == 0:
                 continue
             # save into surface_volume_np
