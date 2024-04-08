@@ -22,6 +22,7 @@ import tifffile
 import cv2
 import zarr
 from multiprocessing import cpu_count, shared_memory
+import time
 
 class MyPredictionWriter(BasePredictionWriter):
     def __init__(self, save_path, image_size, r, max_queue_size=10, max_workers=1, display=True):
@@ -79,29 +80,34 @@ class MyPredictionWriter(BasePredictionWriter):
             pass
 
     def create_shared_array(self, shape, dtype, name="shared_array"):
+        array_size = np.prod(shape) * np.dtype(dtype).itemsize
         try:
             # Create a shared array
-            array_size = np.prod(shape) * np.dtype(dtype).itemsize
             shm = shared_memory.SharedMemory(create=True, size=array_size, name=name)
-            arr = np.ndarray(shape, dtype=dtype, buffer=shm.buf)
-            arr.fill(0)  # Initialize the array with zeros
         except FileExistsError:
             print(f"Shared memory with name {name} already exists. Please use a different name.")
             # Clean up the shared memory if it already exists
+            shm = shared_memory.SharedMemory(create=False, size=array_size, name=name)
             shm = shared_memory.SharedMemory(name=name)
             shm.close()
             shm.unlink()
-            # Try to create the shared memory again
-            arr, shm = self.create_shared_array(shape, dtype, name=name)
+
+        arr = np.ndarray(shape, dtype=dtype, buffer=shm.buf)
+        arr.fill(0)  # Initialize the array with zeros
         return arr, shm
     
     def attach_shared_array(self, shape, dtype, name="shared_array"):
-        # Attach to an existing shared array
-        shm = shared_memory.SharedMemory(name=name)
-        arr = np.ndarray(shape, dtype=dtype, buffer=shm.buf)
-        assert arr.shape == shape, f"Expected shape {shape} but got {arr.shape}"
-        assert arr.dtype == dtype, f"Expected dtype {dtype} but got {arr.dtype}"
-        return arr, shm
+        while True:
+            try:
+                # Attach to an existing shared array
+                shm = shared_memory.SharedMemory(name=name)
+                arr = np.ndarray(shape, dtype=dtype, buffer=shm.buf)
+                assert arr.shape == shape, f"Expected shape {shape} but got {arr.shape}"
+                assert arr.dtype == dtype, f"Expected dtype {dtype} but got {arr.dtype}"
+                print("Attached to shared memory")
+                return arr, shm
+            except FileNotFoundError:
+                time.sleep(0.2)
 
     def process_and_write_data(self, prediction, trainer):
         try:
@@ -111,7 +117,10 @@ class MyPredictionWriter(BasePredictionWriter):
             if self.surface_volume_np is None:
                 if trainer.global_rank == 0:
                     self.surface_volume_np, self.shm = self.create_shared_array((2*self.r+1, self.image_size[0], self.image_size[1]), np.uint16, name="surface_volume")
+                    # Gather the shared memory name
+                    torch.distributed.barrier()
                 else:
+                    torch.distributed.barrier()
                     self.surface_volume_np, self.shm = self.attach_shared_array((2*self.r+1, self.image_size[0], self.image_size[1]), np.uint16, name="surface_volume")
 
             # print("Writing to Numpy")
@@ -746,7 +755,7 @@ def ppm_and_texture(obj_path, grid_cell_path, output_path=None, grid_size=500, g
     num_workers = max(num_workers, 1)
     # Number of workers for the Writer
     max_workers = max(1, min(multiprocessing.cpu_count()//2, 20))
-    max_workers = min(max_workers, 20)
+    max_workers = min(max_workers, 5)
 
     # Template for the grid cell files
     grid_cell_template = os.path.join(grid_cell_path, "cell_yxz_{:03}_{:03}_{:03}.tif")
