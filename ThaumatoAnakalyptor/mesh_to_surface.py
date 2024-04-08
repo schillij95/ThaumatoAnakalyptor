@@ -87,28 +87,24 @@ class MyPredictionWriter(BasePredictionWriter):
                 self.trainer_rank = trainer.global_rank if trainer.world_size > 1 else 0
 
             if prediction is None:
-                print(f"Rank {self.trainer_rank}, prediction is None")
                 rank_pred_dict = {str(self.trainer_rank): (None, None)}
             elif len(prediction) == 0:
-                print(f"Rank {self.trainer_rank}, prediction is empty")
                 rank_pred_dict = {str(self.trainer_rank): (None, None)}
             else:
-                print(f"Rank {self.trainer_rank}, prediction is not empty")
                 values, indexes_3d = prediction
                 indexes_3d = indexes_3d.cpu().numpy().astype(np.int32)
                 values = values.cpu().numpy().astype(np.uint16)
                 rank_pred_dict = {str(self.trainer_rank): (values, indexes_3d)}
 
-            # print(f"Rank {self.trainer_rank}, length of values: {len(rank_pred_dict)}")
-            gathered_predictions = [None] * trainer.world_size
-            torch.distributed.all_gather_object(gathered_predictions, rank_pred_dict)
-            self.lock.release()
-            if self.trainer_rank != 0:
-                print(f"Rank {self.trainer_rank}, returning")
-                return None
-
-            print(f"Rank 0, length of values: {len(rank_pred_dict)}")
-            return rank_pred_dict
+            if trainer.world_size == 1: # Single GPU
+                return rank_pred_dict
+            else: # Multi GPU
+                gathered_predictions = [None] * trainer.world_size
+                torch.distributed.all_gather_object(gathered_predictions, rank_pred_dict)
+                self.lock.release()
+                if self.trainer_rank != 0:
+                    return None
+                return gathered_predictions
         except Exception as e:
             print(e)
             return None
