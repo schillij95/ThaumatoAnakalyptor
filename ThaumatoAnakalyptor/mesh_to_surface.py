@@ -525,7 +525,7 @@ class MeshDataset(Dataset):
     def extract_triangles_mask(self, grid_index):
         # select all triangles that have at least one vertice in the grid with a r-padded bounding box
         # grid_size * grid_index - r <= vertice <= grid_size * grid_index + r
-        selected_triangles_mask = np.any(np.all(np.logical_and(self.triangles_vertices >= np.array(grid_index) * self.grid_size - self.r, self.triangles_vertices <= (np.array(grid_index) + 1) * self.grid_size + self.r), axis=2), axis=1)
+        selected_triangles_mask = np.any(np.all(np.logical_and(self.triangles_vertices >= np.array(grid_index) * self.grid_size - 2*self.r, self.triangles_vertices <= (np.array(grid_index) + 1) * self.grid_size + 2*self.r), axis=2), axis=1)
 
         return selected_triangles_mask
     
