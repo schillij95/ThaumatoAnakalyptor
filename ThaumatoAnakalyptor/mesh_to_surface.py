@@ -59,10 +59,6 @@ class MyPredictionWriter(BasePredictionWriter):
         # display progress
         self.display_progress()
 
-    def write_on_epoch_end(self, trainer, pl_module, predictions, batch_indices):
-        print(f"End of prediction, close shared memory")
-        self.shm.close()
-
     def process_display_progress(self):
         if not self.display:
             return
@@ -147,13 +143,16 @@ class MyPredictionWriter(BasePredictionWriter):
         # Wait for all queued tasks to complete
         for future in tqdm(self.futures, desc="Finalizing writes"):
             future.result()
+        # Wait for all GPU writes to complete
+        torch.distributed.barrier()
 
     def write_to_disk(self, flag='jpg'):
-        if self.trainer_rank != 0: # Only rank 0 should write to disk
-            return
         # Make sure this method is called after the prediction loop is complete
         print("Waiting for all writes to complete")
         self.wait_for_all_writes_to_complete()
+        if self.trainer_rank != 0: # Only rank 0 should write to disk
+            self.shm.close()
+            return
         print("Writing Segment to disk")
         # Make folder if it does not exist
         os.makedirs(self.save_path, exist_ok=True)
@@ -174,6 +173,7 @@ class MyPredictionWriter(BasePredictionWriter):
         
         # Close the shared memory
         if self.trainer_rank == 0:
+            self.shm.close()
             self.shm.unlink()
         print("Segment written to disk")
 
