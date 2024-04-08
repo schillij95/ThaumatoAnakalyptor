@@ -91,7 +91,7 @@ class MyPredictionWriter(BasePredictionWriter):
                 rank_pred_dict = {str(self.trainer_rank): (None, None)}
             else:
                 values, indexes_3d = prediction
-                value = values.cpu()
+                values = values.cpu()
                 indexes_3d = indexes_3d.cpu()
                 rank_pred_dict = {str(self.trainer_rank): (values, indexes_3d)}
 
