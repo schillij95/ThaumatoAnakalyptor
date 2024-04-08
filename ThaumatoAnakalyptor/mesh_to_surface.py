@@ -119,8 +119,10 @@ class MyPredictionWriter(BasePredictionWriter):
         for rank, (values, indexes_3d) in rank_pred_dict.items():
             if values is None:
                 continue
-            values_stack.append(values.cpu().numpy().astype(np.uint16))
-            indexes_3d_stack.append(indexes_3d.cpu().numpy().astype(np.int32))
+            values = values.cpu().numpy().astype(np.uint16)
+            values_stack.append(values)
+            indexes_3d = indexes_3d.cpu().numpy().astype(np.int32)
+            indexes_3d_stack.append(indexes_3d)
 
         indexes_3d = np.concatenate(indexes_3d_stack, axis=0)
         values = np.concatenate(values_stack, axis=0)
