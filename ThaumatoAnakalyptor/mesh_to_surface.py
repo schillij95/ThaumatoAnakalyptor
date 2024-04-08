@@ -39,9 +39,13 @@ class MyPredictionWriter(BasePredictionWriter):
         self.trainer_rank = None
 
     def write_on_batch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, prediction, batch_indices, batch, batch_idx: int, dataloader_idx: int) -> None:
+        rank_pred_dict = self.gather_perdiction(prediction, trainer)
+        if rank_pred_dict is None:
+            return
+        
+        # Process on rank 0
         self.semaphore.acquire()  # Wait for a slot to become available if necessary
-        self.lock.acquire()
-        future = self.executor.submit(self.process_and_write_data, prediction, trainer)
+        future = self.executor.submit(self.process_and_write_data, rank_pred_dict)
         future.add_done_callback(lambda _future: self.semaphore.release())
         self.futures.append(future)
         # display progress
@@ -77,7 +81,7 @@ class MyPredictionWriter(BasePredictionWriter):
             print(e)
             pass
 
-    def process_and_write_data(self, prediction, trainer):
+    def gather_perdiction(self, prediction, trainer):
         try:
             if self.trainer_rank is None: # Only set the rank once
                 self.trainer_rank = trainer.global_rank if trainer.world_size > 1 else 0
@@ -92,7 +96,7 @@ class MyPredictionWriter(BasePredictionWriter):
                 print(f"Rank {self.trainer_rank}, prediction is not empty")
                 values, indexes_3d = prediction
                 indexes_3d = indexes_3d.cpu()
-                values = values.cpu().numpy()
+                values = values.cpu()
                 rank_pred_dict = {str(self.trainer_rank): (values, indexes_3d)}
 
             # print(f"Rank {self.trainer_rank}, length of values: {len(rank_pred_dict)}")
@@ -101,17 +105,28 @@ class MyPredictionWriter(BasePredictionWriter):
             self.lock.release()
             if self.trainer_rank != 0:
                 print(f"Rank {self.trainer_rank}, returning")
-                return
+                return None
 
             print(f"Rank 0, length of values: {len(rank_pred_dict)}")
-            return
+            return rank_pred_dict
         except Exception as e:
             print(e)
-            return
-        # print("Writing to Numpy")
+            return None
 
-        indexes_3d = indexes_3d.cpu().numpy().astype(np.int32)
-        values = values.cpu().numpy().astype(np.uint16)
+    def process_and_write_data(self, rank_pred_dict):
+        if rank_pred_dict is None:
+            return
+        
+        values_stack = []
+        indexes_3d_stack = []
+        for rank, (values, indexes_3d) in rank_pred_dict.items():
+            if values is None:
+                continue
+            values_stack.append(values.numpy().astype(np.uint16))
+            indexes_3d_stack.append(indexes_3d.numpy().astype(np.int32))
+
+        indexes_3d = np.stack(indexes_3d_stack, axis=0)
+        values = np.stack(values_stack, axis=0)
         
         if indexes_3d.shape[0] == 0:
             return
