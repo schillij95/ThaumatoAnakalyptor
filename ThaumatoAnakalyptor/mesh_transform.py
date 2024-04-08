@@ -17,6 +17,7 @@ def load_transform(transform_path):
 
 def invert_transform(transform_matrix):
     inv_transform = np.linalg.inv(transform_matrix)
+    transform_matrix = transform_matrix / transform_matrix[3, 3] # Homogeneous coordinates
     return inv_transform
 
 def combine_transforms(transform_a, transform_b):
@@ -24,8 +25,8 @@ def combine_transforms(transform_a, transform_b):
 
 def apply_transform_to_mesh(mesh_path, transform_matrix):
     mesh = o3d.io.read_triangle_mesh(mesh_path)
-    mesh.vertices = o3d.utility.Vector3dVector(np.asarray(mesh.vertices) @ transform_matrix[:3, :3].T + transform_matrix[:3, 3])
-    normals = np.asarray(mesh.vertex_normals) @ transform_matrix[:3, :3].T
+    mesh.vertices = o3d.utility.Vector3dVector(np.asarray(mesh.vertices) @ transform_matrix[:3, :3] + transform_matrix[:3, 3])
+    normals = np.asarray(mesh.vertex_normals) @ transform_matrix[:3, :3]
     # Normalize Normals
     normals = normals / np.linalg.norm(normals, axis=1)[:, None]
     mesh.vertex_normals = o3d.utility.Vector3dVector(normals)
