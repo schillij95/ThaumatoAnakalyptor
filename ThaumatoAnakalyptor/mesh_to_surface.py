@@ -114,6 +114,7 @@ class MyPredictionWriter(BasePredictionWriter):
             return None
 
     def process_and_write_data(self, rank_pred_dict):
+        print("Processing and writing data")
         if rank_pred_dict is None:
             return
         
