@@ -158,6 +158,11 @@ class MyPredictionWriter(BasePredictionWriter):
         else:
             print("Invalid flag. Choose between 'tif', 'jpg', 'memmap', 'npz', 'zarr'")
             return
+        
+        # Close the shared memory
+        if self.trainer_rank == 0:
+            self.shm.close()
+            self.shm.unlink()
         print("Segment written to disk")
 
     def write_tif(self):
