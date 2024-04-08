@@ -89,7 +89,7 @@ class MyPredictionWriter(BasePredictionWriter):
             values = values.cpu().numpy().astype(np.uint16)
             rank_pred_dict = {self.trainer_rank: (values, indexes_3d)}
 
-        print(f"Rank {self.trainer_rank}, length of values: {len(rank_pred_dict)}")
+        # print(f"Rank {self.trainer_rank}, length of values: {len(rank_pred_dict)}")
         gathered_predictions = [None] * trainer.world_size
         torch.distributed.all_gather_object(gathered_predictions, rank_pred_dict)
         if self.trainer_rank != 0:
