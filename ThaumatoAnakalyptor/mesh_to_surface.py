@@ -775,8 +775,6 @@ def ppm_and_texture(obj_path, grid_cell_path, output_path=None, grid_size=500, g
     print("Rendering done")
     writer.write_to_disk(format)
     
-    return
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('obj', type=str)
