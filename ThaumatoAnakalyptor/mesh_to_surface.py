@@ -103,32 +103,36 @@ class MyPredictionWriter(BasePredictionWriter):
         return arr, shm
 
     def process_and_write_data(self, prediction, trainer):
-        if self.trainer_rank is None: # Only set the rank once
-            self.trainer_rank = trainer.global_rank if trainer.world_size > 1 else 0
+        try:
+            if self.trainer_rank is None: # Only set the rank once
+                self.trainer_rank = trainer.global_rank if trainer.world_size > 1 else 0
 
-        if self.surface_volume_np is None:
-            if trainer.global_rank == 0:
-                self.surface_volume_np, self.shm = self.create_shared_array((2*self.r+1, self.image_size[0], self.image_size[1]), np.uint16, name="surface_volume")
-            else:
-                self.surface_volume_np, self.shm = self.attach_shared_array((2*self.r+1, self.image_size[0], self.image_size[1]), np.uint16, name="surface_volume")
+            if self.surface_volume_np is None:
+                if trainer.global_rank == 0:
+                    self.surface_volume_np, self.shm = self.create_shared_array((2*self.r+1, self.image_size[0], self.image_size[1]), np.uint16, name="surface_volume")
+                else:
+                    self.surface_volume_np, self.shm = self.attach_shared_array((2*self.r+1, self.image_size[0], self.image_size[1]), np.uint16, name="surface_volume")
 
-        # print("Writing to Numpy")
-        if prediction is None:
-            return
-        if len(prediction) == 0:
-            return
+            # print("Writing to Numpy")
+            if prediction is None:
+                return
+            if len(prediction) == 0:
+                return
 
-        values, indexes_3d = prediction
-        indexes_3d = indexes_3d.cpu().numpy().astype(np.int32)
-        values = values.cpu().numpy().astype(np.uint16)
-        if indexes_3d.shape[0] == 0:
-            return
+            values, indexes_3d = prediction
+            indexes_3d = indexes_3d.cpu().numpy().astype(np.int32)
+            values = values.cpu().numpy().astype(np.uint16)
+            if indexes_3d.shape[0] == 0:
+                return
 
-        # save into surface_volume_np
-        self.surface_volume_np[indexes_3d[:, 0], indexes_3d[:, 1], indexes_3d[:, 2]] = values
+            # save into surface_volume_np
+            self.surface_volume_np[indexes_3d[:, 0], indexes_3d[:, 1], indexes_3d[:, 2]] = values
 
-        # display progress
-        self.process_display_progress()
+            # display progress
+            self.process_display_progress()
+        except Exception as e:
+            print(e)
+            
 
     def wait_for_all_writes_to_complete(self):
         # Wait for all queued tasks to complete
