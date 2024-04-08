@@ -163,6 +163,7 @@ dependencies:
       - docker-pycreds==0.4.0
       - einops==0.7.0
       - executing==1.2.0
+      - ezdxf==1.2.0
       - fastapi==0.95.1
       - fastjsonschema==2.16.3
       - fire==0.4.0
@@ -292,7 +293,7 @@ dependencies:
       - tornado==6.3
       - traitlets==5.9.0
       - trimesh==3.14.0
-      - typing-extensions==4.5.0
+      - typing-extensions==4.6.0
       - tzdata==2023.3
       - uvicorn==0.21.1
       - volumentations==0.1.8

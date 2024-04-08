@@ -17,6 +17,7 @@ def load_transform(transform_path):
 
 def invert_transform(transform_matrix):
     inv_transform = np.linalg.inv(transform_matrix)
+    transform_matrix = transform_matrix / transform_matrix[3, 3] # Homogeneous coordinates
     return inv_transform
 
 def combine_transforms(transform_a, transform_b):

@@ -5,6 +5,7 @@ import open3d as o3d
 import argparse
 import os
 import numpy as np
+import torch.distributed
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Semaphore
@@ -19,7 +20,9 @@ Image.MAX_IMAGE_PIXELS = None
 import tifffile
 import cv2
 import zarr
-from multiprocessing import cpu_count
+from multiprocessing import cpu_count, shared_memory
+import time
+import warnings
 
 class MyPredictionWriter(BasePredictionWriter):
     def __init__(self, save_path, image_size, r, max_queue_size=10, max_workers=1, display=True):
@@ -29,14 +32,26 @@ class MyPredictionWriter(BasePredictionWriter):
         self.display = display
         self.image = None
         self.r = r
-        self.surface_volume_np = np.zeros((2*r+1, image_size[0], image_size[1]), dtype=np.uint16)
+        self.surface_volume_np = None
         self.max_queue_size = max(max_queue_size, max_workers)
         self.executor = ThreadPoolExecutor(max_workers=max_workers)  # Adjust number of workers as needed
         self.semaphore = Semaphore(self.max_queue_size)
         self.futures = []
         self.num_workers = cpu_count()
+        self.trainer_rank = None
     
     def write_on_batch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, prediction, batch_indices, batch, batch_idx: int, dataloader_idx: int) -> None:
+        if self.trainer_rank is None: # Only set the rank once
+            self.trainer_rank = trainer.global_rank if trainer.world_size > 1 else 0
+
+        if self.surface_volume_np is None:
+            if trainer.global_rank == 0:
+                self.surface_volume_np, self.shm = self.create_shared_array((2*self.r+1, self.image_size[0], self.image_size[1]), np.uint16, name="surface_volume")
+                # Gather the shared memory name
+                torch.distributed.barrier()
+            else:
+                torch.distributed.barrier()
+                self.surface_volume_np, self.shm = self.attach_shared_array((2*self.r+1, self.image_size[0], self.image_size[1]), np.uint16, name="surface_volume")
         self.semaphore.acquire()  # Wait for a slot to become available if necessary
         future = self.executor.submit(self.process_and_write_data, prediction)
         future.add_done_callback(lambda _future: self.semaphore.release())
@@ -74,34 +89,71 @@ class MyPredictionWriter(BasePredictionWriter):
             print(e)
             pass
 
+    def create_shared_array(self, shape, dtype, name="shared_array"):
+        array_size = np.prod(shape) * np.dtype(dtype).itemsize
+        try:
+            # Create a shared array
+            shm = shared_memory.SharedMemory(create=True, size=array_size, name=name)
+        except FileExistsError:
+            print(f"Shared memory with name {name} already exists.")
+            # Clean up the shared memory if it already exists
+            shm = shared_memory.SharedMemory(create=False, size=array_size, name=name)
+
+        arr = np.ndarray(shape, dtype=dtype, buffer=shm.buf)
+        arr.fill(0)  # Initialize the array with zeros
+        return arr, shm
+    
+    def attach_shared_array(self, shape, dtype, name="shared_array"):
+        while True:
+            try:
+                # Attach to an existing shared array
+                shm = shared_memory.SharedMemory(name=name)
+                arr = np.ndarray(shape, dtype=dtype, buffer=shm.buf)
+                assert arr.shape == shape, f"Expected shape {shape} but got {arr.shape}"
+                assert arr.dtype == dtype, f"Expected dtype {dtype} but got {arr.dtype}"
+                print("Attached to shared memory")
+                return arr, shm
+            except FileNotFoundError:
+                time.sleep(0.2)
+
     def process_and_write_data(self, prediction):
-        # print("Writing to Numpy")
-        if prediction is None:
-            return
-        if len(prediction) == 0:
-            return
+        try:
+            # print("Writing to Numpy")
+            if prediction is None:
+                return
+            if len(prediction) == 0:
+                return
 
-        values, indexes_3d = prediction
-        indexes_3d = indexes_3d.cpu().numpy().astype(np.int32)
-        values = values.cpu().numpy().astype(np.uint16)
-        if indexes_3d.shape[0] == 0:
-            return
+            values, indexes_3d = prediction
+            indexes_3d = indexes_3d.cpu().numpy().astype(np.int32)
+            values = values.cpu().numpy().astype(np.uint16)
+            if indexes_3d.shape[0] == 0:
+                return
 
-        # save into surface_volume_np
-        self.surface_volume_np[indexes_3d[:, 0], indexes_3d[:, 1], indexes_3d[:, 2]] = values
+            # save into surface_volume_np
+            self.surface_volume_np[indexes_3d[:, 0], indexes_3d[:, 1], indexes_3d[:, 2]] = values
 
-        # display progress
-        self.process_display_progress()
+            # display progress
+            self.process_display_progress()
+        except Exception as e:
+            print(e)
+            
 
     def wait_for_all_writes_to_complete(self):
         # Wait for all queued tasks to complete
         for future in tqdm(self.futures, desc="Finalizing writes"):
             future.result()
+        # Wait for all GPU writes to complete
+        torch.distributed.barrier()
 
     def write_to_disk(self, flag='jpg'):
         # Make sure this method is called after the prediction loop is complete
         print("Waiting for all writes to complete")
         self.wait_for_all_writes_to_complete()
+        if self.trainer_rank != 0: # Only rank 0 should write to disk
+            self.shm.close()
+            self.shm = None
+            return
         print("Writing Segment to disk")
         # Make folder if it does not exist
         os.makedirs(self.save_path, exist_ok=True)
@@ -119,6 +171,18 @@ class MyPredictionWriter(BasePredictionWriter):
         else:
             print("Invalid flag. Choose between 'tif', 'jpg', 'memmap', 'npz', 'zarr'")
             return
+        
+        # Close the shared memory
+        if self.trainer_rank == 0:
+            try:
+                self.shm.close()
+                # No warnings verbose
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    self.shm.unlink()
+                    self.shm = None
+            except Exception as e:
+                print(e)
         print("Segment written to disk")
 
     def write_tif(self):
@@ -461,7 +525,7 @@ class MeshDataset(Dataset):
     def extract_triangles_mask(self, grid_index):
         # select all triangles that have at least one vertice in the grid with a r-padded bounding box
         # grid_size * grid_index - r <= vertice <= grid_size * grid_index + r
-        selected_triangles_mask = np.any(np.all(np.logical_and(self.triangles_vertices >= np.array(grid_index) * self.grid_size - self.r, self.triangles_vertices <= (np.array(grid_index) + 1) * self.grid_size + self.r), axis=2), axis=1)
+        selected_triangles_mask = np.any(np.all(np.logical_and(self.triangles_vertices >= np.array(grid_index) * self.grid_size - 2*self.r, self.triangles_vertices <= (np.array(grid_index) + 1) * self.grid_size + 2*self.r), axis=2), axis=1)
 
         return selected_triangles_mask
     
@@ -697,6 +761,7 @@ def ppm_and_texture(obj_path, grid_cell_path, output_path=None, grid_size=500, g
     num_workers = max(num_workers, 1)
     # Number of workers for the Writer
     max_workers = max(1, min(multiprocessing.cpu_count()//2, 20))
+    max_workers = min(max_workers, 20)
 
     # Template for the grid cell files
     grid_cell_template = os.path.join(grid_cell_path, "cell_yxz_{:03}_{:03}_{:03}.tif")
@@ -707,16 +772,16 @@ def ppm_and_texture(obj_path, grid_cell_path, output_path=None, grid_size=500, g
     model = PPMAndTextureModel(r=r, max_side_triangle=max_side_triangle)
     
     writer = dataset.get_writer()
-    trainer = pl.Trainer(callbacks=[writer], gpus=int(gpus), strategy="ddp")
+    trainer = pl.Trainer(callbacks=[writer], accelerator='gpu', devices=int(gpus), strategy="ddp")
     
     print("Start Rendering")
     # Run Rendering
     trainer.predict(model, dataloaders=dataloader, return_predictions=False)
     print("Rendering done")
     writer.write_to_disk(format)
+    # Sync up before exiting
+    torch.distributed.barrier()
     
-    return
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('obj', type=str)

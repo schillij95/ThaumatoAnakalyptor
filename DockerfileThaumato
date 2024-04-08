@@ -21,9 +21,6 @@ ENV PATH /opt/conda/bin:$PATH
 
 RUN export TORCH_CUDA_ARCH_LIST="6.0 6.1 6.2 7.0 7.2 7.5 8.0 8.6"
 
-# Copy your environment.yml file
-COPY environment_thaumato.yml /workspace/
-
 # Create Conda environment from the file
 RUN conda create --name "thaumato" python=3.10.9 pip=23.1 -y
 
@@ -34,11 +31,11 @@ ENV PATH /opt/conda/envs/$CONDA_DEFAULT_ENV/bin:$PATH
 # Install cython and pyyaml first
 RUN pip install "cython<3.0.0" pyyaml==5.4.1 --no-build-isolation -v
 
+# Copy your environment.yml file
+COPY environment_thaumato.yml /workspace/
+
 # Update the environment using the yml file
 RUN conda env update --name thaumato -f /workspace/environment_thaumato.yml
-
-# Install cuda toolkit
-# RUN conda install -c "nvidia/label/cuda-11.3.1" cuda-toolkit
 
 # Copy mask3d third party for installation
 COPY ./ThaumatoAnakalyptor/mask3d/third_party/ /workspace/ThaumatoAnakalyptor/mask3d/third_party/
