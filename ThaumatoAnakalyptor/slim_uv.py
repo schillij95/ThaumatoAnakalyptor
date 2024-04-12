@@ -37,7 +37,9 @@ class Flatboi:
         self.triangles = [t for t in self.triangles if abs(igl.triangle_area(self.vertices[t[0]], self.vertices[t[1]], self.vertices[t[2]])) > 0.0001]
 
     def generate_boundary(self):
-        return igl.boundary_loop(self.triangles)
+        res = igl.boundary_loop(self.triangles)
+        print("Generated Boundary")
+        return res
     
     def harmonic_ic(self):
         bnd = self.generate_boundary()
@@ -51,6 +53,7 @@ class Flatboi:
         bnd_uv = igl.map_vertices_to_circle(self.vertices, bnd)
         uv = igl.harmonic(self.vertices, self.triangles, bnd, bnd_uv, 1)
         arap = igl.ARAP(self.vertices, self.triangles, 2, np.zeros(0))
+        print("ARAP")
         uva = arap.solve(np.zeros((0, 0)), uv)
 
         bc = np.zeros((bnd.shape[0],2), dtype=np.float64)
@@ -306,6 +309,7 @@ def main():
     parser = argparse.ArgumentParser(description='Add UV coordinates using the flatboi script for SLIM to a ThaumatoAnakalyptor papyrus surface mesh (.obj). output mesh has additional "_flatboi.obj" in name.')
     parser.add_argument('--path', type=str, help='Path of .obj Mesh', default=path)
     parser.add_argument('--iter', type=int, help='Max number of iterations.')
+    parser.add_argument('--ic', type=str, help='Initial condition for SLIM. Options: original, arap, harmonic', default='arap')
 
     # Take arguments back over
     args = parser.parse_args()
@@ -330,7 +334,7 @@ def main():
     print(f"Adding UV coordinates to mesh {path}")
 
     flatboi = Flatboi(path, 5)
-    harmonic_uvs, harmonic_energies = flatboi.slim(initial_condition='arap')
+    harmonic_uvs, harmonic_energies = flatboi.slim(initial_condition=args.ic)
     flatboi.save_img(harmonic_uvs)
     flatboi.save_obj(harmonic_uvs)
     print_array_to_file(harmonic_energies, energies_file)       

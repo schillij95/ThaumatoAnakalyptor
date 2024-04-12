@@ -19,10 +19,36 @@ import matplotlib.pyplot as plt
 
 from .instances_to_sheets import select_points, get_vector_mean, alpha_angles, adjust_angles_zero, adjust_angles_offset, add_overlapp_entries_to_patches_list, assign_points_to_tiles, compute_overlap_for_pair, overlapp_score, fit_sheet, winding_switch_sheet_score_raw_precomputed_surface, find_starting_patch, save_main_sheet, update_main_sheet
 from .sheet_to_mesh import load_xyz_from_file, scale_points, umbilicus_xz_at_y
+from .genetic_sheet_stitching import solve as solve_genetic
+from .genetic_sheet_stitching import solve_ as solve_genetic_
 import sys
 ### C++ speed up. not yet fully implemented
-# sys.path.append('sheet_generation/build')
-# import sheet_generation
+sys.path.append('ThaumatoAnakalyptor/sheet_generation/build')
+import sheet_generation
+
+def unit_vector(vector):
+    """ Returns the unit vector of the vector.  """
+    return vector / np.linalg.norm(vector)
+
+def angle_between(v1, v2=np.array([1, 0])):
+    """
+    Returns the signed angle in radians between vectors 'v1' and 'v2'.
+
+    Examples:
+        >>> angle_between(np.array([1, 0]), np.array([0, 1]))
+        1.5707963267948966
+        >>> angle_between(np.array([1, 0]), np.array([1, 0]))
+        0.0
+        >>> angle_between(np.array([1, 0]), np.array([-1, 0]))
+        3.141592653589793
+        >>> angle_between(np.array([1, 0]), np.array([0, -1]))
+        -1.5707963267948966
+    """
+
+    v1_u = unit_vector(v1)
+    v2_u = unit_vector(v2)
+    angle = np.arctan2(v2_u[1], v2_u[0]) - np.arctan2(v1_u[1], v1_u[0])
+    return angle
 
 def surrounding_volumes(volume_id, volume_size=50):
     """
@@ -194,9 +220,9 @@ class Graph:
         self.edges = {}  # Stores edges with update matrices and certainty factors
         self.nodes = {}  # Stores node beliefs and fixed status
 
-    def add_node(self, node, centroid):
+    def add_node(self, node, centroid, winding_angle=None):
         node = tuple(node)
-        self.nodes[node] = {'centroid': centroid}
+        self.nodes[node] = {'centroid': centroid, "winding_angle": winding_angle}
 
     def compute_node_edges(self):
         """
@@ -214,18 +240,17 @@ class Graph:
         Remove nodes and their edges from the graph.
         """
         for node in nodes:
-            # Delete Node
-            del self.nodes[node]
             # Delete Edges
             for edge in list(self.edges.keys()):
                 if node in edge:
                     del self.edges[edge]
             # Delete Node Edges
-            for node_ in self.nodes:
-                node_edges_ = list(self.nodes[node_]['edges'])
-                for edge in node_edges_:
-                    if node in edge:
-                        self.nodes[node_]['edges'].remove(edge)
+            node_edges = list(self.nodes[node]['edges'])
+            for edge in node_edges:
+                node_ = edge[0] if edge[0] != node else edge[1]
+                self.nodes[node_]['edges'].remove(edge)
+            # Delete Node
+            del self.nodes[node]
         # set length of nodes and edges
         self.nodes_length = len(self.nodes)
         self.edges_length = len(self.edges)
@@ -337,7 +362,7 @@ def process_same_block(main_block_patches_list, overlapp_threshold, umbilicus_di
         score_val = score[2]
         if score_val < 0.0:
             score_val = -1.0
-        score = (score[0], score[1], score_val, score[3], score[4], score[5])
+        score = (score[0], score[1], score_val, score[3], score[4], score[5], score[6], score[7])
 
         return [score]
 
@@ -350,7 +375,7 @@ def process_same_block(main_block_patches_list, overlapp_threshold, umbilicus_di
                 continue
             (score_, k_), anchor_angle1, anchor_angle2 = score_same_block_patches(main_block_patches_list[i], main_block_patches_list[j], overlapp_threshold, umbilicus_distance)
             if score_ > 0.0:
-                score_switching_sheets_.append((main_block_patches_list[i]['ids'][0], main_block_patches_list[j]['ids'][0], score_, k_, anchor_angle1, anchor_angle2))
+                score_switching_sheets_.append((main_block_patches_list[i]['ids'][0], main_block_patches_list[j]['ids'][0], score_, k_, anchor_angle1, anchor_angle2, np.mean(main_block_patches_list[i]["points"], axis=0), np.mean(main_block_patches_list[j]["points"], axis=0)))
 
         # filter and only take the scores closest to the main patch (smallest scores) for each k in +1, -1
         direction1_scores = [score for score in score_switching_sheets_ if score[3] > 0.0]
@@ -453,7 +478,7 @@ def process_block(args):
                 patches_list_ = [main_block_patch, surrounding_block_patch]
                 score_ = score_other_block_patches(patches_list_, 0, 1, overlapp_threshold) # score, anchor_angle1, anchor_angle2
                 if score_[0] > overlapp_threshold["final_score_min"]:
-                    score_sheets_patch.append((main_block_patch['ids'][0], surrounding_block_patch['ids'][0], score_[0], None, score_[1], score_[2]))
+                    score_sheets_patch.append((main_block_patch['ids'][0], surrounding_block_patch['ids'][0], score_[0], None, score_[1], score_[2], np.mean(main_block_patch["points"], axis=0), np.mean(surrounding_block_patch["points"], axis=0)))
 
             # Find the best score for each main block patch
             if len(score_sheets_patch) > 0:
@@ -466,7 +491,7 @@ def process_block(args):
     return score_sheets, score_switching_sheets, patches_centroids
 
 class ScrollGraph(Graph):
-    def __init__(self, overlapp_threshold,umbilicus_path):
+    def __init__(self, overlapp_threshold, umbilicus_path):
         super().__init__()
         self.set_overlapp_threshold(overlapp_threshold)
         self.umbilicus_path = umbilicus_path
@@ -487,30 +512,46 @@ class ScrollGraph(Graph):
         self.add_edge(node1, node2, certainty, sheet_offset_k=0.0, same_block=same_block)
 
     def build_other_block_edges(self, score_sheets):
+        # Define a wrapper function for umbilicus_xz_at_y
+        umbilicus_func = lambda z: umbilicus_xz_at_y(self.umbilicus_data, z)
         # Build edges between patches from different blocks
         for score_ in score_sheets:
-            id1, id2, score, _, anchor_angle1, anchor_angle2 = score_
+            id1, id2, score, _, anchor_angle1, anchor_angle2, centroid1, centroid2 = score_
             if score < self.overlapp_threshold["final_score_min"]:
                 continue
-            if abs(anchor_angle1 - anchor_angle2) > 180.0:
-                if anchor_angle1 > anchor_angle2:
+            umbilicus_point1 = umbilicus_func(centroid1[1])[[0, 2]]
+            umbilicus_vector1 = umbilicus_point1 - centroid1[[0, 2]]
+            angle1 = angle_between(umbilicus_vector1) * 180.0 / np.pi
+            umbilicus_point2 = umbilicus_func(centroid2[1])[[0, 2]]
+            umbilicus_vector2 = umbilicus_point2 - centroid2[[0, 2]]
+            angle2 = angle_between(umbilicus_vector2) * 180.0 / np.pi
+            if abs(angle1 - angle2) > 180.0:
+                if angle1 > angle2:
                     id1, id2 = id2, id1
                 self.add_switch_edge(id1, id2, score, same_block=False)
             else:
                 self.add_same_sheet_edge(id1, id2, score, same_block=False)
 
     def build_same_block_edges(self, score_switching_sheets):
+        # Define a wrapper function for umbilicus_xz_at_y
+        umbilicus_func = lambda z: umbilicus_xz_at_y(self.umbilicus_data, z)
         # Build edges between patches from the same block
         disregarding_count = 0
         total_count = 0
         grand_total = 0
         for score_ in score_switching_sheets:
             grand_total += 1
-            id1, id2, score, k, anchor_angle1, anchor_angle2 = score_
+            id1, id2, score, k, anchor_angle1, anchor_angle2, centroid1, centroid2 = score_
             if score < 0.0:
                 continue
             total_count += 1
-            if abs(anchor_angle1 - anchor_angle2) > 180.0:
+            umbilicus_point1 = umbilicus_func(centroid1[1])[[0, 2]]
+            umbilicus_vector1 = umbilicus_point1 - centroid1[[0, 2]]
+            angle1 = angle_between(umbilicus_vector1) * 180.0 / np.pi
+            umbilicus_point2 = umbilicus_func(centroid2[1])[[0, 2]]
+            umbilicus_vector2 = umbilicus_point2 - centroid2[[0, 2]]
+            angle2 = angle_between(umbilicus_vector2) * 180.0 / np.pi
+            if abs(angle1 - angle2) > 180.0:
                 disregarding_count += 1
             else:
                 if k < 0.0:
@@ -596,7 +637,7 @@ class ScrollGraph(Graph):
         blocks_tar_files = glob.glob(path_instances + '/*.tar')
 
         # debug
-        blocks_tar_files = self.filter_blocks_z(blocks_tar_files, 950, 1000)
+        # blocks_tar_files = self.filter_blocks_z(blocks_tar_files, 500, 1000)
 
         #from original coordinates to instance coordinates
         start_block, patch_id = find_starting_patch([start_point], path_instances)
@@ -624,12 +665,22 @@ class ScrollGraph(Graph):
             patches_centroids.update(volume_centroids)
         print(f"Number of results: {count_res}")
 
+        # Define a wrapper function for umbilicus_xz_at_y
+        umbilicus_func = lambda z: umbilicus_xz_at_y(self.umbilicus_data, z)
+
         # Add patches as nodes to graph
         edges_keys = list(self.edges.keys())
         for edge in edges_keys:
             try:
-                self.add_node(edge[0], patches_centroids[edge[0]])
-                self.add_node(edge[1], patches_centroids[edge[1]])
+                umbilicus_point0 = umbilicus_func(patches_centroids[edge[0]][1])[[0, 2]]
+                umbilicus_vector0 = umbilicus_point0 - patches_centroids[edge[0]][[0, 2]]
+                angle0 = angle_between(umbilicus_vector0) * 180.0 / np.pi
+                self.add_node(edge[0], patches_centroids[edge[0]], winding_angle=angle0)
+
+                umbilicus_point1 = umbilicus_func(patches_centroids[edge[1]][1])[[0, 2]]
+                umbilicus_vector1 = umbilicus_point1 - patches_centroids[edge[1]][[0, 2]]
+                angle1 = angle_between(umbilicus_vector1) * 180.0 / np.pi
+                self.add_node(edge[1], patches_centroids[edge[1]], winding_angle=angle1)
             except: 
                 del self.edges[edge] # one node might be outside computed volume
 
@@ -677,6 +728,8 @@ class ScrollGraph(Graph):
             c = color
             if same_block:
                 c = 2
+            elif k != 0.0:
+                c = 5
             # Create polyline points 
             polyline_points = []
             to_add = True
@@ -703,6 +756,80 @@ class ScrollGraph(Graph):
 
         # Save the DXF document
         doc.saveas(filename)
+    
+    def compare_polylines_graph(self, other, filename, color=1, min_z=None, max_z=None):
+        # Create a new DXF document.
+        doc = ezdxf.new('R2010')
+        msp = doc.modelspace()
+
+        for edge in tqdm(self.edges):
+            same_block = self.edges[edge]['same_block']
+            k = self.get_edge_k(edge[0], edge[1])
+            c = color
+            if same_block:
+                c = 2
+            elif k != 0.0:
+                c = 5
+            if edge not in other.edges:
+                if c == 2:
+                    c = 4
+                elif c == 5:
+                    c = 6
+                else:
+                    c = 3
+            
+            # Create polyline points 
+            polyline_points = []
+            to_add = True
+            for pi, point in enumerate(edge):
+                centroid = self.nodes[point]['centroid']
+                if min_z is not None and centroid[1] < min_z:
+                    to_add = False
+                if max_z is not None and centroid[1] > max_z:
+                    to_add = False
+                if not to_add:
+                    break
+                polyline_points.append(Vec3(int(centroid[0]), int(centroid[1]), int(centroid[2])))
+
+                # Add an indicator which node of the edge has the smaller k value
+                if same_block:
+                    if k > 0.0 and pi == 0:
+                        polyline_points = [Vec3(int(centroid[0]), int(centroid[1]) + 10, int(centroid[2]))] + polyline_points
+                    elif k < 0.0 and pi == 1:
+                        polyline_points += [Vec3(int(centroid[0]), int(centroid[1]) + 10, int(centroid[2]))]
+
+            if to_add:
+                # Add the 3D polyline to the model space
+                msp.add_polyline3d(polyline_points, dxfattribs={'color': c})
+
+        # Save the DXF document
+        doc.saveas(filename)
+
+    def extract_subgraph(self, min_z=None, max_z=None, umbilicus_max_distance=None, add_same_block_edges=False):
+        # Define a wrapper function for umbilicus_xz_at_y
+        umbilicus_func = lambda z: umbilicus_xz_at_y(self.umbilicus_data, z)
+        # Extract subgraph with nodes within z range
+        subgraph = ScrollGraph(self.overlapp_threshold, self.umbilicus_path)
+        # starting block info
+        subgraph.start_block = self.start_block
+        subgraph.patch_id = self.patch_id
+        for node in self.nodes:
+            centroid = self.nodes[node]['centroid']
+            winding_angle = self.nodes[node]['winding_angle']
+            if (min_z is not None) and (centroid[1] < min_z):
+                continue
+            if (max_z is not None) and (centroid[1] > max_z):
+                continue
+            if (umbilicus_max_distance is not None) and np.linalg.norm(umbilicus_func(centroid[1]) - centroid) > umbilicus_max_distance:
+                continue
+            subgraph.add_node(node, centroid, winding_angle=winding_angle)
+        for edge in self.edges:
+            node1, node2 = edge
+            if node1 in subgraph.nodes and node2 in subgraph.nodes:
+                if add_same_block_edges or (not self.edges[edge]['same_block']):
+                    subgraph.add_edge(node1, node2, self.edges[edge]['certainty'], self.edges[edge]['sheet_offset_k'], self.edges[edge]['same_block'])
+        subgraph.compute_node_edges()
+        return subgraph
         
 class RandomWalkSolver:
     def __init__(self, graph, umbilicus_path):
@@ -1126,6 +1253,419 @@ class RandomWalkSolver:
         # self.graph.save_graph(path.replace("blocks", "graph_RW_solved") + ".pkl")
         print(f"\033[94m[ThaumatoAnakalyptor]:\033[0m Saved")
 
+class SkeletonGraphFilterDP():
+    def __init__(self, graph, save_path, min_z=None, max_z=None):
+        self.graph = graph
+        self.save_path = save_path
+        self.build_node_data(min_z, max_z)
+        self.build_initial_DP()
+
+    def build_node_data(self, min_z, max_z):
+        """
+        Builds a dictionary with the node data.
+        """
+        node_data = {}
+        for node in self.graph.nodes:
+            centroid = self.graph.nodes[node]['centroid']
+            to_add = True
+            if min_z is not None and centroid[1] < min_z:
+                to_add = False
+            if max_z is not None and centroid[1] > max_z:
+                to_add = False
+            if not to_add:
+                continue
+            node_data[node] = self.graph.nodes[node]
+
+        self.nodes = node_data
+        self.nodes_length = len(self.nodes)
+        self.nodes_index_dict = {node: i for i, node in enumerate(self.nodes)}
+        print(f"Number of nodes: {self.nodes_length}")
+
+    def build_initial_DP(self):
+        """
+        Builds the initial DP table based on the initial k assignments.
+        """
+        # Initialize DP table with shape (nodes, nodes, 64-bit integer), with all bits set to 0
+        self.intial_dp = np.zeros((self.nodes_length, self.nodes_length), dtype=np.int64)
+        self.intial_dp_same_block_edges = np.zeros((self.nodes_length, self.nodes_length), dtype=np.int64)
+        self.transition_dp = np.zeros((self.nodes_length, self.nodes_length), dtype=np.int64)
+        self.non_transition_dp = np.zeros((self.nodes_length, self.nodes_length), dtype=np.int64)
+        for i in range(len(self.intial_dp)): # set all diagonal values to 2^32, self edges
+                self.intial_dp[i, i] = 1 << 32
+        
+        # Set bit 32 to 1 for all nodes' initial class
+        for edge in self.graph.edges:
+            if not edge[0] in self.nodes or not edge[1] in self.nodes:
+                continue
+            node0, node1 = edge
+            node0_index, node1_index = self.nodes_index_dict[node0], self.nodes_index_dict[node1]
+            k = self.graph.get_edge_k(node0, node1)
+            try:
+                # Edge transitions
+                if self.graph.edges[edge]['same_block']: # Only use same-sheet edges for stability at Scroll Sheet Fold
+                    self.intial_dp_same_block_edges[node0_index, node1_index] = 1 << int(32 - k)
+                    self.intial_dp_same_block_edges[node1_index, node0_index] = 1 << int(32 + k)
+                else: # other block connection
+                    self.intial_dp[node0_index, node1_index] = 1 << int(32 + k)
+                    self.intial_dp[node1_index, node0_index] = 1 << int(32 - k)
+                    if k == 0:
+                        self.non_transition_dp[node0_index, node1_index] = 1 << int(32 + k)
+                        self.non_transition_dp[node1_index, node0_index] = 1 << int(32 - k)
+                    else:
+                        self.transition_dp[node0_index, node1_index] = 1 << int(32 + k)
+                        self.transition_dp[node1_index, node0_index] = 1 << int(32 - k)
+            except Exception as e:
+                print(f"Error setting DP table for edge: {edge}: {str(e)}")
+
+    def cpp_data(self):
+        """
+        Returns the data in a format that can be used with the C++ implementation.
+        """
+        print("Building DP table for C++ format...")
+        cpp_dp = np.zeros((self.nodes_length, self.nodes_length,64), dtype=bool)
+        # Initialize DP table with shape (nodes, nodes, 64-bit integer), with all bits set to 0
+        for i in range(len(self.intial_dp)): # set all diagonal values to 2^32, self edges
+                cpp_dp[i, i, 32] = True
+        
+        # Set bit 32 to 1 for all nodes' initial class
+        for edge in self.graph.edges:
+            if self.graph.edges[edge]['same_block']: # Only use same-sheet edges for stability at Scroll Sheet Fold
+                continue
+            if not edge[0] in self.nodes or not edge[1] in self.nodes:
+                continue
+            node0, node1 = edge
+            node0_index, node1_index = self.nodes_index_dict[node0], self.nodes_index_dict[node1]
+            k = self.graph.get_edge_k(node0, node1)
+            try:
+                # Edge transitions
+                cpp_dp[node0_index, node1_index, int(32 + k)] = True
+                cpp_dp[node1_index, node0_index, int(32 - k)] = True
+            except Exception as e:
+                print(f"Error setting DP table for edge: {edge}: {str(e)}")
+
+        return cpp_dp
+    
+    def filter_cpp(self):
+        cpp_dp = self.intial_dp
+        cpp_same_block_edges = self.intial_dp_same_block_edges
+        cpp_transition_dp = self.transition_dp
+        cpp_non_transition_dp = self.non_transition_dp
+        print("Filtering DP table with C++ implementation...")
+        res = sheet_generation.graph_skeleton_filter(self.nodes_length, cpp_non_transition_dp, cpp_transition_dp, cpp_same_block_edges)
+        print(f"Filtered DP table: {res}")
+
+        # create graph from res
+        graph = self.graph_from_dp_k(res)
+        return graph
+
+    def graph_from_dp(self, dp):
+        """
+        Creates a graph from the DP table.
+        """
+        print(f"Shape of DP table: {dp.shape}, self.nodes_length: {self.nodes_length}")
+        nodes = list(self.nodes)
+        graph = ScrollGraph(self.graph.overlapp_threshold, self.graph.umbilicus_path)
+        # graph add nodes
+        for node in nodes:
+            graph.add_node(node, self.nodes[node]['centroid'])
+        added_edges_count = 0
+
+        # debug
+        mask_dp1 = dp != 0
+        mask_dp2 = dp > 0
+
+        nr_edges1 = np.sum(mask_dp1)
+        nr_edges2 = np.sum(mask_dp2)
+
+        print(f"Number of edges in DP table: method 1: {nr_edges1}, method 2: {nr_edges2}")
+
+        for i in tqdm(range(self.nodes_length)):
+            for j in range(self.nodes_length):
+                if i == j: # skip self edges
+                    continue
+                k = dp[i, j]
+                if k == 0:
+                    continue
+                k = self.get_k(k)
+                assert -1 <= k <= 1, f"Invalid k: {k}"
+                # assert len(ks) == 1, f"There should be exactly 1 ks: {ks}, k: {k}"
+                node0, node1 = nodes[i], nodes[j]
+                # assert i == self.nodes_index_dict[node0] and j == self.nodes_index_dict[node1], f"Index mismatch: {i}, {j}, {self.nodes_index_dict[node0]}, {self.nodes_index_dict[node1]}"
+                graph.add_edge(node0, node1, 1.0, k, False)
+                added_edges_count += 1
+        print(f"Added {added_edges_count} edges to the graph.")
+        graph.compute_node_edges()
+        print(f"Filtered graph created with {len(graph.nodes)} nodes and {len(graph.edges)} edges.")
+        return graph
+    
+    def graph_from_dp_k(self, dp_k):
+        """
+        Creates a graph from the DP table.
+        """
+        print(f"Shape of DP table: {dp_k.shape}, self.nodes_length: {self.nodes_length}")
+        nodes = list(self.nodes)
+        graph = ScrollGraph(self.graph.overlapp_threshold, self.graph.umbilicus_path)
+        # graph add nodes
+        for node in nodes:
+            graph.add_node(node, self.nodes[node]['centroid'])
+        added_edges_count = 0
+
+        # debug
+        mask_dp1 = dp_k != -10000
+        mask_dp2 = np.logical_or(np.logical_or(dp_k == 0, dp_k == -1), dp_k == 1)
+
+        nr_edges1 = np.sum(mask_dp1)
+        nr_edges2 = np.sum(mask_dp2)
+
+        print(f"Number of edges in DP table: method 1: {nr_edges1}, method 2: {nr_edges2}")
+
+        for i in tqdm(range(self.nodes_length)):
+            for j in range(self.nodes_length):
+                if i == j: # skip self edges
+                    continue
+                k = dp_k[i, j]
+                if k == -10000: # no edge
+                    continue
+                assert -1 <= k <= 1, f"Invalid k: {k}"
+                node0, node1 = nodes[i], nodes[j]
+                graph.add_edge(node0, node1, 1.0, k, False)
+                added_edges_count += 1
+        print(f"Added {added_edges_count} edges to the graph.")
+        graph.compute_node_edges()
+        print(f"Filtered graph created with {len(graph.nodes)} nodes and {len(graph.edges)} edges.")
+        return graph
+    
+    def get_k(self, n):
+        n = int(n)
+        position = 0
+        while n > 0:
+            if n & 1:
+                return position - 32
+            n >>= 1
+            position += 1
+        raise ValueError(f"Invalid input: {n}")
+
+    def get_set_bits_positions(self, n):
+        n = int(n)
+        positions = []
+        position = 0
+        while n > 0:
+            if n & 1:
+                positions.append(position)
+            n >>= 1
+            position += 1
+        if len(positions) > 1:
+            print(n, positions)
+        return positions
+    
+    def get_ks(self, ks):
+        ks_list = self.get_set_bits_positions(ks)
+        ks_list = [k - 32 for k in ks_list]
+        return ks_list
+
+    def compute_adjacency_transitions(self):
+        new_dp = np.copy(self.dp)
+        for node_index in tqdm(range(self.nodes_length)):
+            for adj_node_index in range(self.nodes_length):
+                # Extract ks from DP table
+                ks = self.dp[node_index, adj_node_index]
+                if ks == 0:
+                    continue
+                ks_list = self.get_ks(ks)
+                for k in ks_list:
+                    adj_next_ks = self.dp[adj_node_index, :] 
+                    if k > 0:
+                        adj_k = adj_next_ks << k
+                    elif k < 0:
+                        adj_k = adj_next_ks >> -k
+                    else:
+                        adj_k = adj_next_ks
+                    new_dp[node_index, :] |= adj_k
+
+        self.dp = new_dp
+
+    def count_overlap(self, k_int):
+        ks_list = self.get_set_bits_positions(k_int)
+        return len(ks_list)
+
+    def skeletonize_nodes(self):
+        # compute for each node the overlap count
+        node_overlap_count = np.zeros(self.nodes_length, dtype=np.int64)
+        for node_index in tqdm(range(self.nodes_length)):
+            for adj_node_index in range(self.nodes_length):
+                k = self.dp[node_index, adj_node_index]
+                node_overlap_count[node_index] += self.count_overlap(k)
+        return node_overlap_count
+
+    def filter(self):
+        self.dp = self.intial_dp
+        # Compute adjacency transitions
+        iterations = 2
+        for i in range(iterations):
+            print(f"Computing adjacency transitions {i + 1}/{iterations} ...")
+            self.compute_adjacency_transitions()
+
+        # Skeletonize the graph
+        node_overlap_count = self.skeletonize_nodes()
+        sorted_overlap_count = np.sort(node_overlap_count)
+        print(f"Sorted Overlap counts: {sorted_overlap_count[:10]}, ..., {sorted_overlap_count[-10:]}")
+
+class EvolutionaryGraphEdgesSelection():
+    def __init__(self, graph, save_path, min_z=None, max_z=None):
+        self.graph = graph
+        self.save_path = save_path
+        self.edges_by_indices, _ = self.build_graph_data(self.graph, min_z, max_z)
+
+    def build_graph_data(self, graph, min_z=None, max_z=None):
+        """
+        Builds a dictionary with the node data.
+        """
+        node_data = {}
+        for node in graph.nodes:
+            centroid = graph.nodes[node]['centroid']
+            to_add = True
+            if min_z is not None and centroid[1] < min_z:
+                to_add = False
+            if max_z is not None and centroid[1] > max_z:
+                to_add = False
+            if not to_add:
+                continue
+            node_data[node] = graph.nodes[node]
+
+        self.nodes = node_data
+        self.nodes_length = len(self.nodes)
+        self.nodes_index_dict = {node: i for i, node in enumerate(self.nodes)}
+
+        nonone_certainty_count = 0
+        edges_by_indices  = []
+        edges_by_subvolume_indices = []
+        for edge in graph.edges:
+            node1, node2 = edge
+            centroid1 = graph.nodes[node1]['centroid']
+            centroid2 = graph.nodes[node2]['centroid']
+            if min_z is not None and (centroid1[1] < min_z or centroid2[1] < min_z):
+                to_add = False
+            if max_z is not None and (centroid1[1] > max_z or centroid2[1] > max_z):
+                to_add = False
+            if not to_add:
+                continue
+            k = graph.get_edge_k(node1, node2)
+            if "assigned_k" in graph.nodes[node1]:
+                assigned_k1 = graph.nodes[node1]["assigned_k"]
+                assigned_k2 = graph.nodes[node2]["assigned_k"]
+            else:
+                assigned_k1 = 0
+                assigned_k2 = 0
+            certainty = graph.edges[edge]['certainty']
+            assert certainty >= 0.0, f"Invalid certainty: {certainty} for edge: {edge}"
+            if certainty > 0.0 and certainty != 1.0:
+                nonone_certainty_count += 1
+            edges_by_indices.append((self.nodes_index_dict[node1], self.nodes_index_dict[node2], k, 1 + int(100*certainty)))
+            edges_by_subvolume_indices.append((self.nodes_index_dict[node1], self.nodes_index_dict[node2], k, 1 + int(100*certainty), node1[0], node1[1], node1[2], node2[0], node2[1], node2[2], assigned_k1, assigned_k2))
+        print(f"None one certainty edges: {nonone_certainty_count} out of {len(edges_by_indices)} edges.")
+        
+        edges_by_indices = np.array(edges_by_indices).astype(np.int32)
+        edges_by_subvolume_indices = np.array(edges_by_subvolume_indices).astype(np.int32)
+        return edges_by_indices, edges_by_subvolume_indices
+    
+    def solve_call(self, input, problem):
+        # easily switch between dummy and real computation
+        return solve_genetic(input, problem=problem)
+
+    def solve(self):
+        # Solve with genetic algorithm
+        valid_mask, valid_edges_count = self.solve_call(self.edges_by_indices, problem='k_assignment')
+        # Build graph from edge selection
+        evolved_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask)
+        # select largest connected component
+        evolved_graph.largest_connected_component()
+        # Compute ks by simple bfs
+        nodes, ks = self.bfs_ks(evolved_graph)
+        self.update_winding_angles(evolved_graph, nodes, ks)
+        evolved_graph = self.filter(evolved_graph)
+        return evolved_graph
+    
+    def filter(self, evolved_graph):
+        print("Filtering patches with genetic algorithm...")
+        # Filter edges with genetic algorithm
+        _, self.edges_by_subvolume_indices = self.build_graph_data(evolved_graph)
+        # Solve with genetic algorithm
+        valid_mask, valid_edges_count = self.solve_call(self.edges_by_subvolume_indices, problem="patch_selection")
+        # Build graph from edge selection
+        evolved_graph = self.graph_from_edge_selection(self.edges_by_subvolume_indices, evolved_graph, valid_mask)
+        # select largest connected component
+        evolved_graph.largest_connected_component()
+        return evolved_graph
+
+    def graph_from_edge_selection(self, edges_indices, input_graph, edges_mask):
+        """
+        Creates a graph from the DP table.
+        """
+        print(f"self.nodes_length: {self.nodes_length}")
+        nodes = list(self.nodes)
+        graph = ScrollGraph(input_graph.overlapp_threshold, input_graph.umbilicus_path)
+        # start block and patch id
+        graph.start_block = input_graph.start_block
+        graph.patch_id = input_graph.patch_id
+        # graph add nodes
+        nr_winding_angles = 0
+        for node in nodes:
+            if self.nodes[node]['winding_angle'] is not None:
+                nr_winding_angles += 1
+            graph.add_node(node, self.nodes[node]['centroid'], winding_angle=self.nodes[node]['winding_angle'])
+        added_edges_count = 0
+        print(f"Number of winding angles: {nr_winding_angles} of {len(nodes)} nodes.")
+
+        for i in tqdm(range(len(edges_mask))):
+            if edges_mask[i]:
+                edge = edges_indices[i]
+                node0_index, node1_index, k = edge[:3]
+                node1 = nodes[node0_index]
+                node2 = nodes[node1_index]
+                certainty = input_graph.edges[(node1, node2)]['certainty']
+
+                assert certainty > 0.0, f"Invalid certainty: {certainty} for edge: {edge}"
+                graph.add_edge(node1, node2, certainty, k, False)
+                added_edges_count += 1
+            
+        print(f"Added {added_edges_count} edges to the graph.")
+        graph.compute_node_edges()
+        print(f"Filtered graph created with {len(graph.nodes)} nodes and {len(graph.edges)} edges.")
+        return graph
+    
+    def bfs_ks(self, graph):
+        # Use BFS to traverse the graph and compute the ks
+        start_node = list(graph.nodes)[0]
+        visited = {start_node: True}
+        queue = [start_node]
+        ks = {start_node: 0}
+        while queue:
+            node = queue.pop(0)
+            node_k = ks[node]
+            for edge in graph.nodes[node]['edges']:
+                if edge[0] == node:
+                    other_node = edge[1]
+                else:
+                    other_node = edge[0]
+                if other_node in visited:
+                    continue
+                visited[other_node] = True
+                k = graph.get_edge_k(node, other_node)
+                ks[other_node] = node_k + k
+                queue.append(other_node)
+
+        nodes = [node for node in graph.nodes]
+        ks = np.array([ks[node] for node in nodes]) # to numpy
+        ks = ks - np.min(ks) # 0 to max
+
+        return nodes, ks
+    
+    def update_winding_angles(self, graph, nodes, ks):
+        # Update winding angles
+        for i, node in enumerate(nodes):
+            graph.nodes[node]['winding_angle'] = - ks[i]*360 + graph.nodes[node]['winding_angle']
+            graph.nodes[node]['assigned_k'] = ks[i]
+
 class WalkToSheet():
     def __init__(self, graph, nodes, ks, path, save_path, overlapp_threshold):
         self.graph = graph
@@ -1137,8 +1677,24 @@ class WalkToSheet():
 
     def create_sheet(self):
         print(f"Min and max k: {np.min(self.ks)}, {np.max(self.ks)}")
-        start_block, patch_id = self.graph.start_block, self.graph.patch_id
+
+        zeroest_node = -1
+        zero_angle = 10000
+        offset = 90
+        for i in tqdm(range(len(self.nodes)), desc="Finding start node"):
+            start_block, patch_id = self.nodes[i][:3], self.nodes[i][3]
+            patch_sheet_patch_info = (start_block, int(patch_id), float(0.0))
+            patch, _ = build_patch_tar(patch_sheet_patch_info, (50, 50, 50), self.path, sample_ratio=1.0)
+            angle_i = patch["anchor_angles"][0]
+            if abs(angle_i - offset) % 360 < zero_angle:
+                zero_angle = abs(angle_i - offset) % 360
+                zeroest_index = i
+
         # get start node
+        zeroest_node = self.nodes[zeroest_index]
+        zeroest_k = self.ks[zeroest_index]
+        start_block, patch_id = zeroest_node[:3], zeroest_node[3]
+
         main_sheet_patch_info = (start_block, int(patch_id), float(0.0))
         main_sheet_patch, _ = build_patch_tar(main_sheet_patch_info, (50, 50, 50), self.path, sample_ratio=1.0)
         anchor_angle = main_sheet_patch["anchor_angles"][0]
@@ -1146,13 +1702,14 @@ class WalkToSheet():
         main_sheet[tuple(start_block)] = {patch_id: {"offset_angle": anchor_angle, "displaying_points": []}}
         # visit all connected nodes
         print(F"Creating sheet with {len(self.nodes)} patches.")
-        for i in range(len(self.nodes)):
+        for i in tqdm(range(len(self.nodes)), desc="Creating sheet"):
             node = self.nodes[i]
             k = self.ks[i]
+            k_adjusted = k - zeroest_k
             # build patch and add to sheet
             sheet_patch = (node[:3], int(node[3]), float(0.0))
             patch, _ = build_patch_tar(sheet_patch, (50, 50, 50), self.path, sample_ratio=self.overlapp_threshold["sample_ratio_score"])
-            angle_offset = patch["anchor_angles"][0] - k * 360.0
+            angle_offset = patch["anchor_angles"][0] - k_adjusted * 360.0
             patches = [(node[:3], int(node[3]), angle_offset, None)]
             offset_angles = [angle_offset]
             update_main_sheet(main_sheet, patches, offset_angles, [[]])
@@ -1180,7 +1737,7 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
     # Build graph
     if recompute:
         scroll_graph = ScrollGraph(overlapp_threshold, umbilicus_path)
-        start_block, patch_id = scroll_graph.build_graph(path, num_processes=30, start_point=start_point, prune_unconnected=True)
+        start_block, patch_id = scroll_graph.build_graph(path, num_processes=30, start_point=start_point, prune_unconnected=False)
         print("Saving built graph...")
         scroll_graph.save_graph(recompute_path)
     elif continue_segmentation:
@@ -1192,32 +1749,28 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
         scroll_graph = load_graph(recompute_path)
         start_block, patch_id = find_starting_patch([start_point], path)
 
-    rw_solver = RandomWalkSolver(scroll_graph, umbilicus_path)
+    # min_z, max_z = 900, 1000
+    min_z, max_z = None, None
+    subgraph = scroll_graph.extract_subgraph(min_z=min_z, max_z=max_z, umbilicus_max_distance=80, add_same_block_edges=True)
+    subgraph.create_dxf_with_colored_polyline(save_path.replace("blocks", "subgraph") + ".dxf", min_z=min_z, max_z=max_z)
+    graph_filter = EvolutionaryGraphEdgesSelection(subgraph, save_path)
+    evolved_graph = graph_filter.solve()
+
+    # save graph
+    evolved_graph.save_graph(save_path.replace("blocks", "evolved_graph") + ".pkl")
+    # Visualize the graph
+    evolved_graph.create_dxf_with_colored_polyline(save_path.replace("blocks", "evolved_graph") + ".dxf", min_z=min_z, max_z=max_z)
+    subgraph.compare_polylines_graph(evolved_graph, save_path.replace("blocks", "evolved_graph_comparison") + ".dxf", min_z=min_z, max_z=max_z)
 
     debug_display = False
     if debug_display:
         scroll_graph.create_dxf_with_colored_polyline(save_path.replace("blocks", "graph") + ".dxf", min_z=975, max_z=1000)
-        rw_solver.display_umbilicus_angles(save_path.replace("blocks", "umbilicus") + ".dxf", 985)
-        
-    scroll_graph.set_overlapp_threshold(overlapp_threshold)
-    scroll_graph.start_block, scroll_graph.patch_id = start_block, patch_id
-    # start_block, patch_id = scroll_graph.start_block, scroll_graph.patch_id
 
-    solver = RandomWalkSolver(scroll_graph, umbilicus_path)
-    solver.save_overlapp_threshold()
-    rw_solver.solve(path=save_path, max_nr_walks=overlapp_threshold["max_nr_walks"], max_steps=overlapp_threshold["max_steps"], max_tries=overlapp_threshold["max_tries"], min_steps=overlapp_threshold["min_steps"], stop_event=stop_event)
-    
-    exit()
-    
-    # save graph
-    scroll_graph.save_graph(save_path.replace("blocks", "graph_RW_solved") + ".pkl")
-    
-    if True:
-        print("Creating sheet...")
-        w2s = WalkToSheet(scroll_graph, nodes, ks, path, save_path, overlapp_threshold)
-        main_sheet = w2s.create_sheet()
-        print("Saving sheet...")
-        w2s.save(main_sheet)
+        # Solved Graph
+        solved_graph_path = save_path.replace("blocks", "scroll_graph_progress") + ".pkl"
+        solved_graph = load_graph(solved_graph_path)
+        solved_graph.create_dxf_with_colored_polyline(save_path.replace("blocks", "solved_graph") + ".dxf", min_z=975, max_z=1000)
+        scroll_graph.compare_polylines_graph(solved_graph, save_path.replace("blocks", "solved_graph_comparison") + ".dxf", min_z=975, max_z=1000)
 
 def random_walks():
     path = "/media/julian/SSD4TB/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks"

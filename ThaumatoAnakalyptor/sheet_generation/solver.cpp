@@ -1165,8 +1165,524 @@ std::pair<py::array_t<int>, py::array_t<int>> solveRandomWalk(
     return process_result(final_nodes, final_ks);
 }
 
+int count_ks(uint64_t k) {
+    // counts number of 1s in the binary representation of k
+    int count = 0;
+    while (k) {
+        if (k & 1) {
+            count++;
+        }
+        k >>= 1;
+    }
+    return count;
+}
+
+std::vector<int> ks_in_k(uint64_t k) {
+    std::vector<int> ks;
+    int position = 0;
+    while (k) {
+        if (k & 1) {
+            ks.push_back(position-32);
+        }
+        k >>= 1;
+        position++;
+    }
+    return ks;
+}
+
+int k_in_k(uint64_t k) {
+    if (k == 0) {
+        // empty k
+        return -10000;
+    }    
+    int position = 0;
+    while (k) {
+        if (k & 1) {
+            return position - 32;
+        }
+        k >>= 1;
+        position++;
+    }
+}
+
+int64_t* DP_to_k(uint64_t* DP, int nodes_length) {
+    int64_t* k_values = new int64_t[nodes_length*nodes_length];
+    for (size_t i = 0; i < nodes_length; i++) {
+        for (size_t j = 0; j < nodes_length; j++) {
+            k_values[i*nodes_length + j] = k_in_k(DP[i*nodes_length + j]);
+        }
+    }
+    return k_values;
+}
+
+void processChunk(int start, int end, int nodes_length, uint64_t* initialDP, uint64_t* initialDP_copy) {
+    for (size_t this_node = start; this_node < end; this_node++) {
+        for (size_t adjacent_node = 0; adjacent_node < nodes_length; adjacent_node++) {
+            if (initialDP[this_node*nodes_length + adjacent_node] == 0) {
+                continue;
+            }
+            auto this_ks = ks_in_k(initialDP[this_node*nodes_length + adjacent_node]);
+            for (size_t this_k : this_ks) {
+                // For each adjacent node, find its adjacent nodes and good k values
+                for (size_t adjacent_next_node = 0; adjacent_next_node < nodes_length; adjacent_next_node++) {
+                    if (initialDP[adjacent_node*nodes_length + adjacent_next_node] == 0) {
+                        continue;
+                    }
+                    std::vector<int> other_ks = ks_in_k(initialDP[adjacent_node*nodes_length + adjacent_next_node]);
+                    for (size_t other_k : other_ks) {
+                        if (this_k + other_k < -32) {
+                            continue;
+                        }
+                        else if (this_k + other_k < 32) {
+                            continue;
+                        }
+                        initialDP_copy[this_node*nodes_length + adjacent_next_node] |= (1 << int(32 + this_k + other_k));
+                    }
+                }
+            }
+        }
+    }
+}
+
+uint64_t* computeAdjacencyTransitionsParallel(
+    int nodes_length,
+    uint64_t* initialDP,
+    bool freeDP
+    )
+{
+    // Deep Copy the initialDP
+    uint64_t* initialDP_copy = new uint64_t[nodes_length*nodes_length];
+    for (size_t i = 0; i < nodes_length; i++) {
+        for (size_t j = 0; j < nodes_length; j++) {
+                initialDP_copy[i*nodes_length + j] = initialDP[i*nodes_length + j];
+        }
+    }
+    
+    const size_t numThreads = std::thread::hardware_concurrency();
+    std::vector<std::future<void>> futures;
+
+    // Calculate chunk size per thread
+    size_t chunkSize = nodes_length / numThreads;
+
+    for (size_t i = 0; i < numThreads; i++) {
+        size_t start = i * chunkSize;
+        size_t end = (i == numThreads - 1) ? nodes_length : start + chunkSize;
+
+        futures.push_back(std::async(std::launch::async, processChunk, start, end, nodes_length, initialDP, initialDP_copy));
+    }
+
+    // Wait for all threads to complete
+    for (auto &f : futures) {
+        f.get();
+    }
+
+    if (freeDP) {
+        delete[] initialDP;
+    }
+
+    return initialDP_copy;
+}
+
+void processSameBlockChunk(int start, int end, int nodes_length, uint64_t* sameBlockDP, uint64_t* initialDP_copy) {
+    for (size_t this_node = start; this_node < end; this_node++) {
+        for (size_t adjacent_node = 0; adjacent_node < nodes_length; adjacent_node++) {
+            if (initialDP_copy[this_node*nodes_length + adjacent_node] == 0) {
+                continue;
+            }
+            auto this_ks = ks_in_k(initialDP_copy[this_node*nodes_length + adjacent_node]);
+            for (size_t this_k : this_ks) {
+                // For each adjacent node, find its adjacent nodes and good k values
+                for (size_t adjacent_next_node = 0; adjacent_next_node < nodes_length; adjacent_next_node++) {
+                    if (sameBlockDP[adjacent_node*nodes_length + adjacent_next_node] == 0) {
+                        continue;
+                    }
+                    std::vector<int> other_ks = ks_in_k(sameBlockDP[adjacent_node*nodes_length + adjacent_next_node]);
+                    for (size_t other_k : other_ks) {
+                        if (this_k + other_k < -32) {
+                            continue;
+                        }
+                        else if (this_k + other_k < 32) {
+                            continue;
+                        }
+                        initialDP_copy[this_node*nodes_length + adjacent_next_node] |= (1 << int(32 + this_k + other_k));
+                    }
+                }
+            }
+        }
+    }
+}
+
+uint64_t* computeAdjacencyTransitionsSameBlockParallel(
+    int nodes_length,
+    uint64_t* filteredDP,
+    uint64_t* sameBlockDP,
+    bool freeDP
+    )
+{
+    // Deep Copy the sameBlockDP
+    uint64_t* filteredDP_copy = new uint64_t[nodes_length*nodes_length];
+    for (size_t i = 0; i < nodes_length; i++) {
+        for (size_t j = 0; j < nodes_length; j++) {
+                filteredDP_copy[i*nodes_length + j] = filteredDP[i*nodes_length + j];
+        }
+    }
+    
+    const size_t numThreads = std::thread::hardware_concurrency();
+    std::vector<std::future<void>> futures;
+
+    // Calculate chunk size per thread
+    size_t chunkSize = nodes_length / numThreads;
+
+    for (size_t i = 0; i < numThreads; i++) {
+        size_t start = i * chunkSize;
+        size_t end = (i == numThreads - 1) ? nodes_length : start + chunkSize;
+
+        futures.push_back(std::async(std::launch::async, processSameBlockChunk, start, end, nodes_length, sameBlockDP, filteredDP_copy));
+    }
+
+    // Wait for all threads to complete
+    for (auto &f : futures) {
+        f.get();
+    }
+
+    if (freeDP) {
+        delete[] filteredDP;
+    }
+
+    return filteredDP_copy;
+}
+
+uint64_t* computeAdjacencyTransitions(
+    int nodes_length,
+    uint64_t* initialDP,
+    bool freeDP
+    )
+{
+    // Deep Copy the initialDP
+    uint64_t* initialDP_copy = new uint64_t[nodes_length*nodes_length];
+    for (size_t i = 0; i < nodes_length; i++) {
+        for (size_t j = 0; j < nodes_length; j++) {
+                initialDP_copy[i*nodes_length + j] = initialDP[i*nodes_length + j];
+        }
+    }
+
+    // For each node, check if the next node is adjacent
+    for (size_t this_node = 0; this_node < nodes_length; this_node++) {
+        for (size_t adjacent_node = 0; adjacent_node < nodes_length; adjacent_node++) {
+            if (initialDP[this_node*nodes_length + adjacent_node] == 0) {
+                continue;
+            }
+            auto this_ks = ks_in_k(initialDP[this_node*nodes_length + adjacent_node]);
+            for (size_t this_k : this_ks) {
+                // For each adjacent node, find its adjacent nodes and good k values
+                for (size_t adjacent_next_node = 0; adjacent_next_node < nodes_length; adjacent_next_node++) {
+                    if (initialDP[adjacent_node*nodes_length + adjacent_next_node] == 0) {
+                        continue;
+                    }
+                    std::vector<int> other_ks = ks_in_k(initialDP[adjacent_node*nodes_length + adjacent_next_node]);
+                    for (size_t other_k : other_ks) {
+                        if (this_k + other_k < -32) {
+                            continue;
+                        }
+                        else if (this_k + other_k < 32) {
+                            continue;
+                        }
+                        initialDP_copy[this_node*nodes_length + adjacent_next_node] |= (1 << int(32 + this_k + other_k));
+                    }
+                }
+            }
+        }
+    }
+
+    if (freeDP) {
+        delete[] initialDP;
+    }
+
+    return initialDP_copy;
+}
+
+std::vector<int> count_overlap(
+    int nodes_length,
+    uint64_t* filteredGraph
+) 
+{
+    // Count the number of True values per node
+    std::vector<int> overlapCounts;
+    for (size_t i = 0; i < nodes_length; i++) {
+        int count_total = 0;
+        for (size_t j = 0; j < nodes_length; j++) {
+            int count_ = count_ks(filteredGraph[i*nodes_length + j]) -1; // Do not count itself
+            if (count_ > 0) {
+                count_total += count_;
+            }
+        }
+        overlapCounts.push_back(count_total);
+    }
+    return overlapCounts;
+}
+
+std::vector<std::pair<int, int>> localEdgeMaxima(
+    int nodes_length,
+    uint64_t* initialDP,
+    uint64_t* sameBlockDP,
+    std::vector<int> overlapCounts
+) 
+{
+    // for Each node Check all the adjacent nodes and determine if the edge is a local maxima
+    std::vector<int> localMaximaNode;
+    for (size_t this_node = 0; this_node < nodes_length; this_node++) {
+        // Skip if the node has no overlap
+        if (overlapCounts[this_node] == 0) {
+            continue;
+        }
+        bool isLocalMaxima = true;
+        for (size_t adjacent_node = 0; adjacent_node < nodes_length; adjacent_node++) {
+            if (this_node == adjacent_node) {
+                continue;
+            }
+            if (initialDP[this_node*nodes_length + adjacent_node] && (sameBlockDP[this_node*nodes_length + adjacent_node] == 0)) {
+                if (overlapCounts[this_node] < overlapCounts[adjacent_node]) {
+                    isLocalMaxima = false;
+                    break;
+                }
+            }
+        }
+        if (isLocalMaxima) {
+            localMaximaNode.push_back(this_node);
+        }
+    }
+
+    // For each local maxima node, find the adjacent node with the highest overlap count
+    std::vector<std::pair<int, int>> localMaximaPairs;
+    for (size_t i = 0; i < localMaximaNode.size(); i++) {
+        int this_node = localMaximaNode[i];
+        int maxOverlap = 0;
+        int maxOverlapNode = -1;
+        for (size_t adjacent_node = 0; adjacent_node < nodes_length; adjacent_node++) {
+            if (this_node == adjacent_node) {
+                continue;
+            }
+            if (initialDP[this_node*nodes_length + adjacent_node] && (sameBlockDP[this_node*nodes_length + adjacent_node] == 0)) {
+                if (overlapCounts[adjacent_node] > maxOverlap) {
+                    maxOverlap = overlapCounts[adjacent_node];
+                    maxOverlapNode = adjacent_node;
+                }
+            }
+        }
+        if (maxOverlapNode != -1) {
+            localMaximaPairs.push_back(std::make_pair(this_node, maxOverlapNode));
+        }
+    }
+
+    // at most take top 1% of nodes length at each pass
+    std::sort(localMaximaPairs.begin(), localMaximaPairs.end(), [&overlapCounts](std::pair<int, int> a, std::pair<int, int> b) {
+        return overlapCounts[a.first] > overlapCounts[b.first];
+    });
+    localMaximaPairs = std::vector<std::pair<int, int>>(localMaximaPairs.begin(), localMaximaPairs.begin() + std::min(int(localMaximaPairs.size()), 1 + int(nodes_length/100)));
+
+    return localMaximaPairs;
+}
+
+void adjacency_count(
+    int nodes_length,
+    uint64_t* initialDP
+) 
+{
+    // count adjacency numbers in the graph
+    int adjacencyCount = 0;
+    for (size_t i = 0; i < nodes_length; i++) {
+        for (size_t j = 0; j < nodes_length; j++) {
+            if (initialDP[i*nodes_length + j] > 0) {
+                adjacencyCount++;
+            }
+        }
+    }
+    std::cout << "Adjacency count: " << adjacencyCount << std::endl;
+}
+
+uint64_t* filterGraph(
+    int nodes_length,
+    uint64_t* initialDP,
+    uint64_t* sameBlockDP
+    )
+{
+    int iterations = 4;
+    while (true) {
+        // Some performance tracking:
+        adjacency_count(nodes_length, initialDP);
+
+        // Variables setup
+        uint64_t* filteredGraph = initialDP;
+        std::vector<std::pair<int, int>> localMaximaPairs;
+        int iteration_index = 0;
+        // iterations < std::sqrt(nodes_length) && 
+        while (iterations < 17) {
+            for(; iteration_index < iterations; iteration_index++) {
+                std::cout << "Iteration: " << iteration_index << " / " << iterations << std::endl;
+                filteredGraph = computeAdjacencyTransitionsParallel(nodes_length, filteredGraph, iteration_index > 0);
+            }
+            // Same block transitions before counting overlap
+            // uint64_t* filteredGraph_ = computeAdjacencyTransitionsSameBlockParallel(nodes_length, filteredGraph, sameBlockDP, false);
+
+            // Overlap count
+            std::vector<int> overlapCounts = count_overlap(nodes_length, filteredGraph);
+
+            // print overlap counts
+            std::cout << "Overlap counts: ";
+            for (auto count : overlapCounts) {
+                if (count != 0) {
+                    std::cout << count << " ";
+                }
+            }
+            std::cout << std::endl;
+
+            // Local edge maxima
+            localMaximaPairs = localEdgeMaxima(nodes_length, initialDP, sameBlockDP, overlapCounts);
+            
+            // Check if found maximas
+            if (!localMaximaPairs.empty()) {
+                break;
+            }
+            else {
+                iterations++;
+            }
+        }
+
+        // Free the filteredGraph
+        if (filteredGraph != initialDP) {
+            std::cout << "Freeing filteredGraph" << std::endl;
+            delete[] filteredGraph;
+        }
+
+        std::cout << "Local edge maxima computed" << std::endl;
+
+        // print local maxima pairs
+        std::cout << "Local maxima pairs: ";
+        for (auto pair : localMaximaPairs) {
+            std::cout << "(" << pair.first << ", " << pair.second << ") ";
+        }
+        std::cout << std::endl;
+
+        // Break if no local edge maxima
+        if (localMaximaPairs.empty()) {
+            break;
+        }
+
+        // Delete local edge maxima edges
+        for (size_t i = 0; i < localMaximaPairs.size(); i++) {
+            int this_node = localMaximaPairs[i].first;
+            int maxOverlapNode = localMaximaPairs[i].second;
+            initialDP[this_node*nodes_length + maxOverlapNode] = 0;
+            initialDP[maxOverlapNode*nodes_length + this_node] = 0;
+        }
+    }
+
+    // Some performance tracking:
+    adjacency_count(nodes_length, initialDP);
+
+    std::cout << "Filtering done" << std::endl;
+    return initialDP;
+}
+
+// Input is; Nodes Length, Initial DP (shape: (nodes_length, nodes_length, 64), type: bool)
+py::array_t<int64_t> skeletonFilterGraph(
+    int nodes_length,
+    py::array_t<int64_t> initialNonTransitionDP_,
+    py::array_t<int64_t> initialTransitionDP_,
+    py::array_t<int64_t> sameBlockDP_   
+    )
+{
+    auto dp_non_transition_unchecked = initialNonTransitionDP_.unchecked<2>(); // Access without bounds checking
+    // Convert initialNonTransitionDP to a C++ array
+    uint64_t* initialNonTransitionDP = new uint64_t[nodes_length*nodes_length];
+    for (size_t i = 0; i < nodes_length; i++) {
+        for (size_t j = 0; j < nodes_length; j++) {
+            initialNonTransitionDP[i*nodes_length + j] = dp_non_transition_unchecked(i, j);
+        }
+    }
+
+    auto dp_transition_unchecked = initialTransitionDP_.unchecked<2>(); // Access without bounds checking
+    // Convert initialTransitionDP to a C++ array
+    uint64_t* initialTransitionDP = new uint64_t[nodes_length*nodes_length];
+    for (size_t i = 0; i < nodes_length; i++) {
+        for (size_t j = 0; j < nodes_length; j++) {
+            initialTransitionDP[i*nodes_length + j] = dp_transition_unchecked(i, j);
+        }
+    }
+
+    auto sameBlock_dp_unchecked = sameBlockDP_.unchecked<2>(); // Access without bounds checking
+    // Convert sameBlockDP to a C++ array
+    uint64_t* sameBlockDP = new uint64_t[nodes_length*nodes_length];
+    for (size_t i = 0; i < nodes_length; i++) {
+        for (size_t j = 0; j < nodes_length; j++) {
+            sameBlockDP[i*nodes_length + j] = sameBlock_dp_unchecked(i, j);
+        }
+    }
+
+
+    std::cout << "Initial DP converted to C++ array" << std::endl;
+
+    std::cout << "No loop Same Block edges computation" << std::endl;
+    uint64_t* emptyDP = new uint64_t[nodes_length*nodes_length];
+    sameBlockDP = filterGraph(nodes_length, sameBlockDP, emptyDP);
+    initialTransitionDP = filterGraph(nodes_length, initialTransitionDP, emptyDP);
+
+    uint64_t* initialDP = new uint64_t[nodes_length*nodes_length];
+    for (size_t i = 0; i < nodes_length; i++) {
+        for (size_t j = 0; j < nodes_length; j++) {
+            initialDP[i*nodes_length + j] = initialNonTransitionDP[i*nodes_length + j] | initialTransitionDP[i*nodes_length + j];
+        }
+    }
+
+    uint64_t* transitionDP = new uint64_t[nodes_length*nodes_length];
+    for (size_t i = 0; i < nodes_length; i++) {
+        for (size_t j = 0; j < nodes_length; j++) {
+            transitionDP[i*nodes_length + j] = initialTransitionDP[i*nodes_length + j] | sameBlockDP[i*nodes_length + j];
+        }
+    }
+
+    // convert to k values
+    int64_t* k_values_initial = DP_to_k(initialDP, nodes_length);
+    // find all unique k values
+    std::set<int> k_values_set;
+    for (size_t i = 0; i < nodes_length; i++) {
+        for (size_t j = 0; j < nodes_length; j++) {
+            k_values_set.insert(k_values_initial[i*nodes_length + j]);
+        }
+    }
+    // print unique k values
+    std::cout << "Unique k values: ";
+    for (auto k : k_values_set) {
+        std::cout << k << " ";
+    }
+    std::cout << std::endl;
+
+    // Call the C++ function to filter the graph
+    uint64_t* filteredGraph = filterGraph(nodes_length, initialDP, transitionDP);
+
+    // convert to k values
+    int64_t* k_values = DP_to_k(filteredGraph, nodes_length);
+
+    // Convert the filteredGraph to a NumPy array 2D
+    py::array_t<int64_t> result_DP(py::array::ShapeContainer({static_cast<long int>(nodes_length), static_cast<long int>(nodes_length)}));
+    auto r_DP = result_DP.mutable_unchecked<2>(); // Now correctly a 3D array
+
+    for (size_t i = 0; i < nodes_length; i++) {
+        for (size_t j = 0; j < nodes_length; j++) {
+                int64_t k = k_values[i*nodes_length + j];
+                r_DP(i, j) = k;
+        }
+    }
+
+    std::cout << "Filtered DP converted to NumPy array" << std::endl;
+
+    return result_DP;
+}
+
 PYBIND11_MODULE(sheet_generation, m) {
     m.doc() = "pybind11 random walk solver for ThaumatoAnakalyptor"; // Optional module docstring
 
     m.def("solve_random_walk", &solveRandomWalk, "Function to solve random walk problem in C++");
+
+    m.def("graph_skeleton_filter", &skeletonFilterGraph, "Function to filter a Graph per DP skeleton in C++");
 }
