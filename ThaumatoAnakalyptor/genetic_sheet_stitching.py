@@ -3,6 +3,7 @@ import random
 from multiprocessing import Pool, RawArray
 import time
 import numpy as np
+from tqdm import tqdm
 
 # Problem parameters
 NUM_ITEMS = 10000  # Assuming you have 10 items
@@ -294,7 +295,7 @@ def solve(graph_edges, initial_component=None, problem='k_assignment'):
         time_Start = time.time()
         toolbox, pop = init(num_items=graph_shape[0], problem=problem)
 
-        toolbox.register("map", pool.map)
+        toolbox.register("map", lambda f, x: tqdm(pool.imap(f, x), total=len(x), desc="Evaluating Individuals"))
 
         hof = run(toolbox, pop)
 
