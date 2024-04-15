@@ -5,6 +5,7 @@ import open3d as o3d
 import argparse
 import os
 import numpy as np
+import torch.distributed
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Semaphore
@@ -19,7 +20,9 @@ Image.MAX_IMAGE_PIXELS = None
 import tifffile
 import cv2
 import zarr
-from multiprocessing import cpu_count
+from multiprocessing import cpu_count, shared_memory
+import time
+import warnings
 
 class MyPredictionWriter(BasePredictionWriter):
     def __init__(self, save_path, image_size, r, max_queue_size=10, max_workers=1, display=True):
@@ -29,14 +32,26 @@ class MyPredictionWriter(BasePredictionWriter):
         self.display = display
         self.image = None
         self.r = r
-        self.surface_volume_np = np.zeros((2*r+1, image_size[0], image_size[1]), dtype=np.uint16)
+        self.surface_volume_np = None
         self.max_queue_size = max(max_queue_size, max_workers)
         self.executor = ThreadPoolExecutor(max_workers=max_workers)  # Adjust number of workers as needed
         self.semaphore = Semaphore(self.max_queue_size)
         self.futures = []
         self.num_workers = cpu_count()
+        self.trainer_rank = None
     
     def write_on_batch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, prediction, batch_indices, batch, batch_idx: int, dataloader_idx: int) -> None:
+        if self.trainer_rank is None: # Only set the rank once
+            self.trainer_rank = trainer.global_rank if trainer.world_size > 1 else 0
+
+        if self.surface_volume_np is None:
+            if trainer.global_rank == 0:
+                self.surface_volume_np, self.shm = self.create_shared_array((2*self.r+1, self.image_size[0], self.image_size[1]), np.uint16, name="surface_volume")
+                # Gather the shared memory name
+                torch.distributed.barrier()
+            else:
+                torch.distributed.barrier()
+                self.surface_volume_np, self.shm = self.attach_shared_array((2*self.r+1, self.image_size[0], self.image_size[1]), np.uint16, name="surface_volume")
         self.semaphore.acquire()  # Wait for a slot to become available if necessary
         future = self.executor.submit(self.process_and_write_data, prediction)
         future.add_done_callback(lambda _future: self.semaphore.release())
@@ -74,34 +89,71 @@ class MyPredictionWriter(BasePredictionWriter):
             print(e)
             pass
 
+    def create_shared_array(self, shape, dtype, name="shared_array"):
+        array_size = np.prod(shape) * np.dtype(dtype).itemsize
+        try:
+            # Create a shared array
+            shm = shared_memory.SharedMemory(create=True, size=array_size, name=name)
+        except FileExistsError:
+            print(f"Shared memory with name {name} already exists.")
+            # Clean up the shared memory if it already exists
+            shm = shared_memory.SharedMemory(create=False, size=array_size, name=name)
+
+        arr = np.ndarray(shape, dtype=dtype, buffer=shm.buf)
+        arr.fill(0)  # Initialize the array with zeros
+        return arr, shm
+    
+    def attach_shared_array(self, shape, dtype, name="shared_array"):
+        while True:
+            try:
+                # Attach to an existing shared array
+                shm = shared_memory.SharedMemory(name=name)
+                arr = np.ndarray(shape, dtype=dtype, buffer=shm.buf)
+                assert arr.shape == shape, f"Expected shape {shape} but got {arr.shape}"
+                assert arr.dtype == dtype, f"Expected dtype {dtype} but got {arr.dtype}"
+                print("Attached to shared memory")
+                return arr, shm
+            except FileNotFoundError:
+                time.sleep(0.2)
+
     def process_and_write_data(self, prediction):
-        # print("Writing to Numpy")
-        if prediction is None:
-            return
-        if len(prediction) == 0:
-            return
+        try:
+            # print("Writing to Numpy")
+            if prediction is None:
+                return
+            if len(prediction) == 0:
+                return
 
-        values, indexes_3d = prediction
-        indexes_3d = indexes_3d.cpu().numpy().astype(np.int32)
-        values = values.cpu().numpy().astype(np.uint16)
-        if indexes_3d.shape[0] == 0:
-            return
+            values, indexes_3d = prediction
+            indexes_3d = indexes_3d.cpu().numpy().astype(np.int32)
+            values = values.cpu().numpy().astype(np.uint16)
+            if indexes_3d.shape[0] == 0:
+                return
 
-        # save into surface_volume_np
-        self.surface_volume_np[indexes_3d[:, 0], indexes_3d[:, 1], indexes_3d[:, 2]] = values
+            # save into surface_volume_np
+            self.surface_volume_np[indexes_3d[:, 0], indexes_3d[:, 1], indexes_3d[:, 2]] = values
 
-        # display progress
-        self.process_display_progress()
+            # display progress
+            self.process_display_progress()
+        except Exception as e:
+            print(e)
+            
 
     def wait_for_all_writes_to_complete(self):
         # Wait for all queued tasks to complete
         for future in tqdm(self.futures, desc="Finalizing writes"):
             future.result()
+        # Wait for all GPU writes to complete
+        torch.distributed.barrier()
 
     def write_to_disk(self, flag='jpg'):
         # Make sure this method is called after the prediction loop is complete
         print("Waiting for all writes to complete")
         self.wait_for_all_writes_to_complete()
+        if self.trainer_rank != 0: # Only rank 0 should write to disk
+            self.shm.close()
+            self.shm = None
+            return
         print("Writing Segment to disk")
         # Make folder if it does not exist
         os.makedirs(self.save_path, exist_ok=True)
@@ -119,6 +171,18 @@ class MyPredictionWriter(BasePredictionWriter):
         else:
             print("Invalid flag. Choose between 'tif', 'jpg', 'memmap', 'npz', 'zarr'")
             return
+        
+        # Close the shared memory
+        if self.trainer_rank == 0:
+            try:
+                self.shm.close()
+                # No warnings verbose
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    self.shm.unlink()
+                    self.shm = None
+            except Exception as e:
+                print(e)
         print("Segment written to disk")
 
     def write_tif(self):
@@ -185,14 +249,15 @@ class MyPredictionWriter(BasePredictionWriter):
         
 class MeshDataset(Dataset):
     """Dataset class for rendering a mesh."""
-    def __init__(self, path, grid_cell_template, grid_size=500, r=32, max_side_triangle=10, max_workers=1, display=False):
+    def __init__(self, path, grid_cell_template, output_path=None, grid_size=500, r=32, max_side_triangle=10, max_workers=1, display=False):
         """Initialize the dataset."""
         self.path = path
         self.grid_cell_template = grid_cell_template
         self.r = r+1
         self.max_side_triangle = max_side_triangle
         self.load_mesh(path)
-        write_path = os.path.join(os.path.dirname(path), "layers")
+        output_path = os.path.dirname(path) if output_path is None else output_path
+        write_path = os.path.join(output_path, "layers")
         self.writer = MyPredictionWriter(write_path, self.image_size, r, max_workers=max_workers, display=display)
 
         self.grid_size = grid_size
@@ -460,7 +525,7 @@ class MeshDataset(Dataset):
     def extract_triangles_mask(self, grid_index):
         # select all triangles that have at least one vertice in the grid with a r-padded bounding box
         # grid_size * grid_index - r <= vertice <= grid_size * grid_index + r
-        selected_triangles_mask = np.any(np.all(np.logical_and(self.triangles_vertices >= np.array(grid_index) * self.grid_size - self.r, self.triangles_vertices <= (np.array(grid_index) + 1) * self.grid_size + self.r), axis=2), axis=1)
+        selected_triangles_mask = np.any(np.all(np.logical_and(self.triangles_vertices >= np.array(grid_index) * self.grid_size - 2*self.r, self.triangles_vertices <= (np.array(grid_index) + 1) * self.grid_size + 2*self.r), axis=2), axis=1)
 
         return selected_triangles_mask
     
@@ -688,7 +753,7 @@ def custom_collate_fn(batch):
     # Return a single batch containing all aggregated items
     return grid_coords, grid_cells, vertices, normals, uv_coords_triangles, grid_index
     
-def ppm_and_texture(obj_path, grid_cell_path, grid_size=500, gpus=1, batch_size=1, r=32, format='jpg', max_side_triangle: int = 10, display=False):
+def ppm_and_texture(obj_path, grid_cell_path, output_path=None, grid_size=500, gpus=1, batch_size=1, r=32, format='jpg', max_side_triangle: int = 10, display=False):
     # Number of workers
     num_threads = multiprocessing.cpu_count() // int(1.5 * int(gpus))
     num_treads_for_gpus = 12
@@ -696,30 +761,32 @@ def ppm_and_texture(obj_path, grid_cell_path, grid_size=500, gpus=1, batch_size=
     num_workers = max(num_workers, 1)
     # Number of workers for the Writer
     max_workers = max(1, min(multiprocessing.cpu_count()//2, 20))
+    max_workers = min(max_workers, 20)
 
     # Template for the grid cell files
     grid_cell_template = os.path.join(grid_cell_path, "cell_yxz_{:03}_{:03}_{:03}.tif")
 
     # Initialize the dataset and dataloader
-    dataset = MeshDataset(obj_path, grid_cell_template, grid_size=grid_size, r=r, max_side_triangle=max_side_triangle, max_workers=max_workers, display=display)
+    dataset = MeshDataset(obj_path, grid_cell_template, output_path=output_path, grid_size=grid_size, r=r, max_side_triangle=max_side_triangle, max_workers=max_workers, display=display)
     dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=custom_collate_fn, shuffle=False, num_workers=num_workers, prefetch_factor=2)
     model = PPMAndTextureModel(r=r, max_side_triangle=max_side_triangle)
     
     writer = dataset.get_writer()
-    trainer = pl.Trainer(callbacks=[writer], gpus=int(gpus), strategy="ddp")
+    trainer = pl.Trainer(callbacks=[writer], accelerator='gpu', devices=int(gpus), strategy="ddp")
     
     print("Start Rendering")
     # Run Rendering
     trainer.predict(model, dataloaders=dataloader, return_predictions=False)
     print("Rendering done")
     writer.write_to_disk(format)
+    # Sync up before exiting
+    torch.distributed.barrier()
     
-    return
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('obj', type=str)
     parser.add_argument('grid_cell', type=str)
+    parser.add_argument('--output_path', type=str, default=None)
     parser.add_argument('--gpus', type=int, default=1)
     parser.add_argument('--r', type=int, default=32)
     parser.add_argument('--format', type=str, default='jpg')
@@ -730,4 +797,4 @@ if __name__ == '__main__':
     if args.display:
         print("[INFO]: Displaying the rendering image slows down the rendering process by about 20%.")
 
-    ppm_and_texture(args.obj, gpus=args.gpus, grid_cell_path=args.grid_cell, r=args.r, format=args.format, display=args.display)
+    ppm_and_texture(args.obj, gpus=args.gpus, grid_cell_path=args.grid_cell, output_path=args.output_path, r=args.r, format=args.format, display=args.display)

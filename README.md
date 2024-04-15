@@ -97,7 +97,7 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
 
     ```
     ```bash
-    docker run --gpus all --shm-size=100g -it --rm \
+    docker run --gpus all --shm-size=150g -it --rm \
     -v <path_to_scroll>:/scroll.volpkg \
     -v <optional_alternative_path_to_scroll>:/scroll_alternative.volpkg \
     -v $(pwd)/:/workspace \
