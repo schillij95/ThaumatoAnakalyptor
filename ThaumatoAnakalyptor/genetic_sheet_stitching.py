@@ -291,7 +291,8 @@ def solve(graph_edges, initial_component=None, problem='k_assignment'):
     # Here we pass X and X_shape to the initializer of each worker.
     # (Because X_shape is not a shared variable, it will be copied to each
     # child process.)
-    with Pool(initializer=init_worker, initargs=(graph_edges_raw_array, graph_shape, factor_0, factor_not_0, initial_component)) as pool:
+    max_processes = 64
+    with Pool(processes=max_processes, initializer=init_worker, initargs=(graph_edges_raw_array, graph_shape, factor_0, factor_not_0, initial_component)) as pool:
         time_Start = time.time()
         toolbox, pop = init(num_items=graph_shape[0], problem=problem)
 
