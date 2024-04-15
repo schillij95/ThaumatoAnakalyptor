@@ -15,7 +15,7 @@ import argparse
 import yaml
 import ezdxf
 from ezdxf.math import Vec3
-import matplotlib.pyplot as plt
+from copy import deepcopy
 
 from .instances_to_sheets import select_points, get_vector_mean, alpha_angles, adjust_angles_zero, adjust_angles_offset, add_overlapp_entries_to_patches_list, assign_points_to_tiles, compute_overlap_for_pair, overlapp_score, fit_sheet, winding_switch_sheet_score_raw_precomputed_surface, find_starting_patch, save_main_sheet, update_main_sheet
 from .sheet_to_mesh import load_xyz_from_file, scale_points, umbilicus_xz_at_y
@@ -229,9 +229,9 @@ class Graph:
         Compute the edges for each node and store them in the node dictionary.
         """
         print("Computing node edges...")
-        for node in self.nodes:
+        for node in tqdm(self.nodes, desc="Adding nodes"):
             self.nodes[node]['edges'] = []
-        for edge in tqdm(self.edges):
+        for edge in tqdm(self.edges, desc="Computing node edges"):
             self.nodes[edge[0]]['edges'].append(edge)
             self.nodes[edge[1]]['edges'].append(edge)
 
@@ -576,7 +576,7 @@ class ScrollGraph(Graph):
         blocks_tar_files = [blocks_tar_files[i] for i in range(len(blocks_tar_files)) if filter_mask[i]]
         return blocks_tar_files
 
-    def largest_connected_component(self):
+    def largest_connected_component(self, delete_nodes=True):
         print("Finding largest connected component...")        
         # walk the graph from the start node
         visited = set()
@@ -628,16 +628,16 @@ class ScrollGraph(Graph):
         largest_component = max(components, key=len)
         other_nodes = [node for node in self.nodes if node not in largest_component]
         # Remove all other Nodes, Edges and Node Edges
-        self.remove_nodes_edges(other_nodes)
+        if delete_nodes:
+            self.remove_nodes_edges(other_nodes)
         
         print(f"Pruned {nodes_total - len(self.nodes)} nodes. Of {nodes_total} nodes.")
         print(f"Pruned {edges_total - len(self.edges)} edges. Of {edges_total} edges.")
 
+        return largest_component
+
     def build_graph(self, path_instances, start_point, num_processes=4, prune_unconnected=False):
         blocks_tar_files = glob.glob(path_instances + '/*.tar')
-
-        # debug
-        # blocks_tar_files = self.filter_blocks_z(blocks_tar_files, 500, 1000)
 
         #from original coordinates to instance coordinates
         start_block, patch_id = find_starting_patch([start_point], path_instances)
@@ -695,6 +695,17 @@ class ScrollGraph(Graph):
 
         return start_block, patch_id
     
+    def naked_graph(self):
+        """
+        Return a naked graph with only nodes.
+        """
+        # Remove all nodes and edges
+        graph = ScrollGraph(self.overlapp_threshold, self.umbilicus_path)
+        # add all nodes
+        for node in self.nodes:
+            graph.add_node(node, self.nodes[node]['centroid'])
+        return graph
+    
     def set_overlapp_threshold(self, overlapp_threshold):
         if hasattr(self, "overlapp_threshold"):
             # compare if the new threshold is different from the old one in any aspect or subaspect
@@ -722,7 +733,7 @@ class ScrollGraph(Graph):
         doc = ezdxf.new('R2010')
         msp = doc.modelspace()
 
-        for edge in tqdm(self.edges):
+        for edge in tqdm(self.edges, desc="Creating DXF..."):
             same_block = self.edges[edge]['same_block']
             k = self.get_edge_k(edge[0], edge[1])
             c = color
@@ -805,7 +816,7 @@ class ScrollGraph(Graph):
         # Save the DXF document
         doc.saveas(filename)
 
-    def extract_subgraph(self, min_z=None, max_z=None, umbilicus_max_distance=None, add_same_block_edges=False):
+    def extract_subgraph(self, min_z=None, max_z=None, umbilicus_max_distance=None, add_same_block_edges=False, tolerated_nodes=None):
         # Define a wrapper function for umbilicus_xz_at_y
         umbilicus_func = lambda z: umbilicus_xz_at_y(self.umbilicus_data, z)
         # Extract subgraph with nodes within z range
@@ -813,18 +824,24 @@ class ScrollGraph(Graph):
         # starting block info
         subgraph.start_block = self.start_block
         subgraph.patch_id = self.patch_id
-        for node in self.nodes:
+        for node in tqdm(self.nodes, desc="Extracting subgraph..."):
             centroid = self.nodes[node]['centroid']
             winding_angle = self.nodes[node]['winding_angle']
-            if (min_z is not None) and (centroid[1] < min_z):
+            if (tolerated_nodes is not None) and (node in tolerated_nodes):
+                subgraph.add_node(node, centroid, winding_angle=winding_angle)
                 continue
-            if (max_z is not None) and (centroid[1] > max_z):
+            elif (min_z is not None) and (centroid[1] < min_z):
                 continue
-            if (umbilicus_max_distance is not None) and np.linalg.norm(umbilicus_func(centroid[1]) - centroid) > umbilicus_max_distance:
+            elif (max_z is not None) and (centroid[1] > max_z):
                 continue
-            subgraph.add_node(node, centroid, winding_angle=winding_angle)
+            elif (umbilicus_max_distance is not None) and np.linalg.norm(umbilicus_func(centroid[1]) - centroid) > umbilicus_max_distance:
+                continue
+            else:
+                subgraph.add_node(node, centroid, winding_angle=winding_angle)
         for edge in self.edges:
             node1, node2 = edge
+            if (tolerated_nodes is not None) and (node1 in tolerated_nodes) and (node2 in tolerated_nodes): # dont add useless edges
+                continue
             if node1 in subgraph.nodes and node2 in subgraph.nodes:
                 if add_same_block_edges or (not self.edges[edge]['same_block']):
                     subgraph.add_edge(node1, node2, self.edges[edge]['certainty'], self.edges[edge]['sheet_offset_k'], self.edges[edge]['same_block'])
@@ -1514,22 +1531,23 @@ class EvolutionaryGraphEdgesSelection():
     def __init__(self, graph, save_path, min_z=None, max_z=None):
         self.graph = graph
         self.save_path = save_path
-        self.edges_by_indices, _ = self.build_graph_data(self.graph, min_z, max_z)
+        self.min_z = min_z
+        self.max_z = max_z
 
-    def build_graph_data(self, graph, min_z=None, max_z=None):
+    def build_graph_data(self, graph, min_z=None, max_z=None, strict_edges=True):
         """
         Builds a dictionary with the node data.
         """
+        print(f"Using strict edges: {strict_edges}")
+        def in_range(centroid, min_z_, max_z_):
+            if min_z_ is not None and centroid[1] < min_z_:
+                return False
+            if max_z_ is not None and centroid[1] > max_z_:
+                return False
+            return True
+        
         node_data = {}
         for node in graph.nodes:
-            centroid = graph.nodes[node]['centroid']
-            to_add = True
-            if min_z is not None and centroid[1] < min_z:
-                to_add = False
-            if max_z is not None and centroid[1] > max_z:
-                to_add = False
-            if not to_add:
-                continue
             node_data[node] = graph.nodes[node]
 
         self.nodes = node_data
@@ -1539,22 +1557,35 @@ class EvolutionaryGraphEdgesSelection():
         nonone_certainty_count = 0
         edges_by_indices  = []
         edges_by_subvolume_indices = []
+        initial_component = {}
         for edge in graph.edges:
             node1, node2 = edge
             centroid1 = graph.nodes[node1]['centroid']
             centroid2 = graph.nodes[node2]['centroid']
-            if min_z is not None and (centroid1[1] < min_z or centroid2[1] < min_z):
-                to_add = False
-            if max_z is not None and (centroid1[1] > max_z or centroid2[1] > max_z):
+            to_add = True
+            if not strict_edges:
+                if (not in_range(centroid1, min_z, max_z)) and (not in_range(centroid2, min_z, max_z)):
+                    to_add = False
+                elif not in_range(centroid1, min_z, max_z):
+                    # assign known k to initial component for evolutionary algorithm
+                    if "assigned_k" in graph.nodes[node1]:
+                        initial_component[self.nodes_index_dict[node1]] = graph.nodes[node1]["assigned_k"]
+                elif not in_range(centroid2, min_z, max_z):
+                    # assign known k to initial component for evolutionary algorithm
+                    if "assigned_k" in graph.nodes[node2]:
+                        initial_component[self.nodes_index_dict[node2]] = graph.nodes[node2]["assigned_k"]
+            if strict_edges and ((not in_range(centroid1, min_z, max_z)) or (not in_range(centroid2, min_z, max_z))):
                 to_add = False
             if not to_add:
                 continue
             k = graph.get_edge_k(node1, node2)
             if "assigned_k" in graph.nodes[node1]:
                 assigned_k1 = graph.nodes[node1]["assigned_k"]
-                assigned_k2 = graph.nodes[node2]["assigned_k"]
             else:
                 assigned_k1 = 0
+            if "assigned_k" in graph.nodes[node2]:
+                assigned_k2 = graph.nodes[node2]["assigned_k"]
+            else:
                 assigned_k2 = 0
             certainty = graph.edges[edge]['certainty']
             assert certainty >= 0.0, f"Invalid certainty: {certainty} for edge: {edge}"
@@ -1566,44 +1597,63 @@ class EvolutionaryGraphEdgesSelection():
         
         edges_by_indices = np.array(edges_by_indices).astype(np.int32)
         edges_by_subvolume_indices = np.array(edges_by_subvolume_indices).astype(np.int32)
-        return edges_by_indices, edges_by_subvolume_indices
+        if len(initial_component) == 0:
+            initial_component = None
+        return edges_by_indices, edges_by_subvolume_indices, initial_component
     
-    def solve_call(self, input, problem):
+    def solve_call(self, input, initial_component, problem):
         # easily switch between dummy and real computation
-        return solve_genetic(input, problem=problem)
+        return solve_genetic(input, initial_component=initial_component, problem=problem)
 
-    def solve(self):
-        # Solve with genetic algorithm
-        valid_mask, valid_edges_count = self.solve_call(self.edges_by_indices, problem='k_assignment')
-        # Build graph from edge selection
-        evolved_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask)
-        # select largest connected component
-        evolved_graph.largest_connected_component()
-        # Compute ks by simple bfs
-        nodes, ks = self.bfs_ks(evolved_graph)
-        self.update_winding_angles(evolved_graph, nodes, ks)
-        evolved_graph = self.filter(evolved_graph)
+    def solve(self, z_height_steps=200):
+        graph_centroids = np.array([self.graph.nodes[node]['centroid'] for node in self.graph.nodes])
+        graph_centroids_min = int(np.floor(np.min(graph_centroids, axis=0))[1])
+        graph_centroids_max = int(np.ceil(np.max(graph_centroids, axis=0))[1])
+        print(f"Graph centroids min: {np.floor(np.min(graph_centroids, axis=0))}, max: {np.ceil(np.max(graph_centroids, axis=0))}")
+
+        evolved_graph = self.graph.naked_graph()
+        start_node = None
+
+        for graph_extraction_start in range(graph_centroids_min, graph_centroids_max, z_height_steps):
+            self.edges_by_indices, _, initial_component = self.build_graph_data(self.graph, min_z=graph_extraction_start, max_z=graph_extraction_start+z_height_steps, strict_edges=(graph_extraction_start==graph_centroids_min))
+            print(f"Graph nodes length {len(self.graph.nodes)}, edges length: {len(self.graph.edges)}")
+            print("Number of edges: ", len(self.edges_by_indices))
+            # Solve with genetic algorithm
+            valid_mask, valid_edges_count = self.solve_call(self.edges_by_indices, initial_component=initial_component, problem='k_assignment')
+            # Build graph from edge selection
+            evolved_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask, evolved_graph)
+            evolved_graph_temp = deepcopy(evolved_graph)
+            # select largest connected component
+            largest_component = evolved_graph_temp.largest_connected_component(delete_nodes=True)
+            if start_node is None:
+                start_node = largest_component[0]
+            # Compute ks by simple bfs
+            self.update_ks(evolved_graph_temp, start_node=start_node)
+            # Filter PointCloud for max 1 patch per subvolume
+            evolved_graph = self.filter(evolved_graph_temp, graph=evolved_graph)
+
         return evolved_graph
     
-    def filter(self, evolved_graph):
+    def filter(self, graph_to_filter, min_z=None, max_z=None, graph=None):
         print("Filtering patches with genetic algorithm...")
         # Filter edges with genetic algorithm
-        _, self.edges_by_subvolume_indices = self.build_graph_data(evolved_graph)
+        _, self.edges_by_subvolume_indices, _ = self.build_graph_data(graph_to_filter, min_z=min_z, max_z=max_z, strict_edges=True)
         # Solve with genetic algorithm
         valid_mask, valid_edges_count = self.solve_call(self.edges_by_subvolume_indices, problem="patch_selection")
         # Build graph from edge selection
-        evolved_graph = self.graph_from_edge_selection(self.edges_by_subvolume_indices, evolved_graph, valid_mask)
+        filtered_graph = self.graph_from_edge_selection(self.edges_by_subvolume_indices, graph_to_filter, valid_mask, graph=graph)
         # select largest connected component
-        evolved_graph.largest_connected_component()
-        return evolved_graph
+        filtered_graph.largest_connected_component()
+        return filtered_graph
 
-    def graph_from_edge_selection(self, edges_indices, input_graph, edges_mask):
+    def graph_from_edge_selection(self, edges_indices, input_graph, edges_mask, graph=None):
         """
         Creates a graph from the DP table.
         """
         print(f"self.nodes_length: {self.nodes_length}")
         nodes = list(self.nodes)
-        graph = ScrollGraph(input_graph.overlapp_threshold, input_graph.umbilicus_path)
+        if graph is None:
+            graph = ScrollGraph(input_graph.overlapp_threshold, input_graph.umbilicus_path)
         # start block and patch id
         graph.start_block = input_graph.start_block
         graph.patch_id = input_graph.patch_id
@@ -1633,9 +1683,16 @@ class EvolutionaryGraphEdgesSelection():
         print(f"Filtered graph created with {len(graph.nodes)} nodes and {len(graph.edges)} edges.")
         return graph
     
-    def bfs_ks(self, graph):
+    def update_ks(self, graph, start_node=None):
+        # Compute nodes, ks
+        nodes, ks = self.bfs_ks(graph, start_node=start_node)
+        # Update the ks for the extracted nodes
+        self.update_winding_angles(graph, nodes, ks)
+
+    def bfs_ks(self, graph, start_node=None):
         # Use BFS to traverse the graph and compute the ks
-        start_node = list(graph.nodes)[0]
+        if start_node is None:
+            start_node = list(graph.nodes)[0]
         visited = {start_node: True}
         queue = [start_node]
         ks = {start_node: 0}
@@ -1749,10 +1806,11 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
         scroll_graph = load_graph(recompute_path)
         start_block, patch_id = find_starting_patch([start_point], path)
 
-    # min_z, max_z = 900, 1000
-    min_z, max_z = None, None
-    subgraph = scroll_graph.extract_subgraph(min_z=min_z, max_z=max_z, umbilicus_max_distance=80, add_same_block_edges=True)
-    subgraph.create_dxf_with_colored_polyline(save_path.replace("blocks", "subgraph") + ".dxf", min_z=min_z, max_z=max_z)
+    # min_z, max_zm umbilicus_max_distance = 900, 1000, 80
+    min_z, max_z, umbilicus_max_distance = None, None, None
+    # subgraph = scroll_graph.extract_subgraph(min_z=min_z, max_z=max_z, umbilicus_max_distance=umbilicus_max_distance, add_same_block_edges=True)
+    subgraph = scroll_graph
+    # subgraph.create_dxf_with_colored_polyline(save_path.replace("blocks", "subgraph") + ".dxf", min_z=min_z, max_z=max_z)
     graph_filter = EvolutionaryGraphEdgesSelection(subgraph, save_path)
     evolved_graph = graph_filter.solve()
 
