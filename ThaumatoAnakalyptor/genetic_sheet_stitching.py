@@ -329,12 +329,12 @@ def solve(graph_edges, initial_component=None, problem='k_assignment'):
         time_End = time.time()
 
         best_ind = tools.selBest(pop, 1)[0]
-        best_ind = np.array(best_ind, dtype=np.int32)
         print("Best individual is:", best_ind, "with fitness:", best_ind.fitness, "Time taken:", time_End - time_Start)
 
         # After the run, access the best individual from the Hall of Fame
         best_ind = hof[0]
         print("Best individual ever is:", best_ind, "with fitness:", best_ind.fitness)
+        best_ind = np.array(best_ind, dtype=np.int32)
         # get the valid mask
         if problem == 'k_assignment':
             valid_mask, valid_edges_count = sheet_generation.build_graph_from_individual_cpp(int(best_ind.shape[0]), best_ind, int(graph_edges.shape[0]), graph_edges, var_dict['factor_0'], var_dict['factor_not_0'], int(initial_component.shape[0]), initial_component, True)
