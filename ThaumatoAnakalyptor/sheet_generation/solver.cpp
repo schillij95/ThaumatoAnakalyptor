@@ -5,6 +5,8 @@
 #include <yaml-cpp/yaml.h>
 #include <string>
 #include <iostream>
+#include <unordered_map>
+#include <algorithm>
 #include <vector>
 #include <random>
 #include <future>
@@ -1203,6 +1205,7 @@ int k_in_k(uint64_t k) {
         k >>= 1;
         position++;
     }
+    return -10000;
 }
 
 int64_t* DP_to_k(uint64_t* DP, int nodes_length) {
@@ -1679,10 +1682,276 @@ py::array_t<int64_t> skeletonFilterGraph(
     return result_DP;
 }
 
+class WeightedUF {
+private:
+    std::unordered_map<int, int> parent;
+    std::unordered_map<int, int> size;
+    std::unordered_map<int, int> weight; // Weight to the parent
+
+public:
+    // Constructor: Initialize union-find structure with known node count.
+    WeightedUF() {
+        // Initial setup is unnecessary here because maps will default-initialize elements.
+    }
+
+    // Find the root of node p, and compress the path
+    int find(int p, int& path_weight) {
+        if (parent.find(p) == parent.end()) return p; // If p isn't in the map, it has no parent.
+
+        int root = p;
+        path_weight = weight[root];
+
+        // Find the actual root
+        while (root != parent[root]) {
+            root = parent[root];
+            path_weight += weight[root];  // Accumulate weights
+        }
+        int total_weight = path_weight;
+
+        // // Path compression
+        // while (p != root) {
+        //     int next = parent[p];
+        //     parent[p] = root;
+        //     int total_weight_ = total_weight - weight[p];  // Update total weight
+        //     weight[p] = total_weight;  // Set the new weight to reflect total path weight
+        //     total_weight = total_weight_;  // Update total weight for next iteration
+        //     p = next;
+        // }
+
+        return root;
+    }
+
+    bool merge(int x, int y, int k) {
+        if (parent.find(x) == parent.end()) {
+            parent[x] = x; // Initialize if not already present
+            weight[x] = 0; // Initial weight to self is 0
+            size[x] = 1; // Initial size is 1
+        }
+        if (parent.find(y) == parent.end()) {
+            parent[y] = y;
+            weight[y] = 0;
+            size[y] = 1;
+        }
+
+        int weightX = 0, weightY = 0;
+        int rootX = find(x, weightX);
+        int rootY = find(y, weightY);
+        if (rootX == rootY) {
+            // Check if k is valid
+            int connection_weight = weightX - weightY;
+            return connection_weight == k;
+        }
+
+        // Merge by size and update weights
+        if (size[rootX] < size[rootY]) {
+            parent[rootX] = rootY;
+            weight[rootX] = weightY + k - weightX;  // Correctly maintain the weight difference
+            size[rootY] += size[rootX];
+        } else {
+            parent[rootY] = rootX;
+            weight[rootY] = weightX - k - weightY;  // Ensure symmetry in weight handling
+            size[rootX] += size[rootY];
+        }
+        return true;
+    }
+
+    // Check if x and y are connected, and optionally retrieve the connection weight
+    bool connected(int x, int y, int& connection_weight) {
+        int weightX = 0, weightY = 0;
+        int rootX = find(x, weightX);
+        int rootY = find(y, weightY);
+        connection_weight = weightX - weightY;
+        return rootX == rootY;
+    }
+};
+
+// Function to check if the given edge between node1 and node2 is valid based on 'k'
+bool check_valid(WeightedUF &uf, int node1, int node2, int k) {
+    int connection_weight;
+    if (uf.connected(node1, node2, connection_weight)) {
+        return connection_weight == k;
+    }
+    return false;
+}
+
+// Function to merge two components
+bool merge_components(WeightedUF &uf, int node1, int node2, int k) {
+    return uf.merge(node1, node2, k);
+}
+
+// Function to add a node to an existing component
+void add_node_to_component(WeightedUF &uf, int node1, int node2, int k) {
+    // This function is conceptual because union-find inherently manages this
+    // Instead, we directly merge node1 and node2 with the given k
+    uf.merge(node1, node2, k);
+}
+
+// Main function to build the graph from given inputs
+std::pair<double, int*> build_graph_from_individual(int length_individual, int* individual, int graph_raw_length, int* graph_raw, double factor_0, double factor_not_0, int legth_initial_component, int* initial_component, bool build_valid_edges) {
+    // std::cout << " Factor 0: " << factor_0 << " Factor not 0: " << factor_not_0 << std::endl;
+    
+    // Initialize the graph components with the maximum node id + 1
+    WeightedUF uf;
+
+    // Add the initial components to the graph
+    for (int i = 0; i < legth_initial_component; i++) {
+        int node1 = -1;
+        int node2 = initial_component[i*2];
+        int k = initial_component[i*2 + 1];
+        add_node_to_component(uf, node1, node2, k);
+    }
+
+    std::vector<int> sorted_indices(length_individual);
+    std::iota(sorted_indices.begin(), sorted_indices.end(), 0);
+    std::sort(sorted_indices.begin(), sorted_indices.end(), 
+              [&individual](int i1, int i2) { return individual[i1] < individual[i2]; });
+
+    double valid_edges_count = 0;
+    int* valid_edges;
+    // return an array containing 0/1 for each edge if selected or not
+    if (build_valid_edges) {
+        valid_edges = new int[graph_raw_length];
+    }
+    else {
+        valid_edges = new int[1];
+    }
+
+    for (int i=0; i < length_individual; i++) {
+        int index = sorted_indices[i];
+        int node1 = graph_raw[4*index];
+        int node2 = graph_raw[4*index + 1];
+        int k = graph_raw[4*index + 2];
+        int certainty = graph_raw[4*index + 3];
+
+        if (certainty <= 0) {
+            std::cout << "Invalid certainty value: " << certainty << std::endl;
+        }
+
+        double k_factor = (k == 0) ? factor_0 : factor_not_0;
+        double score_edge = k_factor * ((double)certainty);
+
+        int connection_weight;
+        
+        valid_edges_count += score_edge;
+        if (!(uf.connected(node1, node2, connection_weight))) {
+            // std::cout << "Merging components: " << node1 << " " << node2 << " " << k << std::endl;
+            add_node_to_component(uf, node1, node2, k);
+            int connection_weight1;
+            uf.connected(node1, node2, connection_weight1);
+            int connection_weight2;
+            uf.connected(node2, node1, connection_weight2);
+            if (connection_weight1 != -connection_weight2) {
+                std::cout << "Invalid connection weight: " << connection_weight1 << " " << connection_weight2 << std::endl;
+            }
+            if (connection_weight1 != k) {
+                std::cout << "Invalid connection weight: " << connection_weight1 << " k1: " << k << std::endl;
+            }
+            if (connection_weight2 != -k) {
+                std::cout << "Invalid connection weight: " << connection_weight2 << " k2: " << k << std::endl;
+            }
+            if (build_valid_edges){
+                valid_edges[4*index] = 1;
+            }
+        } else {
+            int connection_weight1;
+            uf.connected(node1, node2, connection_weight1);
+            int connection_weight2;
+            uf.connected(node2, node1, connection_weight2);
+            if (connection_weight1 != -connection_weight2) {
+                std::cout << "Invalid connection weight: " << connection_weight1 << " " << connection_weight2 << std::endl;
+            }
+            if (!check_valid(uf, node1, node2, k)) {
+                valid_edges_count -= score_edge; // Invalid edge, subtract its score
+                if (build_valid_edges){
+                    valid_edges[4*index] = 0;
+                }
+            }
+            else {
+                if (build_valid_edges){
+                    valid_edges[4*index] = 1;
+                }
+                if (connection_weight1 != k && connection_weight2 != -k) {
+                    std::cout << "Invalid connection weight: " << connection_weight1 << " k " << k << std::endl;
+                }
+            }    
+        }
+    }
+    // std::cout << "Valid edges count: " << (int)valid_edges_count << std::endl;
+    return {valid_edges_count, valid_edges};
+}
+
+// Input is; Nodes Length, Initial DP (shape: (nodes_length, nodes_length, 64), type: bool)
+std::pair<py::array_t<int>, double> build_graph_from_individual_init(
+    int length_individual,
+    py::array_t<int> individual,
+    int length_edges,
+    py::array_t<int> edges,
+    double factor_0,
+    double factor_not_0,
+    int legth_initial_component,
+    py::array_t<int> initial_component,
+    bool build_valid_edges
+    )
+{
+
+    // auto individual_unchecked = individual.unchecked<1>(); // Access without bounds checking
+    // // Convert individual_cpp to a C++ array
+    // int* individual_cpp = new int[length_individual];
+    // for (size_t i = 0; i < length_individual; i++) {
+    //     individual_cpp[i] = individual_unchecked(i);
+    // }
+
+    // auto edges_unchecked = edges.unchecked<2>(); // Access without bounds checking
+    // // Convert edges_cpp to a C++ array
+    // int* edges_cpp = new int[length_edges*4];
+    // for (size_t i = 0; i < length_edges; i++) {
+    //     for (size_t j = 0; j < 4; j++) {
+    //         edges_cpp[i*length_edges + j] = edges_unchecked(i, j);
+    //     }
+    // }
+
+    // auto initial_component_unchecked = initial_component.unchecked<2>(); // Access without bounds checking
+    // // Convert initial_component_cpp to a C++ array
+    // int* initial_component_cpp = new int[legth_initial_component*2];
+    // for (size_t i = 0; i < legth_initial_component; i++) {
+    //     for (size_t j = 0; j < 2; j++) {
+    //         initial_component_cpp[i*legth_initial_component + j] = initial_component_unchecked(i, j);
+    //     }
+    // }
+
+    // Directly use the pointer to the data in the individual array
+    int* individual_cpp = static_cast<int*>(individual.request().ptr);
+
+    // Directly use the pointer to the data in the edges array
+    int* edges_cpp = static_cast<int*>(edges.request().ptr);
+
+    // Directly use the pointer to the data in the initial_component array
+    int* initial_component_cpp = static_cast<int*>(initial_component.request().ptr);
+
+    auto res = build_graph_from_individual(length_individual, individual_cpp, length_edges, edges_cpp, factor_0, factor_not_0, legth_initial_component, initial_component_cpp, build_valid_edges);
+
+    double valid_edges_count = res.first;
+    int* valid_edges = res.second;
+
+    // Convert the valid_edges_python to a NumPy array 1D
+    int fill_length = build_valid_edges ? length_edges : 1;
+
+    py::array_t<int64_t> valid_edges_python(py::array::ShapeContainer({static_cast<long int>(fill_length)}));
+    auto valid_edges_res = valid_edges_python.mutable_unchecked<1>(); // Now correctly a 3D array
+
+    for (size_t i = 0; i < fill_length; i++) {
+        valid_edges_res(i) = valid_edges[i];
+    }
+
+    return {valid_edges_python, valid_edges_count};
+}
+
 PYBIND11_MODULE(sheet_generation, m) {
     m.doc() = "pybind11 random walk solver for ThaumatoAnakalyptor"; // Optional module docstring
 
     m.def("solve_random_walk", &solveRandomWalk, "Function to solve random walk problem in C++");
 
     m.def("graph_skeleton_filter", &skeletonFilterGraph, "Function to filter a Graph per DP skeleton in C++");
+
+    m.def("build_graph_from_individual_cpp", &build_graph_from_individual_init, "Function to build graph from individual in C++");
 }

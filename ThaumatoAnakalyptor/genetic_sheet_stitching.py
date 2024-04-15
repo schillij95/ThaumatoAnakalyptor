@@ -4,6 +4,12 @@ from multiprocessing import Pool, RawArray
 import time
 import numpy as np
 from tqdm import tqdm
+import multiprocessing
+
+import sys
+### C++ speed up. not yet fully implemented
+sys.path.append('ThaumatoAnakalyptor/sheet_generation/build')
+import sheet_generation
 
 # Problem parameters
 NUM_ITEMS = 10000  # Assuming you have 10 items
@@ -28,7 +34,7 @@ def calculate_fitness_k_factors(graph):
 
     return factor_0, factor_not_0
 
-def init_worker(graph, graph_shape, factor_0, factor_not_0, initial_component):
+def init_worker(graph, graph_shape, factor_0, factor_not_0, initial_component, initial_component_shape):
     # Using a dictionary is not strictly necessary. You can also
     # use global variables.
     var_dict['graph'] = graph
@@ -36,6 +42,7 @@ def init_worker(graph, graph_shape, factor_0, factor_not_0, initial_component):
     var_dict['factor_0'] = factor_0
     var_dict['factor_not_0'] = factor_not_0
     var_dict['initial_component'] = initial_component
+    var_dict['initial_component_shape'] = initial_component_shape
 
 def check_valid(component, node1, node2, k):
     k_node1 = component[node1]
@@ -54,10 +61,70 @@ def add_node_to_component(component, node1, node2, k):
     k_node2 = k_node1 + k
     component[node2] = k_node2
 
+def build_graph_from_individual(individual, graph_raw, factor_0, factor_not_0, return_valid_mask=False, initial_component=None):
+    # Build a valid graph based on the weights for each edge represented by the individual
+    # Sort the edges based on the weights
+    sorted_edges_indices = np.argsort(individual)
+    # Initialize the graph
+    graph_components = []
+    if initial_component is not None:
+        graph_components.append(initial_component)
+    valid_edges_count = 0
+
+    if return_valid_mask:
+        valid_mask = np.ones(len(sorted_edges_indices), dtype=bool)
+
+    for edge_index in sorted_edges_indices:
+        edge = graph_raw[edge_index]
+        node1, node2, k, certainty = edge
+        # Check if the nodes are already in the graph
+        node1_component, node2_component = None, None
+        for i, component in enumerate(graph_components):
+            if node1 in component:
+                node1_component = (component, i)
+            if node2 in component:
+                node2_component = (component, i)
+            if node1_component is not None and node2_component is not None:
+                break
+        # Calculate first part of fitness, subject to change in checks
+        k_factor = factor_0 if k == 0 else factor_not_0
+
+        score_edge = k_factor * certainty
+        valid_edges_count += score_edge
+        # If both nodes are not in the graph, add a new component
+        if node1_component is None and node2_component is None:
+            new_component = {node1: 0, node2: k}
+            graph_components.append(new_component)
+        # If one node is in a component, add the other node to the component
+        elif (node1_component is not None) and (node2_component is None):
+            add_node_to_component(node1_component[0], node1, node2, k)
+        elif (node2_component is not None) and (node1_component is None):
+            add_node_to_component(node2_component[0], node2, node1, -k)
+        # If both nodes are in the same component, check if the edge is valid
+        elif node1_component[1] == node2_component[1]:
+            if not check_valid(node1_component[0], node1, node2, k):
+                valid_edges_count -= score_edge # Remove the bad edge from the positive score
+                if return_valid_mask:
+                    valid_mask[edge_index] = False
+        # If both nodes are in different components, merge the components
+        elif node1_component is not None and node2_component is not None:
+            merge_components(node1_component[0], node2_component[0], node1, node2, k)
+            # Remove the second component
+            graph_components.pop(node2_component[1])
+        # Error case
+        else:
+            print("Error: This case should not happen")
+            raise ValueError("Invalid graph")
+        
+    if return_valid_mask:
+        return valid_mask, valid_edges_count
+    else:
+        return valid_edges_count
+
 def build_graph_from_individual_patch(individual, graph_raw, return_valid_mask=False):
     # Build a valid graph based on the weights for each edge represented by the individual. Every subvolume (node) can only be containing one patch
     # Sort the edges based on the weights
-    sorted_edges_indices = np.argsort(individual)[::-1]
+    sorted_edges_indices = np.argsort(individual)
     # Initialize the graph
     graph_components = []
     valid_edges_count = 0
@@ -128,66 +195,6 @@ def build_graph_from_individual_patch(individual, graph_raw, return_valid_mask=F
         return valid_mask, valid_edges_count
     else:
         return valid_edges_count
-
-def build_graph_from_individual(individual, graph_raw, return_valid_mask=False, initial_component=None):
-    # Build a valid graph based on the weights for each edge represented by the individual
-    # Sort the edges based on the weights
-    sorted_edges_indices = np.argsort(individual)[::-1]
-    # Initialize the graph
-    graph_components = []
-    if initial_component is not None:
-        graph_components.append(initial_component)
-    valid_edges_count = 0
-
-    if return_valid_mask:
-        valid_mask = np.ones(len(sorted_edges_indices), dtype=bool)
-
-    for edge_index in sorted_edges_indices:
-        edge = graph_raw[edge_index]
-        node1, node2, k, certainty = edge
-        # Check if the nodes are already in the graph
-        node1_component, node2_component = None, None
-        for i, component in enumerate(graph_components):
-            if node1 in component:
-                node1_component = (component, i)
-            if node2 in component:
-                node2_component = (component, i)
-            if node1_component is not None and node2_component is not None:
-                break
-        # Calculate first part of fitness, subject to change in checks
-        k_factor = var_dict['factor_0'] if k == 0 else var_dict['factor_not_0']
-
-        score_edge = k_factor * certainty
-        valid_edges_count += score_edge
-        # If both nodes are not in the graph, add a new component
-        if node1_component is None and node2_component is None:
-            new_component = {node1: 0, node2: k}
-            graph_components.append(new_component)
-        # If one node is in a component, add the other node to the component
-        elif (node1_component is not None) and (node2_component is None):
-            add_node_to_component(node1_component[0], node1, node2, k)
-        elif (node2_component is not None) and (node1_component is None):
-            add_node_to_component(node2_component[0], node2, node1, -k)
-        # If both nodes are in the same component, check if the edge is valid
-        elif node1_component[1] == node2_component[1]:
-            if not check_valid(node1_component[0], node1, node2, k):
-                valid_edges_count -= score_edge # Remove the bad edge from the positive score
-                if return_valid_mask:
-                    valid_mask[edge_index] = False
-        # If both nodes are in different components, merge the components
-        elif node1_component is not None and node2_component is not None:
-            merge_components(node1_component[0], node2_component[0], node1, node2, k)
-            # Remove the second component
-            graph_components.pop(node2_component[1])
-        # Error case
-        else:
-            print("Error: This case should not happen")
-            raise ValueError("Invalid graph")
-        
-    if return_valid_mask:
-        return valid_mask, valid_edges_count
-    else:
-        return valid_edges_count
     
 def evalItemsPatchSelection(individual):
     graph_raw = np.frombuffer(var_dict['graph'], dtype=np.int32).reshape(var_dict['graph_shape'])
@@ -196,11 +203,16 @@ def evalItemsPatchSelection(individual):
 
 # Define the fitness function
 def evalItems(individual):
+    individual = np.array(individual).astype(np.int32)
     # Implement your evaluation logic here
     # For example, sum of all values (just a placeholder)
     graph_raw = np.frombuffer(var_dict['graph'], dtype=np.int32).reshape(var_dict['graph_shape'])
-    initial_component = var_dict['initial_component']
-    valid_edges_count = build_graph_from_individual(individual, graph_raw, initial_component=initial_component)
+    initial_component = np.frombuffer(var_dict['initial_component'], dtype=np.int32).reshape(var_dict['initial_component_shape'])
+    _, valid_edges_count = sheet_generation.build_graph_from_individual_cpp(int(individual.shape[0]), individual, int(graph_raw.shape[0]), graph_raw, var_dict['factor_0'], var_dict['factor_not_0'], int(initial_component.shape[0]), initial_component, False)
+    # valid_edges_count_gt = build_graph_from_individual(individual, graph_raw, var_dict['factor_0'], var_dict['factor_not_0'], initial_component)
+    # if abs(valid_edges_count - valid_edges_count_gt) > 1e-5:
+    #     print(f"Valid edges count: {valid_edges_count}, Valid edges count GT: {valid_edges_count_gt}")
+    #     raise ValueError("Invalid graph")
     return (valid_edges_count,)
 
 def init(num_items, problem='k_assignment'):
@@ -249,7 +261,7 @@ def solve_(graph_edges, initial_component=None, problem='k_assignment'):
     var_dict['initial_component'] = initial_component
 
     if problem == 'k_assignment':
-        return solve_k_assignment_(graph_edges)
+        return solve_k_assignment_(graph_edges, initial_component)
     elif problem == 'patch_selection':
         return solve_path_selection_(graph_edges)
     else:
@@ -261,10 +273,11 @@ def solve_path_selection_(graph_edges):
     valid_mask, valid_edges_count = build_graph_from_individual_patch(best_individual, graph_edges, return_valid_mask=True)
     return valid_mask, valid_edges_count
 
-def solve_k_assignment_(graph_edges):
+def solve_k_assignment_(graph_edges, initial_component):
     best_individual = [74, 296, 735, 402, 175, 285, 698, 596, 494, 936, 923, 231, 266, 31, 357, 708, 409, 946, 702, 951, 865, 585, 823, 197, 513, 481, 853, 289, 589, 199, 49, 231, 200, 211, 242, 364, 470, 896, 902, 648, 126, 475, 48, 304, 399, 916, 813, 182, 934, 212, 876, 734, 406, 323, 745, 342, 254, 338, 466, 745, 623, 125, 117, 305, 652, 51, 855, 460, 916, 473, 578, 599, 395, 428, 953, 600, 772, 954, 823, 838, 890, 986, 802, 424, 813, 593, 588, 222, 692, 840, 873, 710, 787, 998, 651, 599, 578, 676, 774, 757, 28, 10, 752, 195, 264, 279, 245, 220, 220, 826, 929, 44, 979, 425, 822, 451, 768, 486, 812, 508, 730, 586, 359, 726, 662, 872, 49, 864, 889, 449, 669, 342, 584, 822, 203, 646, 96, 721, 632, 241, 205, 767, 931, 679, 867, 848, 945, 645, 690, 985, 59, 756, 427, 623, 550, 299, 447, 981, 898, 763, 166, 290, 279, 740, 967, 397, 811, 937, 792, 509, 730, 988, 643, 424, 967, 505, 56, 903, 971, 545, 707, 835, 546, 833, 658, 661, 711, 145, 534, 625, 542, 661, 434, 701, 172, 649, 422, 495, 643, 134, 484, 624, 498, 912, 85, 861, 111, 385, 394, 840, 760, 621, 846, 151, 27, 309, 244, 901, 464, 287, 903, 963, 845, 546, 951, 833, 432, 47, 411, 289, 901, 561, 312, 790, 922, 629, 721, 377, 929, 232, 848, 23, 296, 334, 663, 237, 657, 259, 253, 463, 613, 74, 964, 40, 354, 475, 861, 423, 775, 967, 488, 492, 808, 538, 324, 543, 655, 592, 513, 481, 698, 710, 686, 595, 335, 70, 544, 287, 549, 44, 421, 326, 590, 14, 472, 892, 224, 986, 410, 838, 502, 318, 759, 112, 680, 718, 369, 28, 36, 551, 76, 920, 728, 322, 730, 283, 974, 702, 324, 359, 555, 407, 947, 617, 302, 274, 182, 106, 120, 171, 526, 828, 772, 143, 802, 428, 910, 385, 92, 477, 840, 642, 503, 313, 540, 546, 717, 291, 194, 130, 968, 936, 984, 970, 551, 96, 247, 78, 182, 131, 846, 457, 175, 154, 366, 936, 115, 779, 52, 351, 775, 232, 110, 216, 919, 954, 459, 431, 345, 814, 642, 201, 249, 541, 491, 471, 148, 403, 487, 185, 611, 429, 962, 594, 941, 741, 943, 78, 71, 782, 895, 605, 150, 162, 284, 324, 726, 363, 85, 570, 561, 569, 261, 747, 740, 604, 472, 52, 109, 815, 707, 418, 780, 555, 917, 841, 95, 373, 881, 579, 705, 424, 459, 771, 258, 577, 591, 993, 295, 913, 421, 926, 835, 15, 17, 620, 490, 916, 519, 500, 885, 58, 997, 124, 777, 338, 905, 253, 882, 51, 220, 657, 814, 606, 845, 976, 298, 883, 533, 573, 672, 674, 760, 706, 862, 209, 825, 670, 830, 713, 690, 847, 100, 406, 50, 340, 583, 311, 154, 41, 783, 566, 119, 930, 597, 326, 71, 813, 191, 868, 177, 72, 320, 62, 833, 149, 537, 613, 576, 544, 129, 811, 687, 259, 222, 359, 126, 685, 144, 881, 853, 612, 482, 778, 819, 180, 702, 73, 848, 401, 675, 283, 735, 202, 153, 196, 561, 647, 730, 173, 268, 307, 969, 870, 376, 778, 593, 500, 601, 819, 853, 194, 938, 52, 886, 954, 331, 649, 939, 674, 957, 389, 814, 623, 466, 93, 373, 283, 331, 577, 139, 187, 990, 398, 838, 295, 408, 611, 988, 556, 63, 378, 979, 412, 454, 618, 878, 580, 761, 781, 231, 799, 462, 134, 773, 151, 970, 49, 485, 509, 959, 190, 820, 805, 488, 298, 318, 514, 617, 631, 16, 232, 105, 239, 765, 930, 852, 35, 262, 103, 476, 58, 909, 787, 157, 3, 782, 594, 286, 624, 19, 738, 7, 639, 442, 649, 653, 85, 450, 348, 458, 113, 124, 680, 702, 153, 583, 459, 262, 450, 103, 303, 824, 463, 274, 790, 960, 548, 40, 659, 423, 671, 805, 830, 307, 414, 222, 847, 352, 332, 360, 837, 570, 230, 182, 863, 668, 504, 243, 884, 730, 283, 352, 241, 602, 438, 648, 13, 83, 753, 319, 225, 596, 760, 528, 761, 867, 953, 533, 966, 462, 237, 677, 737, 127, 47, 7, 609, 644, 609, 176, 912, 905, 87, 60, 537, 244, 18, 708, 81, 637, 571, 568, 13, 295, 459, 637, 305, 814, 925, 188, 521, 278, 471, 584, 496, 91, 156, 1, 986, 526, 870, 778, 564, 457, 54, 47, 800, 444, 34, 917, 204, 927, 933, 881, 41, 666, 969, 170, 294, 537, 278, 844, 307, 523, 3, 601, 81, 409, 631, 14, 720, 550, 352, 432, 280, 781, 914, 566, 903, 433, 323, 743, 439, 448, 854, 782, 288, 560, 902, 779, 699, 874, 371, 608, 493, 406, 553, 831, 362, 911, 944, 261, 169, 555, 73, 564, 751, 250, 883, 435, 131, 79, 354, 477, 284, 601, 494, 993, 111, 939, 19, 773, 158, 492, 762, 976, 569, 831, 872, 68, 714, 746, 764, 995, 682, 166, 71, 777, 504, 911, 664, 134, 831, 249, 40, 188, 221, 884, 460, 957, 824, 329, 963, 202, 300, 262, 788, 831, 306, 788, 667, 585, 133, 875, 886, 209, 958, 903, 501, 932, 458, 858, 977, 509, 148, 309, 184, 473, 570, 87, 137, 209, 39, 336, 134, 505, 120, 710, 24, 504, 137, 545, 528, 259, 799, 295, 391, 97, 876, 790, 382, 948, 451, 317, 538, 379, 918, 931, 248, 369, 545, 5, 151, 849, 342, 341, 664, 434, 10, 277, 107, 89, 144, 128, 412, 538, 89, 650, 741, 767, 186, 92, 289, 208, 33, 602, 547, 677, 575, 172, 442, 491, 736, 38, 14, 204, 891, 73, 873, 256, 213, 588, 562, 254, 193, 683, 922, 36, 8, 872, 400, 221, 270, 344, 664, 822, 854, 882, 640, 2, 119, 470, 610, 738, 488, 898, 929, 250, 269, 145, 32, 174, 454, 831, 460, 876, 822, 308, 153, 516, 24, 134, 680, 156, 842, 665, 945, 203, 393, 909, 93, 391, 866, 127, 80, 520, 567, 874, 241, 31, 996, 951, 698, 516, 940, 621, 194, 859, 256, 997, 495, 855, 274, 289, 273, 145, 371, 1000, 829, 727, 597, 496, 613, 860, 194, 689, 407, 872, 29, 824, 264, 971, 890, 915, 68, 452, 810, 429, 825, 855, 465, 392, 15, 607, 429, 712, 55, 12, 99, 908, 984, 364, 549, 101, 118, 568, 779, 578, 296, 781, 574, 15, 692, 338, 229, 989, 126, 13, 254, 77, 804, 979, 973, 264, 953, 82, 406, 199, 750, 265, 410, 250, 897, 1000, 403, 436, 938, 513, 865, 882, 993, 965, 251, 28, 704, 970, 907, 614, 766, 448, 273, 567, 170, 510, 162, 575, 617, 218, 419, 276, 330, 298, 397, 90, 394, 793, 968, 442, 990, 53, 111, 585, 239, 425, 893, 522, 522, 256, 322, 904, 866, 199, 85, 385, 848, 278, 43, 154, 115, 531, 288, 984, 910, 630, 308, 570, 49, 556, 541, 620, 462, 282, 999, 310, 813, 731, 853, 710, 521, 146, 320, 819, 596, 344, 488, 498, 737, 676, 46, 311, 437, 757, 66, 731, 18, 323, 877, 230, 207, 541, 862, 83, 200, 547, 480, 93, 7, 937, 460, 535, 717, 10, 559, 638, 117, 829, 911, 226, 151, 900, 76, 52, 8, 336, 651, 699, 126, 537, 65, 249, 800, 260, 254, 438, 455, 415, 370, 578, 143, 328, 231, 191, 575, 824, 414, 394, 749, 662, 121, 950, 797, 76, 979, 972, 368, 604, 234, 607, 691, 57, 899, 640, 472, 18, 242, 991, 714, 467, 950, 218, 400, 29, 129, 260, 406, 210, 107, 507, 231, 340, 443, 149, 394, 224, 136, 730, 135, 943, 59, 73, 339, 158, 578, 464, 916, 485, 79, 368, 841, 658, 328, 278, 869, 471, 589, 194, 269, 573, 115, 376, 861, 77, 162, 2, 637, 780, 284, 433, 902, 709, 122, 671, 762, 980, 307, 499, 118, 147, 64, 297, 232, 356, 459, 774, 12, 499, 513, 675, 966, 888, 76, 654, 802, 590, 401, 613, 698, 548, 481, 45, 237, 86, 91, 782, 71, 628, 494, 54, 819, 10, 158, 133, 515, 796, 60, 344, 733, 416, 134, 270, 509, 103, 905, 720, 627, 485, 803, 90, 209, 365, 881, 190, 767, 44, 871, 552, 131, 778, 149, 483, 800, 436, 13, 423, 470, 181, 642, 229, 888, 951, 161, 227, 625, 122, 953, 886, 660, 659, 256, 774, 464, 796, 518, 714, 301, 559, 106, 516, 705, 330, 335, 985, 997, 490, 611, 137, 20, 915, 214, 863, 27, 641, 228, 740, 354, 617, 482, 295, 791, 570, 351, 98, 56, 702, 880, 688, 691, 300, 162, 120, 314, 529, 713, 290, 714, 26, 26, 809, 134, 853, 972, 615, 806, 398, 187, 719, 916, 360, 358, 786, 426, 75, 80, 583, 610, 189, 201, 933, 174, 949, 872, 871, 28, 827, 19, 416, 23, 801, 175, 280, 370, 101, 590, 284, 720, 687, 859, 987, 910, 496, 56, 773, 556, 538, 821, 704, 81, 194, 312, 818, 229, 863, 975, 673, 591, 80, 143, 49, 924, 732, 535, 222, 837, 852, 19, 95, 438, 883, 445, 289, 187, 50, 604, 111, 416, 620, 773, 889, 603, 75, 984, 231, 117, 86, 95, 622, 162, 660, 423, 138, 210, 636, 635, 193, 680, 546, 108, 493, 640, 809, 361, 636, 524, 704, 600, 436, 645, 960, 796, 429, 281, 962, 792, 461, 207, 526, 726, 21, 904, 381, 840, 660, 451, 464, 220, 487, 762, 589, 338, 7, 402, 864, 698, 16, 405, 877, 239, 41, 682, 73, 594, 754, 784, 594, 642, 166, 722, 257, 279, 648, 390, 759, 544, 859, 79, 652, 216, 150, 925, 34, 877, 513, 289, 139, 857, 520, 793, 202, 36, 18, 122, 998, 457, 488, 822, 34, 37, 13, 25, 163, 665, 587, 678, 973, 671, 762, 494, 868, 787, 276, 848, 821, 125, 618, 552, 757, 905, 298, 165, 189, 799, 618, 489, 394, 438, 388, 500, 285, 847, 200, 188, 367, 239, 954, 878, 496, 189, 214, 920, 460, 535, 69, 969, 502, 706, 394, 517, 552, 909, 316, 597, 797, 456, 401, 326, 707, 714, 513, 109, 910, 906, 664, 83, 869, 196, 223, 633, 215, 570, 463, 850, 217, 646, 943, 717, 731, 508, 8, 496, 330, 683, 759, 542, 669, 601, 835, 405, 933, 784, 119, 727, 554, 23, 315, 725, 397, 435, 398, 443, 22, 39, 578, 205, 969, 937, 387, 826, 199, 537, 971, 556, 883, 146, 513, 540, 732, 227, 972, 323, 902, 715, 702, 912, 367, 448, 334, 215, 704, 956, 53, 276, 897, 166, 592, 545, 6, 809, 795, 33, 779, 50, 328, 748, 982, 502, 756, 165, 248, 186, 898, 409, 604, 77, 983, 915, 992, 252, 777, 372, 589, 11, 811, 11, 40, 70, 536, 175, 510, 659, 311, 477, 655, 307, 224, 955, 764, 268, 537, 826, 726, 807, 94, 353, 355, 927, 840, 236, 262, 599, 896, 355, 368, 858, 231, 483, 165, 132, 351, 610, 347, 788, 165, 591, 765, 182, 710, 222, 63, 815, 743, 858, 709, 598, 120, 359, 526, 276, 659, 231, 405, 638, 57, 844, 741, 491, 889, 411, 658, 566, 717, 849, 201, 777, 777, 910, 630, 750, 871, 662, 749, 809, 799, 737, 362, 177, 330, 169, 506, 881, 319, 260, 308, 538, 961, 136, 209, 453, 608, 270, 485, 824, 144, 513, 564, 139, 61, 504, 266, 42, 774, 739, 772, 646, 954, 368, 404, 104, 331, 745, 79, 568, 405, 525, 803, 564, 957, 245, 70, 746, 815, 799, 163, 147, 483, 301, 513, 710, 968, 773, 524, 619, 592, 659, 615, 781, 793, 55, 303, 133, 979, 570, 251, 41, 247, 19, 268, 386, 829, 335, 663, 577, 20, 344, 861, 650, 891, 653, 245, 787, 765, 408, 100, 538, 505, 725, 578, 497, 255, 633, 281, 555, 977, 542, 962, 914, 920, 822, 754, 939, 67, 514, 392, 10, 197, 224, 639, 908, 909, 637, 223, 273, 360, 496, 5, 260, 187, 356, 619, 263, 621, 520, 335, 363, 704, 243, 575, 346, 496, 83, 381, 183, 711, 439, 255, 518, 939, 998, 620, 193, 659, 810, 105, 329, 116, 891, 893, 792, 783, 437, 898, 456, 106, 710, 680, 369, 979, 8, 408, 703, 486, 78, 338, 690, 721, 549, 199, 497, 473, 302, 233, 153, 720, 593, 509, 334, 51, 709, 468, 968, 701, 760, 300, 684, 462, 801, 748, 181, 121, 372, 577, 279, 319, 375, 168, 650, 629, 614, 401, 553, 233, 847, 735, 478, 502, 12, 402, 272, 154, 867, 914, 806, 512, 610, 627, 84, 189, 618, 766, 121, 589, 11, 258, 827, 387, 448, 306, 489, 415, 43, 200, 942, 283, 132, 779, 489, 569, 383, 199, 408, 579, 265, 368, 691, 279, 457, 554, 32, 48, 573, 678, 838, 497, 115, 192, 309, 975, 908, 516, 421, 262, 321, 952, 378, 461, 896, 504, 778, 286, 591, 299, 151, 619, 432, 825, 60, 472, 185, 518, 318, 279, 944, 881, 541, 473, 30, 663, 494, 440, 842, 647, 750, 327, 245, 690, 510, 101, 151, 109, 737, 850, 53, 792, 793, 683, 846, 375, 75, 184, 581, 572, 49, 442, 461, 245, 151, 893, 550, 635, 940, 743, 499, 166, 290, 766, 995, 651, 675, 77, 463, 10, 27, 491, 219, 495, 6, 43, 444, 320, 224, 196, 182, 725, 737, 224, 724, 535, 840, 190, 702, 568, 549, 925, 802, 76, 478, 134, 14, 995, 749, 375, 122, 921, 963, 869, 613, 499, 586, 750, 327, 952, 798, 48, 81, 622, 352, 845, 313, 898, 641, 612, 211, 563, 758, 862, 558, 446, 652, 263, 589, 641, 113, 88, 274, 267, 750, 166, 762, 346, 873, 730, 609, 963, 249, 490, 449, 512, 284, 514, 299, 710, 704, 491, 885, 341, 247, 436, 100, 320, 529, 153, 473, 284, 777, 887, 632, 446, 237, 664, 797, 876, 701, 778, 404, 444, 576, 771, 239, 529, 423, 944, 1000, 858, 740, 406, 764, 497, 163, 149, 689, 297, 279, 52, 859, 752, 640, 632, 94, 985, 769, 231, 538, 529, 12, 720, 133, 926, 753, 367, 511, 817, 283, 359, 750, 162, 403, 573, 50, 815, 373, 321, 465, 831, 375, 838, 232, 81, 410, 493, 432, 535, 35, 334, 160, 539, 118, 78, 621, 740, 716, 348, 808, 538, 270, 271, 543, 68, 829, 226, 525, 197, 33, 910, 879, 207, 689, 394, 193, 17, 619, 70, 677, 876, 256, 606, 53, 307, 507, 432, 578, 65, 801, 818, 970, 528, 220, 391, 53, 916, 219, 409, 712, 359, 8, 658, 334, 994, 863, 716, 369, 796, 751, 955, 170, 829, 950, 511, 453, 46, 749, 790, 849, 213, 297, 85, 197, 321, 362, 580, 552, 582, 603, 1000, 252, 905, 743, 680, 848, 523, 847, 132, 784, 227, 832, 960, 102, 38, 667, 724, 195, 916, 309, 42, 467, 466, 555, 449, 153, 608, 757, 333, 802, 967, 848, 623, 657, 517, 965, 733, 216, 80, 569, 733, 378, 219, 314, 938, 183, 665, 336, 787, 220, 67, 607, 337, 678, 792, 979, 625, 812, 916, 205, 491, 330, 44, 457, 378, 438, 355, 144, 639, 273, 568, 759, 654, 390, 354, 167, 31, 259, 963, 213, 531, 92, 497, 302, 834, 73, 534, 272, 195, 223, 926, 269, 550, 981, 202, 718, 667, 876, 744, 27, 277, 444, 879, 835, 157, 369, 424, 172, 215, 226, 295, 393, 443, 138, 321, 663, 113, 784, 47, 232, 34, 438, 911, 981, 870, 201, 745, 189, 566, 908, 516, 231, 624, 540, 184, 151, 587, 592, 857, 1, 766, 187, 99, 21, 464, 26, 237, 119, 161, 176, 602, 396, 212, 910, 656, 440, 231, 353, 575, 248, 503, 873, 606, 496, 347, 42, 985, 424, 787, 874, 450, 725, 265, 205, 661, 501, 828, 455, 759, 913, 753, 473, 555, 230, 49, 846, 18, 468, 445, 479, 145, 311, 702, 466, 336, 974, 663, 888, 172, 752, 546, 713, 473, 93, 937, 615, 355, 504, 247, 799, 503, 309, 391, 463, 881, 21, 701, 92, 73, 63, 20, 440, 844, 421, 356, 437, 534, 794, 703, 391, 511, 999, 349, 247, 791, 500, 101, 571, 48, 932, 824, 148, 724, 229, 13, 224, 533, 835, 181, 740, 43, 951, 991, 499, 856, 490, 794, 547, 827, 599, 992, 435, 381, 321, 208, 895, 383, 475, 93, 274, 32, 931, 754, 533, 877, 830, 982, 135, 19, 628, 257, 86, 761, 270, 563, 358, 406, 809, 773, 322, 432, 773, 665, 869, 277, 190, 665, 487, 766, 489, 335, 796, 891, 61, 8, 606, 714, 211, 557, 652, 860, 447, 625, 628, 179, 768, 942, 602, 320, 961, 281, 194, 619, 17, 667, 961, 240, 844, 913, 55, 674, 149, 396, 345, 40, 857, 236, 339, 823, 481, 617, 511, 917, 6, 744, 56, 273, 421, 864, 950, 833, 231, 847, 676, 77, 325, 594, 402, 256, 990, 460, 551, 622, 538, 686, 140, 719, 295, 15, 68, 966, 949, 739, 734, 520, 66, 84, 368, 320, 974, 310, 254, 777, 543, 809, 199, 545, 510, 156, 95, 988, 732, 314, 275, 712, 543, 228, 682, 526, 606, 444, 323, 82, 115, 316, 642, 556, 186, 152, 750, 691, 864, 170, 140, 933, 354, 695, 196, 644, 477, 768, 277, 385, 524, 814, 200, 38, 60, 148, 211, 309, 361, 118, 144, 508, 519, 23, 122, 594, 880, 666, 59, 287, 463, 236, 580, 333, 193, 381, 390, 308, 685, 749, 477, 657, 578, 945, 247, 3, 448, 843, 256, 958, 583, 896, 925, 45, 462, 553, 653, 897, 641, 204, 119, 960, 163, 201, 665, 126, 651, 471, 655, 331, 379, 361, 85, 914, 284, 243, 705, 386, 728, 567, 153, 342, 64, 787, 297, 157, 523, 519, 37, 47, 19, 962, 70, 837, 402, 164, 792, 762, 746, 953, 683, 335, 58, 160, 705, 286, 115, 823, 526, 62, 356, 662, 167, 951, 801, 13, 791, 408, 925, 294, 573, 426, 944, 40, 496, 205, 135, 896, 485, 618, 166, 467, 254, 440, 925, 629, 811, 343, 259, 859, 868, 358, 630, 383, 183, 390, 375, 450, 661, 396, 321, 183, 777, 729, 19, 205, 197, 35, 954, 950, 90, 175, 448, 511, 975, 265, 865, 107, 730, 309, 83, 804, 722, 881, 230, 543, 69, 437, 840, 610, 192, 285, 558, 795, 676, 282, 110, 895, 486, 753, 567, 737, 138, 218, 161, 387, 885, 15, 738, 934, 66, 426, 198, 159, 528, 511, 495, 552, 867, 927, 497, 735, 647, 724, 109, 820, 766, 384, 519, 218, 150, 747, 573, 586, 531, 220, 657, 28, 476, 777, 351, 261, 915, 143, 661, 22, 918, 50, 197, 867, 598, 497, 607, 870, 213, 92, 205, 993, 467, 463, 917, 941, 940, 582, 630, 820, 667, 781, 613, 719, 416, 506, 206, 240, 117, 590, 568, 493, 722, 321, 554, 285, 709, 338, 367, 498, 927, 737, 713, 755, 792, 349, 279, 681, 481, 710, 473, 92, 885, 175, 1000, 136, 281, 81, 589, 447, 659, 396, 391, 455, 71, 44, 287, 853, 511, 778, 252, 411, 635, 820, 271, 433, 855, 674, 758, 321, 90, 904, 55, 419, 837, 282, 874, 278, 909, 481, 427, 900, 389, 318, 398, 88, 187, 433, 499, 599, 677, 78, 370, 56, 794, 620, 283, 371, 535, 226, 712, 157, 328, 324, 261, 623, 645, 597, 926, 832, 210, 176, 477, 390, 214, 684, 811, 294, 125, 144, 74, 73, 775, 279, 354, 729, 638, 176, 499, 289, 966, 522, 311, 719, 431, 618, 546, 52, 190, 945, 682, 577, 842, 104, 569, 199, 391, 138, 275, 25, 202, 251, 436, 753, 215, 679, 202, 465, 838, 781, 481, 993, 41, 582, 624, 813, 638, 336, 358, 936, 153, 848, 298, 64, 856, 51, 924, 666, 358, 597, 645, 169, 548, 969, 602, 375, 407, 621, 307, 755, 895, 781, 934, 644, 980, 113, 950, 103, 685, 153, 691, 776, 194, 138, 390, 465, 28, 794, 830, 987, 685, 804, 31, 577, 23, 961, 683, 125, 201, 730, 365, 13, 862, 277, 570, 613, 584, 534, 921, 286, 660, 550, 693, 868, 311, 170, 215, 281, 322, 894, 880, 421, 361, 21, 473, 578, 572, 508, 459, 259, 386, 108, 176, 374, 633, 630, 304, 757, 620, 682, 902, 873, 721, 319, 567, 283, 828, 466, 462, 922, 915, 933, 778, 235, 320, 712, 47, 114, 29, 943, 87, 228, 426, 709, 250, 581, 551, 26, 378, 623, 113, 402, 740, 763, 984, 820, 884, 175, 267, 802, 60, 651, 405, 723, 641, 609, 672, 739, 309, 829, 580, 589, 951, 698, 358, 889, 334, 376, 149, 658, 313, 848, 280, 975, 217, 637, 507, 972, 493, 446, 187, 185, 628, 221, 37, 346, 459, 302, 48, 759, 921, 471, 544, 839, 968, 406, 122, 903, 425, 739, 519, 249, 35, 766, 484, 377, 538, 109, 398, 687, 648, 320, 866, 122, 860, 622, 149, 439, 62, 382, 215, 312, 622, 931, 276, 887, 96, 530, 594, 69, 980, 16, 83, 65, 610, 542, 149, 14, 714, 714, 359, 866, 86, 915, 915, 208, 14, 406, 182, 382, 987, 580, 835, 322, 44, 839, 587, 560, 563, 503, 331, 631, 547, 88, 560, 445, 596, 605, 215, 17, 827, 445, 431, 457, 636, 361, 559, 991, 612, 333, 950, 210, 194, 284, 582, 149, 866, 801, 51, 513, 918, 660, 849, 809, 139, 500, 830, 52, 675, 390, 142, 240, 226, 78, 696, 556, 242, 866, 321, 604, 880, 805, 144, 636, 344, 110, 886, 911, 162, 323, 858, 247, 120, 63, 428, 728, 606, 612, 692, 750, 884, 239, 992, 356, 509, 339, 930, 446, 103, 124, 270, 958, 105, 632, 598, 141, 207, 555, 967, 398, 549, 144, 316, 856, 561, 737, 837, 237, 474, 859, 987, 554, 951, 623, 449, 644, 254, 201, 718, 411, 440, 35, 537, 567, 223, 195, 110, 554, 830, 106, 426, 336, 587, 170, 221, 24, 191, 480, 726, 287, 107, 776, 363, 906, 227, 747, 640, 305, 613, 454, 128, 253, 421, 754, 7, 964, 31, 415, 315, 829, 459, 225, 659, 396, 216, 436, 521, 455, 98, 161, 595, 76, 831, 307, 257, 247, 686, 499, 821, 785, 267, 157, 390, 195, 984, 798, 26, 759, 446, 636, 734, 87, 239, 353, 315, 425, 677, 483, 631, 349, 871, 931, 684, 579, 195, 599, 937, 886, 104, 227, 668, 258, 480, 988, 183, 255, 539, 400, 144, 84, 149, 593, 194, 704, 113, 756, 896, 53, 437, 137, 406, 930, 398, 176, 105, 260, 455, 420, 697, 65, 158, 230, 928, 127, 890, 29, 461, 916, 661, 943, 598, 552, 431, 776, 996, 15, 660, 311, 248, 343, 442, 962, 515, 795, 293, 548, 588, 806, 658, 250, 737, 248, 704, 99, 351, 687, 623, 538, 775, 554, 286, 910, 258, 979, 418, 828, 621, 68, 542, 862, 819, 135, 141, 454, 214, 573, 579, 541, 658, 847, 431, 109, 840, 312, 555, 308, 803, 989, 631, 453, 258, 124, 503, 773, 407, 372, 961, 862, 355, 72, 957, 661, 922, 43, 215, 453, 244, 649, 318, 117, 296, 263, 7, 81, 77, 721, 436, 576, 382, 593, 760, 646, 514, 208, 233, 396, 176, 525, 153, 535, 314, 866, 68, 367, 677, 891, 404, 669, 7, 904, 451, 176, 563, 331, 658, 984, 92, 707, 46, 814, 397, 607, 227, 552, 157, 15, 412, 910, 304, 392, 888, 723, 499, 701, 984, 618, 341]
-    
-    valid_mask, valid_edges_count = build_graph_from_individual(best_individual, graph_edges, return_valid_mask=True, initial_component=var_dict['initial_component'])
+    best_individual = np.array(best_individual, dtype=np.int32)
+    valid_mask, valid_edges_count = sheet_generation.build_graph_from_individual_cpp(int(best_individual.shape[0]), best_individual, int(graph_edges.shape[0]), graph_edges, var_dict['factor_0'], var_dict['factor_not_0'], int(initial_component.shape[0]), initial_component, True)
+    # build_graph_from_individual(best_individual, graph_edges, var_dict['factor_0'], var_dict['factor_not_0'], return_valid_mask=True, initial_component=var_dict['initial_component'])
     return valid_mask, valid_edges_count
 
 def solve(graph_edges, initial_component=None, problem='k_assignment'):
@@ -287,12 +300,25 @@ def solve(graph_edges, initial_component=None, problem='k_assignment'):
     graph_edges_raw_array_np = np.frombuffer(graph_edges_raw_array, dtype=np.int32).reshape(graph_shape)
     # Copy data to our shared array.
     np.copyto(graph_edges_raw_array_np, graph_edges)
+
+    # Store the initial component in a shared array
+    if initial_component is not None:
+        initial_component_shape = initial_component.shape
+        initial_component_array = RawArray('i', initial_component_shape[0]*initial_component_shape[1])
+        initial_component_array_np = np.frombuffer(initial_component_array, dtype=np.int32).reshape(initial_component_shape)
+        np.copyto(initial_component_array_np, initial_component)
+    else:
+        initial_component_array = None
+        initial_component_shape = None
+
     # Start the process pool and do the computation.
     # Here we pass X and X_shape to the initializer of each worker.
     # (Because X_shape is not a shared variable, it will be copied to each
     # child process.)
-    max_processes = 64
-    with Pool(processes=max_processes, initializer=init_worker, initargs=(graph_edges_raw_array, graph_shape, factor_0, factor_not_0, initial_component)) as pool:
+    # max_processes = 64
+    # max_processes = min(max_processes, multiprocessing.cpu_count())
+    # max_processes = 4
+    with Pool(initializer=init_worker, initargs=(graph_edges_raw_array, graph_shape, factor_0, factor_not_0, initial_component_array, initial_component_shape)) as pool:
         time_Start = time.time()
         toolbox, pop = init(num_items=graph_shape[0], problem=problem)
 
@@ -303,6 +329,7 @@ def solve(graph_edges, initial_component=None, problem='k_assignment'):
         time_End = time.time()
 
         best_ind = tools.selBest(pop, 1)[0]
+        best_ind = np.array(best_ind, dtype=np.int32)
         print("Best individual is:", best_ind, "with fitness:", best_ind.fitness, "Time taken:", time_End - time_Start)
 
         # After the run, access the best individual from the Hall of Fame
@@ -310,9 +337,10 @@ def solve(graph_edges, initial_component=None, problem='k_assignment'):
         print("Best individual ever is:", best_ind, "with fitness:", best_ind.fitness)
         # get the valid mask
         if problem == 'k_assignment':
-            valid_mask, valid_edges_count = build_graph_from_individual(best_ind, graph_edges, return_valid_mask=True, initial_component=initial_component)
+            valid_mask, valid_edges_count = sheet_generation.build_graph_from_individual_cpp(int(best_ind.shape[0]), best_ind, int(graph_edges.shape[0]), graph_edges, var_dict['factor_0'], var_dict['factor_not_0'], int(initial_component.shape[0]), initial_component, True)
+            # build_graph_from_individual(best_ind, graph_edges, return_valid_mask=True, initial_component=initial_component)
         else:
-            valid_mask, valid_edges_count = build_graph_from_individual_patch(best_ind, graph_edges, return_valid_mask=True)
+            valid_mask, valid_edges_count = build_graph_from_individual_patch(best_ind, graph_edges, var_dict['factor_0'], var_dict['factor_not_0'], return_valid_mask=True)
 
     return valid_mask, valid_edges_count
     
