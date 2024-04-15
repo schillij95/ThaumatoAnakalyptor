@@ -1609,7 +1609,7 @@ class EvolutionaryGraphEdgesSelection():
         # easily switch between dummy and real computation
         return solve_genetic(input, initial_component=initial_component, problem=problem)
 
-    def solve(self, z_height_steps=100):
+    def solve(self, z_height_steps=500):
         graph_centroids = np.array([self.graph.nodes[node]['centroid'] for node in self.graph.nodes])
         graph_centroids_min = int(np.floor(np.min(graph_centroids, axis=0))[1])
         graph_centroids_max = int(np.ceil(np.max(graph_centroids, axis=0))[1])
