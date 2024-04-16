@@ -1671,8 +1671,8 @@ class EvolutionaryGraphEdgesSelection():
                 # Solve with genetic algorithm
                 valid_mask, valid_edges_count = self.solve_call(self.edges_by_indices, initial_component=initial_component, problem='k_assignment')
                 # Build graph from edge selection
-                evolved_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask, evolved_graph)
                 evolved_graph_temp = deepcopy(evolved_graph)
+                evolved_graph_temp = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask, evolved_graph_temp)
                 # select largest connected component
                 largest_component = evolved_graph_temp.largest_connected_component(delete_nodes=False)
                 if start_node is None:
@@ -1693,7 +1693,7 @@ class EvolutionaryGraphEdgesSelection():
     def filter(self, graph_to_filter, min_z=None, max_z=None, graph=None):
         print("Filtering patches with genetic algorithm...")
         # Filter edges with genetic algorithm
-        _, self.edges_by_subvolume_indices, _ = self.build_graph_data(graph_to_filter, min_z=min_z, max_z=max_z, strict_edges=True)
+        _, self.edges_by_subvolume_indices, _ = self.build_graph_data(graph_to_filter, min_z=min_z, max_z=max_z, strict_edges=False)
         # Solve with genetic algorithm
         valid_mask, valid_edges_count = self.solve_call(self.edges_by_subvolume_indices, problem="patch_selection")
         # Build graph from edge selection
