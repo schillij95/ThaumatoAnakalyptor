@@ -1650,6 +1650,9 @@ class EvolutionaryGraphEdgesSelection():
             # Filter PointCloud for max 1 patch per subvolume
             evolved_graph = self.filter(evolved_graph_temp, graph=evolved_graph)
 
+        # select largest connected component
+        evolved_graph.largest_connected_component()
+        self.update_ks(evolved_graph)
         return evolved_graph
     
     def filter(self, graph_to_filter, min_z=None, max_z=None, graph=None):
@@ -1660,8 +1663,6 @@ class EvolutionaryGraphEdgesSelection():
         valid_mask, valid_edges_count = self.solve_call(self.edges_by_subvolume_indices, problem="patch_selection")
         # Build graph from edge selection
         filtered_graph = self.graph_from_edge_selection(self.edges_by_subvolume_indices, graph_to_filter, valid_mask, graph=graph)
-        # select largest connected component
-        filtered_graph.largest_connected_component()
         return filtered_graph
 
     def graph_from_edge_selection(self, edges_indices, input_graph, edges_mask, graph=None):

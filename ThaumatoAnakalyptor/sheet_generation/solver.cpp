@@ -1920,12 +1920,27 @@ std::pair<py::array_t<int>, double> build_graph_from_individual_init(
     return {valid_edges_python, valid_edges_count};
 }
 
+// Define a hash function for the tuple
+struct hash_tuple {
+    template <class T>
+    std::size_t operator()(const T& tuple) const {
+        auto hash1 = std::hash<int>{}(std::get<0>(tuple));
+        auto hash2 = std::hash<int>{}(std::get<1>(tuple));
+        auto hash3 = std::hash<int>{}(std::get<2>(tuple));
+        auto hash4 = std::hash<int>{}(std::get<3>(tuple));
+
+        return hash1 ^ hash2 ^ hash3 ^ hash4;  // Combine the hash values
+    }
+};
+
 // Main function to build the graph from given inputs
 std::pair<double, int*> build_graph_from_individual_patch(int length_individual, int* individual, int graph_raw_length, int* graph_raw, double factor_0, double factor_not_0, bool build_valid_edges) {
     // std::cout << " Factor 0: " << factor_0 << " Factor not 0: " << factor_not_0 << std::endl;
     
     // Initialize the graph components with the maximum node id + 1
     WeightedUF uf;
+
+    std::unordered_set<std::tuple<int, int, int, int>, hash_tuple> visited_subvolumes;
 
     std::vector<int> sorted_indices(length_individual);
     std::iota(sorted_indices.begin(), sorted_indices.end(), 0);
@@ -1986,6 +2001,9 @@ std::pair<double, int*> build_graph_from_individual_patch(int length_individual,
             if (build_valid_edges){
                 valid_edges[index] = 1;
             }
+            // Add the subvolumes to the visited set
+            visited_subvolumes.insert(std::make_tuple(node1_subvolume_0, node1_subvolume_1, node1_subvolume_2, assigned_k1));
+            visited_subvolumes.insert(std::make_tuple(node2_subvolume_0, node2_subvolume_1, node2_subvolume_2, assigned_k2));
         } else {
             int connection_weight1;
             uf.connected(node1, node2, connection_weight1);
@@ -2007,6 +2025,9 @@ std::pair<double, int*> build_graph_from_individual_patch(int length_individual,
                 if (connection_weight1 != k && connection_weight2 != -k) {
                     std::cout << "Invalid connection weight: " << connection_weight1 << " k " << k << std::endl;
                 }
+                // Add the subvolumes to the visited set
+                visited_subvolumes.insert(std::make_tuple(node1_subvolume_0, node1_subvolume_1, node1_subvolume_2, assigned_k1));
+                visited_subvolumes.insert(std::make_tuple(node2_subvolume_0, node2_subvolume_1, node2_subvolume_2, assigned_k2));
             }    
         }
     }
