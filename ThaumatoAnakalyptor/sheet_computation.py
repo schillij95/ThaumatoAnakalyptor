@@ -1677,11 +1677,16 @@ class EvolutionaryGraphEdgesSelection():
                 largest_component = evolved_graph_temp.largest_connected_component(delete_nodes=False)
                 if start_node is None:
                     # start_node_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask)
-                    start_node = largest_component[0]
+                    start_node_temp = largest_component[0]
                 # Compute ks by simple bfs to filter based on ks and subvolume
-                self.update_ks(evolved_graph_temp, start_node=start_node, edges_by_indices=self.edges_by_indices, valid_mask=valid_mask)
+                self.update_ks(evolved_graph_temp, start_node=start_node_temp, edges_by_indices=self.edges_by_indices, valid_mask=valid_mask)
                 # Filter PointCloud for max 1 patch per subvolume
                 evolved_graph = self.filter(evolved_graph_temp, graph=evolved_graph, min_z=graph_extraction_start, max_z=graph_extraction_start+z_height_steps)
+                largest_component = evolved_graph_temp.largest_connected_component(delete_nodes=False)
+                if start_node is None:
+                    # start_node_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask)
+                    start_node = largest_component[0]
+                    start_node_temp = start_node
                 # Compute ks by simple bfs
                 self.update_ks(evolved_graph, start_node=start_node, edges_by_indices=self.edges_by_indices, valid_mask=valid_mask)          
 
