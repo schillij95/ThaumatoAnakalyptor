@@ -1663,7 +1663,7 @@ class EvolutionaryGraphEdgesSelection():
                 # Solve with genetic algorithm
                 valid_mask, valid_edges_count = self.solve_call(self.edges_by_indices, initial_component=initial_component, problem='k_assignment')
                 # Build graph from edge selection
-                evolved_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask, evolved_graph)
+                evolved_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask, evolved_graph, max_z=graph_extraction_start+z_height_steps)
                 evolved_graph_temp = deepcopy(evolved_graph)
                 # select largest connected component
                 largest_component = evolved_graph_temp.largest_connected_component(delete_nodes=False)
