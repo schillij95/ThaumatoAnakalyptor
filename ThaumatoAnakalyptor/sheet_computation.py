@@ -1669,17 +1669,17 @@ class EvolutionaryGraphEdgesSelection():
         print(f"nodes length: {len(nodes)}")
         if graph is None:
             graph = ScrollGraph(input_graph.overlapp_threshold, input_graph.umbilicus_path)
-            # start block and patch id
-            graph.start_block = input_graph.start_block
-            graph.patch_id = input_graph.patch_id
-            # graph add nodes
-            nr_winding_angles = 0
-            for node in nodes:
-                if input_graph.nodes[node]['winding_angle'] is not None:
-                    nr_winding_angles += 1
-                graph.add_node(node, input_graph.nodes[node]['centroid'], winding_angle=input_graph.nodes[node]['winding_angle'])
-            added_edges_count = 0
-            print(f"Number of winding angles: {nr_winding_angles} of {len(nodes)} nodes.")
+        # start block and patch id
+        graph.start_block = input_graph.start_block
+        graph.patch_id = input_graph.patch_id
+        # graph add nodes
+        nr_winding_angles = 0
+        for node in nodes:
+            if input_graph.nodes[node]['winding_angle'] is not None:
+                nr_winding_angles += 1
+            graph.add_node(node, input_graph.nodes[node]['centroid'], winding_angle=input_graph.nodes[node]['winding_angle'])
+        added_edges_count = 0
+        print(f"Number of winding angles: {nr_winding_angles} of {len(nodes)} nodes.")
 
         for i in tqdm(range(len(edges_mask))):
             if edges_mask[i]:
