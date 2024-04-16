@@ -1863,12 +1863,12 @@ std::pair<double, int*> build_graph_from_individual(int length_individual, int* 
             if (!check_valid(uf, node1, node2, k)) {
                 valid_edges_count -= score_edge; // Invalid edge, subtract its score
                 if (build_valid_edges){
-                    valid_edges[4*index] = 0;
+                    valid_edges[index] = 0;
                 }
             }
             else {
                 if (build_valid_edges){
-                    valid_edges[4*index] = 1;
+                    valid_edges[index] = 1;
                 }
                 if (connection_weight1 != k && connection_weight2 != -k) {
                     std::cout << "Invalid connection weight: " << connection_weight1 << " k " << k << std::endl;
