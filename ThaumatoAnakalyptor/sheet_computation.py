@@ -586,14 +586,15 @@ class ScrollGraph(Graph):
         starting_index = 0
         def build_nodes():
             nodes = set()
-            for edge in self.edges:
+            for edge in edges:
                 nodes.add(edge[0])
                 nodes.add(edge[1])
             return list(nodes)
-        nodes = build_nodes()
+        nodes = build_nodes(self.edges)
         max_component_length = 0
         nodes_length = len(nodes)
         nodes_remaining = nodes_length
+        print(f"Number of active nodes: {nodes_length}, number of total nodes: {len(self.nodes)}")
         while True:
             start_node = None
             # Pick first available unvisited node

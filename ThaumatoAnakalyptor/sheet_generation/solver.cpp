@@ -1920,6 +1920,100 @@ std::pair<py::array_t<int>, double> build_graph_from_individual_init(
     return {valid_edges_python, valid_edges_count};
 }
 
+// Main function to build the graph from given inputs
+std::pair<double, int*> build_graph_from_individual_patch(int length_individual, int* individual, int graph_raw_length, int* graph_raw, double factor_0, double factor_not_0, bool build_valid_edges) {
+    // std::cout << " Factor 0: " << factor_0 << " Factor not 0: " << factor_not_0 << std::endl;
+    
+    // Initialize the graph components with the maximum node id + 1
+    WeightedUF uf;
+
+    std::vector<int> sorted_indices(length_individual);
+    std::iota(sorted_indices.begin(), sorted_indices.end(), 0);
+    std::sort(sorted_indices.begin(), sorted_indices.end(), 
+              [&individual](int i1, int i2) { return individual[i1] < individual[i2]; });
+
+    double valid_edges_count = 0;
+    int* valid_edges;
+    // return an array containing 0/1 for each edge if selected or not
+    if (build_valid_edges) {
+        valid_edges = new int[length_individual];
+    }
+    else {
+        valid_edges = new int[1];
+    }
+
+    for (int i=0; i < length_individual; i++) {
+        int index = sorted_indices[i];
+        int node1 = graph_raw[12*index];
+        int node2 = graph_raw[12*index + 1];
+        int k = graph_raw[12*index + 2];
+        int certainty = graph_raw[12*index + 3];
+        int node1_subvolume_0 = graph_raw[12*index + 4];
+        int node1_subvolume_1 = graph_raw[12*index + 5];
+        int node1_subvolume_2 = graph_raw[12*index + 6];
+        int node2_subvolume_0 = graph_raw[12*index + 7];
+        int node2_subvolume_1 = graph_raw[12*index + 8];
+        int node2_subvolume_2 = graph_raw[12*index + 9];
+        int assigned_k1 = graph_raw[12*index + 10];
+        int assigned_k2 = graph_raw[12*index + 11];
+
+        if (certainty <= 0) {
+            std::cout << "Invalid certainty value: " << certainty << std::endl;
+        }
+
+        double k_factor = (k == 0) ? factor_0 : factor_not_0;
+        double score_edge = k_factor * ((double)certainty);
+
+        int connection_weight;
+        
+        valid_edges_count += score_edge;
+        if (!(uf.connected(node1, node2, connection_weight))) {
+            // std::cout << "Merging components: " << node1 << " " << node2 << " " << k << std::endl;
+            add_node_to_component(uf, node1, node2, k);
+            int connection_weight1;
+            uf.connected(node1, node2, connection_weight1);
+            int connection_weight2;
+            uf.connected(node2, node1, connection_weight2);
+            if (connection_weight1 != -connection_weight2) {
+                std::cout << "Invalid connection weight: " << connection_weight1 << " " << connection_weight2 << std::endl;
+            }
+            if (connection_weight1 != k) {
+                std::cout << "Invalid connection weight: " << connection_weight1 << " k1: " << k << std::endl;
+            }
+            if (connection_weight2 != -k) {
+                std::cout << "Invalid connection weight: " << connection_weight2 << " k2: " << k << std::endl;
+            }
+            if (build_valid_edges){
+                valid_edges[index] = 1;
+            }
+        } else {
+            int connection_weight1;
+            uf.connected(node1, node2, connection_weight1);
+            int connection_weight2;
+            uf.connected(node2, node1, connection_weight2);
+            if (connection_weight1 != -connection_weight2) {
+                std::cout << "Invalid connection weight: " << connection_weight1 << " " << connection_weight2 << std::endl;
+            }
+            if (!check_valid(uf, node1, node2, k)) {
+                valid_edges_count -= score_edge; // Invalid edge, subtract its score
+                if (build_valid_edges){
+                    valid_edges[index] = 0;
+                }
+            }
+            else {
+                if (build_valid_edges){
+                    valid_edges[index] = 1;
+                }
+                if (connection_weight1 != k && connection_weight2 != -k) {
+                    std::cout << "Invalid connection weight: " << connection_weight1 << " k " << k << std::endl;
+                }
+            }    
+        }
+    }
+    // std::cout << "Valid edges count: " << (int)valid_edges_count << std::endl;
+    return {valid_edges_count, valid_edges};
+}
+
 // Input is; Nodes Length, Initial DP (shape: (nodes_length, nodes_length, 64), type: bool)
 std::pair<py::array_t<int>, double> build_graph_from_individual_patch_init(
     int length_individual,
@@ -1928,8 +2022,6 @@ std::pair<py::array_t<int>, double> build_graph_from_individual_patch_init(
     py::array_t<int> edges,
     double factor_0,
     double factor_not_0,
-    int legth_initial_component,
-    py::array_t<int> initial_component,
     bool build_valid_edges
     )
 {
@@ -1939,10 +2031,7 @@ std::pair<py::array_t<int>, double> build_graph_from_individual_patch_init(
     // Directly use the pointer to the data in the edges array
     int* edges_cpp = static_cast<int*>(edges.request().ptr);
 
-    // Directly use the pointer to the data in the initial_component array
-    int* initial_component_cpp = static_cast<int*>(initial_component.request().ptr);
-
-    auto res = build_graph_from_individual(length_individual, individual_cpp, length_edges, edges_cpp, factor_0, factor_not_0, legth_initial_component, initial_component_cpp, build_valid_edges);
+    auto res = build_graph_from_individual_patch(length_individual, individual_cpp, length_edges, edges_cpp, factor_0, factor_not_0, build_valid_edges);
 
     double valid_edges_count = res.first;
     int* valid_edges = res.second;
