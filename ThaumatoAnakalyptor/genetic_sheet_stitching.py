@@ -17,7 +17,7 @@ MIN_VALUE, MAX_VALUE = 1, 1000  # Range of values that can be assigned to items
 
 # Genetic Algorithm parameters
 POP_SIZE = 500
-NUM_GEN = 500
+NUM_GEN = 2
 
 var_dict = {'initial_component': None}
 
