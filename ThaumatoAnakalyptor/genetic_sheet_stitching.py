@@ -197,6 +197,7 @@ def build_graph_from_individual_patch(individual, graph_raw, factor_0, factor_no
         return valid_edges_count
     
 def evalItemsPatchSelection(individual):
+    individual = np.array(individual).astype(np.int32)
     graph_raw = np.frombuffer(var_dict['graph'], dtype=np.int32).reshape(var_dict['graph_shape'])
     # valid_edges_count = build_graph_from_individual_patch(individual, graph_raw, var_dict['factor_0'], var_dict['factor_not_0'], return_valid_mask=False)
     unused_valid_mask_cpp_array, valid_edges_count = sheet_generation.build_graph_from_individual_patch_cpp(int(individual.shape[0]), individual, int(graph_raw.shape[0]), graph_raw, var_dict['factor_0'], var_dict['factor_not_0'], False)
