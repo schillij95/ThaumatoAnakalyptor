@@ -1562,6 +1562,7 @@ class EvolutionaryGraphEdgesSelection():
         self.nodes = node_data
         self.nodes_length = len(self.nodes)
         self.nodes_index_dict = {node: i for i, node in enumerate(self.nodes)}
+        self.index_nodes_dict = {i: node for i, node in enumerate(self.nodes)}
 
         nonone_certainty_count = 0
         edges_by_indices  = []
@@ -1723,8 +1724,8 @@ class EvolutionaryGraphEdgesSelection():
             if edges_mask[i]:
                 edge = edges_indices[i]
                 node0_index, node1_index, k = edge[:3]
-                node1 = self.nodes_index_dict[node0_index]
-                node2 = self.nodes_index_dict[node1_index]
+                node1 = self.index_nodes_dict[node0_index]
+                node2 = self.index_nodes_dict[node1_index]
                 certainty = input_graph.edges[(node1, node2)]['certainty']
 
                 centroid1 = input_graph.nodes[node1]['centroid']
