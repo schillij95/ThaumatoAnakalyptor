@@ -1647,10 +1647,12 @@ class EvolutionaryGraphEdgesSelection():
                 if start_node is None:
                     # start_node_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask)
                     start_node = largest_component[0]
-                # Compute ks by simple bfs
+                # Compute ks by simple bfs to filter based on ks and subvolume
                 self.update_ks(evolved_graph_temp, start_node=start_node)
                 # Filter PointCloud for max 1 patch per subvolume
                 evolved_graph = self.filter(evolved_graph_temp, graph=evolved_graph)
+                # Compute ks by simple bfs
+                self.update_ks(evolved_graph_temp, start_node=start_node)
             for graph_extraction_start in range(graph_centroids_middle-z_height_steps, graph_centroids_min, -z_height_steps):
                 pbar.update(1)
                 self.edges_by_indices, _, initial_component = self.build_graph_data(self.graph, min_z=graph_extraction_start, max_z=graph_extraction_start+z_height_steps, strict_edges=True)
@@ -1666,10 +1668,12 @@ class EvolutionaryGraphEdgesSelection():
                 if start_node is None:
                     # start_node_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask)
                     start_node = largest_component[0]
-                # Compute ks by simple bfs
+                # Compute ks by simple bfs to filter based on ks and subvolume
                 self.update_ks(evolved_graph_temp, start_node=start_node)
                 # Filter PointCloud for max 1 patch per subvolume
-                evolved_graph = self.filter(evolved_graph_temp, graph=evolved_graph)            
+                evolved_graph = self.filter(evolved_graph_temp, graph=evolved_graph)
+                # Compute ks by simple bfs
+                self.update_ks(evolved_graph_temp, start_node=start_node)          
 
         # select largest connected component
         evolved_graph.largest_connected_component()
