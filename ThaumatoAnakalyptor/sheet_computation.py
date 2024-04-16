@@ -640,7 +640,7 @@ class ScrollGraph(Graph):
         print(f"Pruned {nodes_total - len(self.nodes)} nodes. Of {nodes_total} nodes.")
         print(f"Pruned {edges_total - len(self.edges)} edges. Of {edges_total} edges.")
 
-        return largest_component
+        return list(largest_component)
 
     def build_graph(self, path_instances, start_point, num_processes=4, prune_unconnected=False):
         blocks_tar_files = glob.glob(path_instances + '/*.tar')
@@ -1692,8 +1692,6 @@ class EvolutionaryGraphEdgesSelection():
                 assert certainty > 0.0, f"Invalid certainty: {certainty} for edge: {edge}"
                 graph.add_edge(node1, node2, certainty, k, False)
                 added_edges_count += 1
-            else:
-                print(f"Edge {i} not selected.")
             
         print(f"Added {added_edges_count} edges to the graph.")
         graph.compute_node_edges()
