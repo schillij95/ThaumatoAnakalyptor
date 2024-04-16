@@ -1720,8 +1720,8 @@ class EvolutionaryGraphEdgesSelection():
             if edges_mask[i]:
                 edge = edges_indices[i]
                 node0_index, node1_index, k = edge[:3]
-                node1 = nodes[node0_index]
-                node2 = nodes[node1_index]
+                node1 = self.nodes_index_dict[node0_index]
+                node2 = self.nodes_index_dict[node1_index]
                 certainty = input_graph.edges[(node1, node2)]['certainty']
 
                 centroid1 = input_graph.nodes[node1]['centroid']
@@ -1751,6 +1751,7 @@ class EvolutionaryGraphEdgesSelection():
     def bfs_ks(self, graph, start_node=None):
         # Use BFS to traverse the graph and compute the ks
         if start_node is None:
+            print("No start node provided, using first node in the graph.")
             start_node = list(graph.nodes)[0]
         visited = {start_node: True}
         queue = [start_node]
