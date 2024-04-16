@@ -1615,7 +1615,7 @@ class EvolutionaryGraphEdgesSelection():
     
     def solve_call(self, input, initial_component=None, problem='k_assignment'):
         input = input.astype(np.int32)
-        if initial_component is not None:
+        if initial_component is None:
             initial_component = np.zeros((0,2), dtype=np.int32)
         initial_component = initial_component.astype(np.int32)
         # easily switch between dummy and real computation
@@ -1630,7 +1630,7 @@ class EvolutionaryGraphEdgesSelection():
         evolved_graph = self.graph.naked_graph()
         start_node = None
 
-        for graph_extraction_start in range(graph_centroids_min, graph_centroids_max, z_height_steps):
+        for graph_extraction_start in range(graph_centroids_min, graph_centroids_max+1, z_height_steps):
             self.edges_by_indices, _, initial_component = self.build_graph_data(self.graph, min_z=graph_extraction_start, max_z=graph_extraction_start+z_height_steps, strict_edges=(graph_extraction_start==graph_centroids_min))
             print(f"Graph nodes length {len(self.graph.nodes)}, edges length: {len(self.graph.edges)}")
             print("Number of edges: ", len(self.edges_by_indices))
