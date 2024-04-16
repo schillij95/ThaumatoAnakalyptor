@@ -584,7 +584,13 @@ class ScrollGraph(Graph):
         tqdm_object = tqdm(total=len(self.nodes))
         components = []
         starting_index = 0
-        nodes = list(self.nodes.keys())
+        def build_nodes():
+            nodes = set()
+            for edge in self.edges:
+                nodes.add(edge[0])
+                nodes.add(edge[1])
+            return list(nodes)
+        nodes = build_nodes()
         max_component_length = 0
         nodes_length = len(nodes)
         nodes_remaining = nodes_length
@@ -1663,17 +1669,17 @@ class EvolutionaryGraphEdgesSelection():
         print(f"nodes length: {len(nodes)}")
         if graph is None:
             graph = ScrollGraph(input_graph.overlapp_threshold, input_graph.umbilicus_path)
-        # start block and patch id
-        graph.start_block = input_graph.start_block
-        graph.patch_id = input_graph.patch_id
-        # graph add nodes
-        nr_winding_angles = 0
-        for node in nodes:
-            if input_graph.nodes[node]['winding_angle'] is not None:
-                nr_winding_angles += 1
-            graph.add_node(node, input_graph.nodes[node]['centroid'], winding_angle=input_graph.nodes[node]['winding_angle'])
-        added_edges_count = 0
-        print(f"Number of winding angles: {nr_winding_angles} of {len(nodes)} nodes.")
+            # start block and patch id
+            graph.start_block = input_graph.start_block
+            graph.patch_id = input_graph.patch_id
+            # graph add nodes
+            nr_winding_angles = 0
+            for node in nodes:
+                if input_graph.nodes[node]['winding_angle'] is not None:
+                    nr_winding_angles += 1
+                graph.add_node(node, input_graph.nodes[node]['centroid'], winding_angle=input_graph.nodes[node]['winding_angle'])
+            added_edges_count = 0
+            print(f"Number of winding angles: {nr_winding_angles} of {len(nodes)} nodes.")
 
         for i in tqdm(range(len(edges_mask))):
             if edges_mask[i]:
@@ -1686,6 +1692,8 @@ class EvolutionaryGraphEdgesSelection():
                 assert certainty > 0.0, f"Invalid certainty: {certainty} for edge: {edge}"
                 graph.add_edge(node1, node2, certainty, k, False)
                 added_edges_count += 1
+            else:
+                print(f"Edge {i} not selected.")
             
         print(f"Added {added_edges_count} edges to the graph.")
         graph.compute_node_edges()
