@@ -1810,7 +1810,7 @@ std::pair<double, int*> build_graph_from_individual(int length_individual, int* 
     int* valid_edges;
     // return an array containing 0/1 for each edge if selected or not
     if (build_valid_edges) {
-        valid_edges = new int[graph_raw_length];
+        valid_edges = new int[length_individual];
     }
     else {
         valid_edges = new int[1];
@@ -1850,7 +1850,7 @@ std::pair<double, int*> build_graph_from_individual(int length_individual, int* 
                 std::cout << "Invalid connection weight: " << connection_weight2 << " k2: " << k << std::endl;
             }
             if (build_valid_edges){
-                valid_edges[4*index] = 1;
+                valid_edges[index] = 1;
             }
         } else {
             int connection_weight1;
