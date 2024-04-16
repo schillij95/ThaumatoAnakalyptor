@@ -1634,7 +1634,7 @@ class EvolutionaryGraphEdgesSelection():
         with tqdm(total=2 + (graph_centroids_max - graph_centroids_min) // z_height_steps, desc="Evolving valid graph") as pbar:
             for graph_extraction_start in range(graph_centroids_middle, graph_centroids_max, z_height_steps):
                 pbar.update(1)
-                self.edges_by_indices, _, initial_component = self.build_graph_data(self.graph, min_z=graph_extraction_start, max_z=graph_extraction_start+z_height_steps, strict_edges=False)
+                self.edges_by_indices, _, initial_component = self.build_graph_data(self.graph, min_z=graph_extraction_start, max_z=graph_extraction_start+z_height_steps, strict_edges=True)
                 print(f"Graph nodes length {len(self.graph.nodes)}, edges length: {len(self.graph.edges)}")
                 print("Number of edges: ", len(self.edges_by_indices))
                 # Solve with genetic algorithm
@@ -1653,7 +1653,7 @@ class EvolutionaryGraphEdgesSelection():
                 evolved_graph = self.filter(evolved_graph_temp, graph=evolved_graph)
             for graph_extraction_start in range(graph_centroids_middle-z_height_steps, graph_centroids_min, -z_height_steps):
                 pbar.update(1)
-                self.edges_by_indices, _, initial_component = self.build_graph_data(self.graph, min_z=graph_extraction_start, max_z=graph_extraction_start+z_height_steps, strict_edges=False)
+                self.edges_by_indices, _, initial_component = self.build_graph_data(self.graph, min_z=graph_extraction_start, max_z=graph_extraction_start+z_height_steps, strict_edges=True)
                 print(f"Graph nodes length {len(self.graph.nodes)}, edges length: {len(self.graph.edges)}")
                 print("Number of edges: ", len(self.edges_by_indices))
                 # Solve with genetic algorithm
