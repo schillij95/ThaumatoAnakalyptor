@@ -1620,7 +1620,9 @@ class EvolutionaryGraphEdgesSelection():
             initial_component = np.zeros((0,2), dtype=np.int32)
         initial_component = initial_component.astype(np.int32)
         # easily switch between dummy and real computation
-        return solve_genetic(input, initial_component=initial_component, problem=problem)
+        valid_mask, valid_edges_count = solve_genetic(input, initial_component=initial_component, problem=problem)
+        valid_mask = valid_mask > 0
+        return valid_mask, valid_edges_count
 
     def solve(self, z_height_steps=100):
         graph_centroids = np.array([self.graph.nodes[node]['centroid'] for node in self.graph.nodes])
