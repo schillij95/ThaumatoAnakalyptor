@@ -1578,13 +1578,13 @@ class EvolutionaryGraphEdgesSelection():
                 elif not in_range(centroid1, min_z, max_z):
                     # assign known k to initial component for evolutionary algorithm
                     if "assigned_k" in helper_graph.nodes[node1]:
-                        initial_component[self.nodes_index_dict[node1]] = helper_graph.nodes[node1]["assigned_k"]
+                        initial_component[self.nodes_index_dict[node1]] = int(helper_graph.nodes[node1]["assigned_k"])
                     else:
                         to_add = False
                 elif not in_range(centroid2, min_z, max_z):
                     # assign known k to initial component for evolutionary algorithm
                     if "assigned_k" in helper_graph.nodes[node2]:
-                        initial_component[self.nodes_index_dict[node2]] = helper_graph.nodes[node2]["assigned_k"]
+                        initial_component[self.nodes_index_dict[node2]] = int(helper_graph.nodes[node2]["assigned_k"])
                     else:
                         to_add = False
             if strict_edges and ((not in_range(centroid1, min_z, max_z)) or (not in_range(centroid2, min_z, max_z))):
@@ -1611,8 +1611,11 @@ class EvolutionaryGraphEdgesSelection():
         edges_by_indices = np.array(edges_by_indices).astype(np.int32)
         edges_by_subvolume_indices = np.array(edges_by_subvolume_indices).astype(np.int32)
         if len(initial_component) == 0:
+            print("Building Initial component with 0 nodes.")
             initial_component = np.zeros((0,2), dtype=np.int32)
         else:
+            print(f"Building Initial component with {len(initial_component)} nodes.")
+            initial_component = [(int(node_index), int(k)) for node_index, k in initial_component.items()]
             initial_component = np.array(initial_component, dtype=np.int32)
         return edges_by_indices, edges_by_subvolume_indices, initial_component
     
