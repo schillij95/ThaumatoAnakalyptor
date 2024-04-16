@@ -394,8 +394,9 @@ class MeshDataset(Dataset):
 
                 # Check if any triangle is too large
                 mask_large_side = np.any(side_lengths > self.max_side_triangle, axis=1)
-                # If no triangle is too large, we are done
-                if not np.any(mask_large_side):
+
+                # Break without adding the last good triangles if mask_large_side has shape 0
+                if mask_large_side.shape[0] == 0:
                     break
 
                 # Keep the triangles that are not too large
@@ -407,6 +408,10 @@ class MeshDataset(Dataset):
                 uv_good.append(uv_good_)
                 triangles_vertices_good.append(triangles_vertices_good_)
                 triangles_normals_good.append(triangles_normals_good_)
+                
+                # If no triangle is too large, we are done
+                if not np.any(mask_large_side):
+                    break
 
                 # Get the triangles that are too large
                 uv_large = uv[mask_large_side]
