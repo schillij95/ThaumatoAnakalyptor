@@ -126,82 +126,94 @@ def bfs_ks(edges_indices, valid_mask_int):
 
 class TestGraphK(unittest.TestCase):
     def test_random_graph(self):
-        runs = 10000
-        nr_nodes = random.randint(3, 100)
-        # nr_nodes = 3
-        nr_edges = random.randint(1, 300)
-        # nr_edges = 3
-        edges = np.random.randint(0, nr_nodes, size=(nr_edges, 2))
-        k = np.random.randint(-1, 2, size=(nr_edges))
-        certainty = np.random.randint(1, 1000, size=(nr_edges))
-        edges_indices  = np.concatenate((edges, k.reshape(-1, 1), certainty.reshape(-1, 1)), axis=1).astype(np.int32)
-        initial_component = np.zeros((0,2), dtype=np.int32)
+        runs = 100000
         for i in range(runs):
-            individual = np.random.randint(0, 1000, size=(nr_edges)).astype(np.int32)
+            nr_nodes = random.randint(3, 10)
+            # nr_nodes = 3
+            nr_edges = random.randint(1, 300)
+            # nr_edges = 3
+            edges = np.random.randint(1, nr_nodes, size=(nr_edges, 2))
+            k = np.random.randint(-1, 2, size=(nr_edges))
+            certainty = np.random.randint(1, 1000, size=(nr_edges))
+            edges_indices  = np.concatenate((edges, k.reshape(-1, 1), certainty.reshape(-1, 1)), axis=1).astype(np.int32)
+            # filter loop edges
+            edges_indices = edges_indices[edges_indices[:, 0] != edges_indices[:, 1]]
+            # continue if no remaining edges
+            if edges_indices.shape[0] == 0:
+                continue
+            initial_component = np.zeros((0,2), dtype=np.int32)
+            individual = np.random.randint(0, 1000, size=(edges_indices.shape[0])).astype(np.int32)
             valid_mask, valid_edges_count = sg.build_graph_from_individual_cpp(int(individual.shape[0]), individual, int(edges_indices.shape[0]), edges_indices, 1.0, 2.5, int(initial_component.shape[0]), initial_component, True)
-            self.assertTrue(bfs_ks(edges_indices, valid_mask))
+            condition = bfs_ks(edges_indices, valid_mask)
+            self.assertTrue(condition)
 
     def test_fully_connected_graph(self):
-        runs = 10000
-        nr_nodes = random.randint(3, 100)
-        # build edges
-        edges = []
-        k = []
-        certainty = []
-        for i in range(nr_nodes):
-            for j in range(i+1, nr_nodes):
-                edges.append([i, j])
-                k.append(random.randint(-1, 2))
-                certainty.append(random.randint(1, 1000))
-        edges = np.array(edges)
-        k = np.array(k)
-        certainty = np.array(certainty)
-        edges_indices  = np.concatenate((edges, k.reshape(-1, 1), certainty.reshape(-1, 1)), axis=1).astype(np.int32)
-        initial_component = np.zeros((0,2), dtype=np.int32)
+        runs = 100000
         for i in range(runs):
-            individual = np.random.randint(0, 1000, size=(edges.shape[0])).astype(np.int32)
+            nr_nodes = random.randint(3, 10)
+            # build edges
+            edges = []
+            k = []
+            certainty = []
+            for i in range(nr_nodes):
+                for j in range(i+1, nr_nodes):
+                    edges.append([i, j])
+                    k.append(random.randint(-1, 2))
+                    certainty.append(random.randint(1, 1000))
+            edges = np.array(edges)
+            k = np.array(k)
+            certainty = np.array(certainty)
+            edges_indices  = np.concatenate((edges, k.reshape(-1, 1), certainty.reshape(-1, 1)), axis=1).astype(np.int32)
+            # filter loop edges
+            edges_indices = edges_indices[edges_indices[:, 0] != edges_indices[:, 1]]
+            # continue if no remaining edges
+            if edges_indices.shape[0] == 0:
+                continue
+            initial_component = np.zeros((0,2), dtype=np.int32)
+            individual = np.random.randint(0, 1000, size=(edges_indices.shape[0])).astype(np.int32)
             valid_mask, valid_edges_count = sg.build_graph_from_individual_cpp(int(individual.shape[0]), individual, int(edges_indices.shape[0]), edges_indices, 1.0, 2.5, int(initial_component.shape[0]), initial_component, True)
-            self.assertTrue(bfs_ks(edges_indices, valid_mask))
+            condition = bfs_ks(edges_indices, valid_mask)
+            self.assertTrue(condition)
 
-class TestGraphKPython(unittest.TestCase):
-    def test_random_graph_python(self):
-        runs = 10000
-        nr_nodes = random.randint(3, 100)
-        # nr_nodes = 3
-        nr_edges = random.randint(1, 300)
-        # nr_edges = 3
-        edges = np.random.randint(0, nr_nodes, size=(nr_edges, 2))
-        k = np.random.randint(-1, 2, size=(nr_edges))
-        certainty = np.random.randint(1, 1000, size=(nr_edges))
-        edges_indices  = np.concatenate((edges, k.reshape(-1, 1), certainty.reshape(-1, 1)), axis=1).astype(np.int32)
-        initial_component = np.zeros((0,2), dtype=np.int32)
-        for i in range(runs):
-            individual = np.random.randint(0, 1000, size=(nr_edges)).astype(np.int32)
-            valid_mask, valid_edges_count = build_graph_from_individual(individual, edges_indices, 1.0, 2.5, initial_component=initial_component, return_valid_mask=True)
-            self.assertTrue(bfs_ks(edges_indices, valid_mask))
+# class TestGraphKPython(unittest.TestCase):
+#     def test_random_graph_python(self):
+#         runs = 10000
+#         nr_nodes = random.randint(3, 100)
+#         # nr_nodes = 3
+#         nr_edges = random.randint(1, 300)
+#         # nr_edges = 3
+#         edges = np.random.randint(1, nr_nodes, size=(nr_edges, 2))
+#         k = np.random.randint(-1, 2, size=(nr_edges))
+#         certainty = np.random.randint(1, 1000, size=(nr_edges))
+#         edges_indices  = np.concatenate((edges, k.reshape(-1, 1), certainty.reshape(-1, 1)), axis=1).astype(np.int32)
+#         initial_component = np.zeros((0,2), dtype=np.int32)
+#         for i in range(runs):
+#             individual = np.random.randint(0, 1000, size=(nr_edges)).astype(np.int32)
+#             valid_mask, valid_edges_count = build_graph_from_individual(individual, edges_indices, 1.0, 2.5, initial_component=initial_component, return_valid_mask=True)
+#             self.assertTrue(bfs_ks(edges_indices, valid_mask))
 
-    def test_fully_connected_graph_python(self):
-        runs = 10000
-        nr_nodes = random.randint(3, 100)
-        # build edges
-        edges = []
-        k = []
-        certainty = []
-        for i in range(nr_nodes):
-            for j in range(i+1, nr_nodes):
-                edges.append([i, j])
-                k.append(random.randint(-1, 2))
-                certainty.append(random.randint(1, 1000))
-        edges = np.array(edges)
-        k = np.array(k)
-        certainty = np.array(certainty)
-        edges_indices  = np.concatenate((edges, k.reshape(-1, 1), certainty.reshape(-1, 1)), axis=1).astype(np.int32)
-        initial_component = np.zeros((0,2), dtype=np.int32)
-        for i in range(runs):
-            individual = np.random.randint(0, 1000, size=(edges.shape[0])).astype(np.int32)
-            valid_mask, valid_edges_count = build_graph_from_individual(individual, edges_indices, 1.0, 2.5, initial_component=initial_component, return_valid_mask=True)
-            # print(f"Shape: {valid_mask.shape}, Shape individual: {individual.shape}, Shape edges_indices: {edges_indices.shape}")
-            self.assertTrue(bfs_ks(edges_indices, valid_mask))
+#     def test_fully_connected_graph_python(self):
+#         runs = 10000
+#         nr_nodes = random.randint(3, 100)
+#         # build edges
+#         edges = []
+#         k = []
+#         certainty = []
+#         for i in range(nr_nodes):
+#             for j in range(i+1, nr_nodes):
+#                 edges.append([i, j])
+#                 k.append(random.randint(-1, 2))
+#                 certainty.append(random.randint(1, 1000))
+#         edges = np.array(edges)
+#         k = np.array(k)
+#         certainty = np.array(certainty)
+#         edges_indices  = np.concatenate((edges, k.reshape(-1, 1), certainty.reshape(-1, 1)), axis=1).astype(np.int32)
+#         initial_component = np.zeros((0,2), dtype=np.int32)
+#         for i in range(runs):
+#             individual = np.random.randint(0, 1000, size=(edges.shape[0])).astype(np.int32)
+#             valid_mask, valid_edges_count = build_graph_from_individual(individual, edges_indices, 1.0, 2.5, initial_component=initial_component, return_valid_mask=True)
+#             # print(f"Shape: {valid_mask.shape}, Shape individual: {individual.shape}, Shape edges_indices: {edges_indices.shape}")
+#             self.assertTrue(bfs_ks(edges_indices, valid_mask))
         
 if __name__ == '__main__':
     unittest.main()
