@@ -1613,8 +1613,10 @@ class EvolutionaryGraphEdgesSelection():
             initial_component = np.array(initial_component, dtype=np.int32)
         return edges_by_indices, edges_by_subvolume_indices, initial_component
     
-    def solve_call(self, input, initial_component, problem):
+    def solve_call(self, input, initial_component=None, problem='k_assignment'):
         input = input.astype(np.int32)
+        if initial_component is not None:
+            initial_component = np.zeros((0,2), dtype=np.int32)
         initial_component = initial_component.astype(np.int32)
         # easily switch between dummy and real computation
         return solve_genetic(input, initial_component=initial_component, problem=problem)
