@@ -1613,7 +1613,7 @@ class EvolutionaryGraphEdgesSelection():
         # easily switch between dummy and real computation
         return solve_genetic(input, initial_component=initial_component, problem=problem)
 
-    def solve(self, z_height_steps=500):
+    def solve(self, z_height_steps=100):
         graph_centroids = np.array([self.graph.nodes[node]['centroid'] for node in self.graph.nodes])
         graph_centroids_min = int(np.floor(np.min(graph_centroids, axis=0))[1])
         graph_centroids_max = int(np.ceil(np.max(graph_centroids, axis=0))[1])
@@ -1659,8 +1659,8 @@ class EvolutionaryGraphEdgesSelection():
         """
         Creates a graph from the DP table.
         """
-        nodes = list(input_graph.nodes)
-        print(f"self.nodes_length: {len(nodes)}")
+        nodes = list(input_graph.nodes.keys())
+        print(f"nodes length: {len(nodes)}")
         if graph is None:
             graph = ScrollGraph(input_graph.overlapp_threshold, input_graph.umbilicus_path)
         # start block and patch id
@@ -1669,9 +1669,9 @@ class EvolutionaryGraphEdgesSelection():
         # graph add nodes
         nr_winding_angles = 0
         for node in nodes:
-            if input_graph[node]['winding_angle'] is not None:
+            if input_graph.nodes[node]['winding_angle'] is not None:
                 nr_winding_angles += 1
-            graph.add_node(node, input_graph[node]['centroid'], winding_angle=input_graph[node]['winding_angle'])
+            graph.add_node(node, input_graph.nodes[node]['centroid'], winding_angle=input_graph.nodes[node]['winding_angle'])
         added_edges_count = 0
         print(f"Number of winding angles: {nr_winding_angles} of {len(nodes)} nodes.")
 
