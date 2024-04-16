@@ -1927,9 +1927,10 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
         start_block, patch_id = find_starting_patch([start_point], path)
 
     # min_z, max_zm umbilicus_max_distance = 900, 1000, 80
-    min_z, max_z, umbilicus_max_distance = None, None, None
-    # subgraph = scroll_graph.extract_subgraph(min_z=min_z, max_z=max_z, umbilicus_max_distance=umbilicus_max_distance, add_same_block_edges=True)
-    subgraph = scroll_graph
+    # min_z, max_z, umbilicus_max_distance = None, None, None
+    min_z, max_z, umbilicus_max_distance = None, None, 80
+    subgraph = scroll_graph.extract_subgraph(min_z=min_z, max_z=max_z, umbilicus_max_distance=umbilicus_max_distance, add_same_block_edges=True)
+    # subgraph = scroll_graph
     # subgraph.create_dxf_with_colored_polyline(save_path.replace("blocks", "subgraph") + ".dxf", min_z=min_z, max_z=max_z)
     graph_filter = EvolutionaryGraphEdgesSelection(subgraph, save_path)
     evolved_graph = graph_filter.solve()
