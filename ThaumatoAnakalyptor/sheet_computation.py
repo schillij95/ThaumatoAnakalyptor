@@ -1782,6 +1782,8 @@ class EvolutionaryGraphEdgesSelection():
         ks = np.array([ks[node] for node in nodes]) # to numpy
         ks = ks - np.min(ks) # 0 to max
 
+        print(f"Visited {len(visited)} nodes. During Breadth First Search.")
+
         return nodes, ks
     
     def bfs_ks_indices(self, edges_indices, valid_mask_int):
