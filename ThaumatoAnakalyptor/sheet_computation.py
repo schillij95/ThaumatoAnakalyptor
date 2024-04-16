@@ -1641,6 +1641,7 @@ class EvolutionaryGraphEdgesSelection():
                 self.edges_by_indices, _, initial_component = self.build_graph_data(self.graph, min_z=graph_extraction_start, max_z=graph_extraction_start+z_height_steps, strict_edges=True, helper_graph=evolved_graph)
                 print(f"Graph nodes length {len(self.graph.nodes)}, edges length: {len(self.graph.edges)}")
                 print("Number of edges: ", len(self.edges_by_indices))
+                print("Initial component shape: ", initial_component.shape)
                 # Solve with genetic algorithm
                 valid_mask, valid_edges_count = self.solve_call(self.edges_by_indices, initial_component=initial_component, problem='k_assignment')
                 # Build graph from edge selection
@@ -1662,6 +1663,7 @@ class EvolutionaryGraphEdgesSelection():
                 self.edges_by_indices, _, initial_component = self.build_graph_data(self.graph, min_z=graph_extraction_start, max_z=graph_extraction_start+z_height_steps, strict_edges=True, helper_graph=evolved_graph)
                 print(f"Graph nodes length {len(self.graph.nodes)}, edges length: {len(self.graph.edges)}")
                 print("Number of edges: ", len(self.edges_by_indices))
+                print("Initial component shape: ", initial_component.shape)
                 # Solve with genetic algorithm
                 valid_mask, valid_edges_count = self.solve_call(self.edges_by_indices, initial_component=initial_component, problem='k_assignment')
                 # Build graph from edge selection
