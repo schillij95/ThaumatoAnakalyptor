@@ -1898,7 +1898,7 @@ std::pair<py::array_t<int>, double> build_graph_from_individual_init(
         std::cout << "Length of individual and edges must be equal" << std::endl;
         throw std::invalid_argument("Length of individual and edges must be equal");
     }
-    
+
     // Directly use the pointer to the data in the individual array
     int* individual_cpp = static_cast<int*>(individual.request().ptr);
 
@@ -1946,7 +1946,7 @@ std::pair<double, int*> build_graph_from_individual_patch(int length_individual,
     // Initialize the graph components with the maximum node id + 1
     WeightedUF uf;
 
-    std::unordered_set<std::tuple<int, int, int, int>, hash_tuple> visited_subvolumes;
+    std::unordered_map<std::tuple<int, int, int, int>, int, hash_tuple> visited_subvolumes;
 
     std::vector<int> sorted_indices(length_individual);
     std::iota(sorted_indices.begin(), sorted_indices.end(), 0);
@@ -1982,6 +1982,26 @@ std::pair<double, int*> build_graph_from_individual_patch(int length_individual,
             std::cout << "Invalid certainty value: " << certainty << std::endl;
         }
 
+        auto node1_subvolume = std::make_tuple(node1_subvolume_0, node1_subvolume_1, node1_subvolume_2, assigned_k1);
+        auto node2_subvolume = std::make_tuple(node2_subvolume_0, node2_subvolume_1, node2_subvolume_2, assigned_k2);
+        // Check for visited subvolume vs found components
+        if (visited_subvolumes.find(node1_subvolume) != visited_subvolumes.end()) {
+            if (visited_subvolumes[node1_subvolume] != node1) {
+                if (build_valid_edges){
+                        valid_edges[index] = 0;
+                }
+                continue;
+            }
+        }
+        else if (visited_subvolumes.find(node2_subvolume) != visited_subvolumes.end()) {
+            if (visited_subvolumes[node2_subvolume] != node2) {
+                if (build_valid_edges){
+                        valid_edges[index] = 0;
+                }
+                continue;
+            }
+        }
+
         double k_factor = (k == 0) ? factor_0 : factor_not_0;
         double score_edge = k_factor * ((double)certainty);
 
@@ -2008,8 +2028,8 @@ std::pair<double, int*> build_graph_from_individual_patch(int length_individual,
                 valid_edges[index] = 1;
             }
             // Add the subvolumes to the visited set
-            visited_subvolumes.insert(std::make_tuple(node1_subvolume_0, node1_subvolume_1, node1_subvolume_2, assigned_k1));
-            visited_subvolumes.insert(std::make_tuple(node2_subvolume_0, node2_subvolume_1, node2_subvolume_2, assigned_k2));
+            visited_subvolumes[node1_subvolume] = node1;
+            visited_subvolumes[node2_subvolume] = node2;
         } else {
             int connection_weight1;
             uf.connected(node1, node2, connection_weight1);
@@ -2032,8 +2052,8 @@ std::pair<double, int*> build_graph_from_individual_patch(int length_individual,
                     std::cout << "Invalid connection weight: " << connection_weight1 << " k " << k << std::endl;
                 }
                 // Add the subvolumes to the visited set
-                visited_subvolumes.insert(std::make_tuple(node1_subvolume_0, node1_subvolume_1, node1_subvolume_2, assigned_k1));
-                visited_subvolumes.insert(std::make_tuple(node2_subvolume_0, node2_subvolume_1, node2_subvolume_2, assigned_k2));
+                visited_subvolumes[node1_subvolume] = node1;
+                visited_subvolumes[node2_subvolume] = node2;
             }    
         }
     }
