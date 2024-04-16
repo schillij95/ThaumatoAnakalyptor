@@ -1720,13 +1720,16 @@ class EvolutionaryGraphEdgesSelection():
                 else:
                     other_node = edge[0]
                 if other_node in visited:
+                    # Assert for correct k
+                    k = graph.get_edge_k(node, other_node)
+                    assert ks[other_node] == node_k + k, f"Invalid k: {ks[other_node]} != {node_k + k}"
                     continue
                 visited[other_node] = True
                 k = graph.get_edge_k(node, other_node)
                 ks[other_node] = node_k + k
                 queue.append(other_node)
 
-        nodes = [node for node in graph.nodes]
+        nodes = [node for node in visited]
         ks = np.array([ks[node] for node in nodes]) # to numpy
         ks = ks - np.min(ks) # 0 to max
 
