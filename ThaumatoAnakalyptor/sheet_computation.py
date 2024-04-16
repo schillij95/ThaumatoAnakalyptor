@@ -1570,10 +1570,14 @@ class EvolutionaryGraphEdgesSelection():
                     # assign known k to initial component for evolutionary algorithm
                     if "assigned_k" in graph.nodes[node1]:
                         initial_component[self.nodes_index_dict[node1]] = graph.nodes[node1]["assigned_k"]
+                    else:
+                        to_add = False
                 elif not in_range(centroid2, min_z, max_z):
                     # assign known k to initial component for evolutionary algorithm
                     if "assigned_k" in graph.nodes[node2]:
                         initial_component[self.nodes_index_dict[node2]] = graph.nodes[node2]["assigned_k"]
+                    else:
+                        to_add = False
             if strict_edges and ((not in_range(centroid1, min_z, max_z)) or (not in_range(centroid2, min_z, max_z))):
                 to_add = False
             if not to_add:
@@ -1628,9 +1632,9 @@ class EvolutionaryGraphEdgesSelection():
             evolved_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask, evolved_graph)
             evolved_graph_temp = deepcopy(evolved_graph)
             # select largest connected component
+            largest_component = evolved_graph_temp.largest_connected_component(delete_nodes=False)
             if start_node is None:
-                start_node_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask)
-                largest_component = start_node_graph.largest_connected_component(delete_nodes=False)
+                # start_node_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask)
                 start_node = largest_component[0]
             # Compute ks by simple bfs
             self.update_ks(evolved_graph_temp, start_node=start_node)
@@ -1655,8 +1659,8 @@ class EvolutionaryGraphEdgesSelection():
         """
         Creates a graph from the DP table.
         """
-        print(f"self.nodes_length: {self.nodes_length}")
-        nodes = list(self.nodes)
+        nodes = list(input_graph.nodes)
+        print(f"self.nodes_length: {len(nodes)}")
         if graph is None:
             graph = ScrollGraph(input_graph.overlapp_threshold, input_graph.umbilicus_path)
         # start block and patch id
@@ -1665,9 +1669,9 @@ class EvolutionaryGraphEdgesSelection():
         # graph add nodes
         nr_winding_angles = 0
         for node in nodes:
-            if self.nodes[node]['winding_angle'] is not None:
+            if input_graph[node]['winding_angle'] is not None:
                 nr_winding_angles += 1
-            graph.add_node(node, self.nodes[node]['centroid'], winding_angle=self.nodes[node]['winding_angle'])
+            graph.add_node(node, input_graph[node]['centroid'], winding_angle=input_graph[node]['winding_angle'])
         added_edges_count = 0
         print(f"Number of winding angles: {nr_winding_angles} of {len(nodes)} nodes.")
 
