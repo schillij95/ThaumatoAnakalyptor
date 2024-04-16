@@ -1549,7 +1549,7 @@ class EvolutionaryGraphEdgesSelection():
             helper_graph = graph
         print(f"Using strict edges: {strict_edges}")
         def in_range(centroid, min_z_, max_z_):
-            if min_z_ is not None and centroid[1] < min_z_:
+            if min_z_ is not None and centroid[1] <= min_z_:
                 return False
             if max_z_ is not None and centroid[1] > max_z_:
                 return False
