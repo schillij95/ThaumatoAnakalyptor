@@ -1659,7 +1659,7 @@ class EvolutionaryGraphEdgesSelection():
                 # Compute ks by simple bfs to filter based on ks and subvolume
                 self.update_ks(evolved_graph_temp, start_node=start_node, edges_by_indices=self.edges_by_indices, valid_mask=valid_mask)
                 # Filter PointCloud for max 1 patch per subvolume
-                evolved_graph = self.filter(evolved_graph_temp, graph=evolved_graph)
+                evolved_graph = self.filter(evolved_graph_temp, graph=evolved_graph, min_z=graph_extraction_start, max_z=graph_extraction_start+z_height_steps)
                 # Compute ks by simple bfs
                 self.update_ks(evolved_graph, start_node=start_node, edges_by_indices=self.edges_by_indices, valid_mask=valid_mask)
             for graph_extraction_start in range(graph_centroids_middle-z_height_steps, graph_centroids_min, -z_height_steps):
@@ -1681,7 +1681,7 @@ class EvolutionaryGraphEdgesSelection():
                 # Compute ks by simple bfs to filter based on ks and subvolume
                 self.update_ks(evolved_graph_temp, start_node=start_node, edges_by_indices=self.edges_by_indices, valid_mask=valid_mask)
                 # Filter PointCloud for max 1 patch per subvolume
-                evolved_graph = self.filter(evolved_graph_temp, graph=evolved_graph)
+                evolved_graph = self.filter(evolved_graph_temp, graph=evolved_graph, min_z=graph_extraction_start, max_z=graph_extraction_start+z_height_steps)
                 # Compute ks by simple bfs
                 self.update_ks(evolved_graph, start_node=start_node, edges_by_indices=self.edges_by_indices, valid_mask=valid_mask)          
 
