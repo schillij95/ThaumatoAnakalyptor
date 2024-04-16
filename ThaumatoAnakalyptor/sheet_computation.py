@@ -584,7 +584,7 @@ class ScrollGraph(Graph):
         tqdm_object = tqdm(total=len(self.nodes))
         components = []
         starting_index = 0
-        def build_nodes():
+        def build_nodes(edges):
             nodes = set()
             for edge in edges:
                 nodes.add(edge[0])
