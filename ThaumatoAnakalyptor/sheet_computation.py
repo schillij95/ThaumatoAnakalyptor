@@ -1642,7 +1642,7 @@ class EvolutionaryGraphEdgesSelection():
                 # Solve with genetic algorithm
                 valid_mask, valid_edges_count = self.solve_call(self.edges_by_indices, initial_component=initial_component, problem='k_assignment')
                 # Build graph from edge selection
-                evolved_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask, evolved_graph, min_z=graph_extraction_start, max_z=graph_extraction_start+z_height_steps)
+                evolved_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask, evolved_graph)
                 evolved_graph_temp = deepcopy(evolved_graph)
                 # select largest connected component
                 largest_component = evolved_graph_temp.largest_connected_component(delete_nodes=False)
@@ -1650,11 +1650,11 @@ class EvolutionaryGraphEdgesSelection():
                     # start_node_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask)
                     start_node = largest_component[0]
                 # Compute ks by simple bfs to filter based on ks and subvolume
-                self.update_ks(evolved_graph_temp, start_node=start_node)
+                self.update_ks(evolved_graph_temp, start_node=start_node, edges_by_indices=self.edges_by_indices, valid_mask=valid_mask)
                 # Filter PointCloud for max 1 patch per subvolume
                 evolved_graph = self.filter(evolved_graph_temp, graph=evolved_graph)
                 # Compute ks by simple bfs
-                self.update_ks(evolved_graph_temp, start_node=start_node)
+                self.update_ks(evolved_graph_temp, start_node=start_node, edges_by_indices=self.edges_by_indices, valid_mask=valid_mask)
             for graph_extraction_start in range(graph_centroids_middle-z_height_steps, graph_centroids_min, -z_height_steps):
                 pbar.update(1)
                 self.edges_by_indices, _, initial_component = self.build_graph_data(self.graph, min_z=graph_extraction_start, max_z=graph_extraction_start+z_height_steps, strict_edges=True)
@@ -1663,7 +1663,7 @@ class EvolutionaryGraphEdgesSelection():
                 # Solve with genetic algorithm
                 valid_mask, valid_edges_count = self.solve_call(self.edges_by_indices, initial_component=initial_component, problem='k_assignment')
                 # Build graph from edge selection
-                evolved_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask, evolved_graph, max_z=graph_extraction_start+z_height_steps)
+                evolved_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask, evolved_graph)
                 evolved_graph_temp = deepcopy(evolved_graph)
                 # select largest connected component
                 largest_component = evolved_graph_temp.largest_connected_component(delete_nodes=False)
@@ -1671,15 +1671,15 @@ class EvolutionaryGraphEdgesSelection():
                     # start_node_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask)
                     start_node = largest_component[0]
                 # Compute ks by simple bfs to filter based on ks and subvolume
-                self.update_ks(evolved_graph_temp, start_node=start_node)
+                self.update_ks(evolved_graph_temp, start_node=start_node, edges_by_indices=self.edges_by_indices, valid_mask=valid_mask)
                 # Filter PointCloud for max 1 patch per subvolume
                 evolved_graph = self.filter(evolved_graph_temp, graph=evolved_graph)
                 # Compute ks by simple bfs
-                self.update_ks(evolved_graph_temp, start_node=start_node)          
+                self.update_ks(evolved_graph_temp, start_node=start_node, edges_by_indices=self.edges_by_indices, valid_mask=valid_mask)          
 
         # select largest connected component
         evolved_graph.largest_connected_component()
-        self.update_ks(evolved_graph)
+        self.update_ks(evolved_graph, edges_by_indices=self.edges_by_indices, valid_mask=valid_mask)
         return evolved_graph
     
     def filter(self, graph_to_filter, min_z=None, max_z=None, graph=None):
@@ -1737,7 +1737,8 @@ class EvolutionaryGraphEdgesSelection():
         print(f"Filtered graph created with {len(graph.nodes)} nodes and {len(graph.edges)} edges.")
         return graph
     
-    def update_ks(self, graph, start_node=None):
+    def update_ks(self, graph, start_node=None, edges_by_indices=None, valid_mask=None):
+        condition = self.bfs_ks_indices(edges_by_indices, valid_mask_int=valid_mask)
         # Compute nodes, ks
         nodes, ks = self.bfs_ks(graph, start_node=start_node)
         # Update the ks for the extracted nodes
@@ -1773,6 +1774,47 @@ class EvolutionaryGraphEdgesSelection():
         ks = ks - np.min(ks) # 0 to max
 
         return nodes, ks
+    
+    def bfs_ks_indices(self, edges_indices, valid_mask_int):
+        valid_mask = valid_mask_int > 0
+
+        edges = {}
+        valid_edges = edges_indices[valid_mask]
+        for edge in valid_edges:
+            if edge[0] not in edges:
+                edges[edge[0]] = set()
+            edges[edge[0]].add((edge[0], edge[1], edge[2], edge[3]))
+            if edge[1] not in edges:
+                edges[edge[1]] = set()
+            edges[edge[1]].add((edge[0], edge[1], edge[2], edge[3]))
+        
+        # Use BFS to traverse the graph and compute the ks
+        start_node = valid_edges[0, 0]
+        visited = {start_node: True}
+        queue = [start_node]
+        ks = {start_node: 0}
+
+        while queue:
+            node = queue.pop(0)
+            node_k = ks[node]
+            for edge in edges[node]:
+                node1, node2, k, certainty = edge
+                if node1 == node:
+                    other_node = node2
+                else:
+                    other_node = node1
+                    k = -k # flip k if edge direction is flipped
+                if other_node in visited:
+                    # Assert for correct k
+                    condition= ks[other_node] == node_k + k
+                    assert condition, f"Invalid k: {ks[other_node]} != {node_k + k}, edges_indices: {edges_indices}, valid_mask: {valid_mask}, valid_mask_int: {valid_mask_int}"
+                    if not condition:
+                        return False
+                    continue
+                visited[other_node] = True
+                ks[other_node] = node_k + k
+                queue.append(other_node)
+        return True
     
     def update_winding_angles(self, graph, nodes, ks):
         # Update winding angles

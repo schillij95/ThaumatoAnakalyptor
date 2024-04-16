@@ -1893,6 +1893,12 @@ std::pair<py::array_t<int>, double> build_graph_from_individual_init(
     bool build_valid_edges
     )
 {
+    // Check length Individual equals length Edges
+    if (length_individual != length_edges) {
+        std::cout << "Length of individual and edges must be equal" << std::endl;
+        throw std::invalid_argument("Length of individual and edges must be equal");
+    }
+    
     // Directly use the pointer to the data in the individual array
     int* individual_cpp = static_cast<int*>(individual.request().ptr);
 
@@ -2046,6 +2052,11 @@ std::pair<py::array_t<int>, double> build_graph_from_individual_patch_init(
     bool build_valid_edges
     )
 {
+    // Check length Individual equals length Edges
+    if (length_individual != length_edges) {
+        std::cout << "Length of individual and edges must be equal" << std::endl;
+        throw std::invalid_argument("Length of individual and edges must be equal");
+    }
     // Directly use the pointer to the data in the individual array
     int* individual_cpp = static_cast<int*>(individual.request().ptr);
 
