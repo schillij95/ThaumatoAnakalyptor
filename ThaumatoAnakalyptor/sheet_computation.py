@@ -1541,10 +1541,12 @@ class EvolutionaryGraphEdgesSelection():
         self.min_z = min_z
         self.max_z = max_z
 
-    def build_graph_data(self, graph, min_z=None, max_z=None, strict_edges=True):
+    def build_graph_data(self, graph, min_z=None, max_z=None, strict_edges=True, helper_graph=None):
         """
         Builds a dictionary with the node data.
         """
+        if helper_graph is None:
+            helper_graph = graph
         print(f"Using strict edges: {strict_edges}")
         def in_range(centroid, min_z_, max_z_):
             if min_z_ is not None and centroid[1] < min_z_:
@@ -1575,14 +1577,14 @@ class EvolutionaryGraphEdgesSelection():
                     to_add = False
                 elif not in_range(centroid1, min_z, max_z):
                     # assign known k to initial component for evolutionary algorithm
-                    if "assigned_k" in graph.nodes[node1]:
-                        initial_component[self.nodes_index_dict[node1]] = graph.nodes[node1]["assigned_k"]
+                    if "assigned_k" in helper_graph.nodes[node1]:
+                        initial_component[self.nodes_index_dict[node1]] = helper_graph.nodes[node1]["assigned_k"]
                     else:
                         to_add = False
                 elif not in_range(centroid2, min_z, max_z):
                     # assign known k to initial component for evolutionary algorithm
-                    if "assigned_k" in graph.nodes[node2]:
-                        initial_component[self.nodes_index_dict[node2]] = graph.nodes[node2]["assigned_k"]
+                    if "assigned_k" in helper_graph.nodes[node2]:
+                        initial_component[self.nodes_index_dict[node2]] = helper_graph.nodes[node2]["assigned_k"]
                     else:
                         to_add = False
             if strict_edges and ((not in_range(centroid1, min_z, max_z)) or (not in_range(centroid2, min_z, max_z))):
@@ -1590,12 +1592,12 @@ class EvolutionaryGraphEdgesSelection():
             if not to_add:
                 continue
             k = graph.get_edge_k(node1, node2)
-            if "assigned_k" in graph.nodes[node1]:
-                assigned_k1 = graph.nodes[node1]["assigned_k"]
+            if "assigned_k" in helper_graph.nodes[node1]:
+                assigned_k1 = helper_graph.nodes[node1]["assigned_k"]
             else:
                 assigned_k1 = 0
-            if "assigned_k" in graph.nodes[node2]:
-                assigned_k2 = graph.nodes[node2]["assigned_k"]
+            if "assigned_k" in helper_graph.nodes[node2]:
+                assigned_k2 = helper_graph.nodes[node2]["assigned_k"]
             else:
                 assigned_k2 = 0
             certainty = graph.edges[edge]['certainty']
@@ -1636,7 +1638,7 @@ class EvolutionaryGraphEdgesSelection():
         with tqdm(total=2 + (graph_centroids_max - graph_centroids_min) // z_height_steps, desc="Evolving valid graph") as pbar:
             for graph_extraction_start in range(graph_centroids_middle, graph_centroids_max, z_height_steps):
                 pbar.update(1)
-                self.edges_by_indices, _, initial_component = self.build_graph_data(self.graph, min_z=graph_extraction_start, max_z=graph_extraction_start+z_height_steps, strict_edges=True)
+                self.edges_by_indices, _, initial_component = self.build_graph_data(self.graph, min_z=graph_extraction_start, max_z=graph_extraction_start+z_height_steps, strict_edges=True, helper_graph=evolved_graph)
                 print(f"Graph nodes length {len(self.graph.nodes)}, edges length: {len(self.graph.edges)}")
                 print("Number of edges: ", len(self.edges_by_indices))
                 # Solve with genetic algorithm
@@ -1654,10 +1656,10 @@ class EvolutionaryGraphEdgesSelection():
                 # Filter PointCloud for max 1 patch per subvolume
                 evolved_graph = self.filter(evolved_graph_temp, graph=evolved_graph)
                 # Compute ks by simple bfs
-                self.update_ks(evolved_graph_temp, start_node=start_node, edges_by_indices=self.edges_by_indices, valid_mask=valid_mask)
+                self.update_ks(evolved_graph, start_node=start_node, edges_by_indices=self.edges_by_indices, valid_mask=valid_mask)
             for graph_extraction_start in range(graph_centroids_middle-z_height_steps, graph_centroids_min, -z_height_steps):
                 pbar.update(1)
-                self.edges_by_indices, _, initial_component = self.build_graph_data(self.graph, min_z=graph_extraction_start, max_z=graph_extraction_start+z_height_steps, strict_edges=True)
+                self.edges_by_indices, _, initial_component = self.build_graph_data(self.graph, min_z=graph_extraction_start, max_z=graph_extraction_start+z_height_steps, strict_edges=True, helper_graph=evolved_graph)
                 print(f"Graph nodes length {len(self.graph.nodes)}, edges length: {len(self.graph.edges)}")
                 print("Number of edges: ", len(self.edges_by_indices))
                 # Solve with genetic algorithm
@@ -1675,7 +1677,7 @@ class EvolutionaryGraphEdgesSelection():
                 # Filter PointCloud for max 1 patch per subvolume
                 evolved_graph = self.filter(evolved_graph_temp, graph=evolved_graph)
                 # Compute ks by simple bfs
-                self.update_ks(evolved_graph_temp, start_node=start_node, edges_by_indices=self.edges_by_indices, valid_mask=valid_mask)          
+                self.update_ks(evolved_graph, start_node=start_node, edges_by_indices=self.edges_by_indices, valid_mask=valid_mask)          
 
         # select largest connected component
         evolved_graph.largest_connected_component()
