@@ -121,7 +121,7 @@ def build_graph_from_individual(individual, graph_raw, factor_0, factor_not_0, r
     else:
         return valid_edges_count
 
-def build_graph_from_individual_patch(individual, graph_raw, return_valid_mask=False):
+def build_graph_from_individual_patch(individual, graph_raw, factor_0, factor_not_0, return_valid_mask=False):
     # Build a valid graph based on the weights for each edge represented by the individual. Every subvolume (node) can only be containing one patch
     # Sort the edges based on the weights
     sorted_edges_indices = np.argsort(individual)
@@ -162,7 +162,7 @@ def build_graph_from_individual_patch(individual, graph_raw, return_valid_mask=F
             visited_subvolumes_set.add((node2_subvolume, assigned_k2))
 
         # Calculate first part of fitness, subject to change in checks
-        k_factor = var_dict['factor_0'] if k == 0 else var_dict['factor_not_0']
+        k_factor = factor_0 if k == 0 else factor_not_0
 
         score_edge = k_factor * certainty
         valid_edges_count += score_edge
@@ -198,7 +198,7 @@ def build_graph_from_individual_patch(individual, graph_raw, return_valid_mask=F
     
 def evalItemsPatchSelection(individual):
     graph_raw = np.frombuffer(var_dict['graph'], dtype=np.int32).reshape(var_dict['graph_shape'])
-    valid_edges_count = build_graph_from_individual_patch(individual, graph_raw, return_valid_mask=False)
+    valid_edges_count = build_graph_from_individual_patch(individual, graph_raw, var_dict['factor_0'], var_dict['factor_not_0'], return_valid_mask=False)
     return (valid_edges_count,)
 
 # Define the fitness function

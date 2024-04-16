@@ -1893,32 +1893,46 @@ std::pair<py::array_t<int>, double> build_graph_from_individual_init(
     bool build_valid_edges
     )
 {
+    // Directly use the pointer to the data in the individual array
+    int* individual_cpp = static_cast<int*>(individual.request().ptr);
 
-    // auto individual_unchecked = individual.unchecked<1>(); // Access without bounds checking
-    // // Convert individual_cpp to a C++ array
-    // int* individual_cpp = new int[length_individual];
-    // for (size_t i = 0; i < length_individual; i++) {
-    //     individual_cpp[i] = individual_unchecked(i);
-    // }
+    // Directly use the pointer to the data in the edges array
+    int* edges_cpp = static_cast<int*>(edges.request().ptr);
 
-    // auto edges_unchecked = edges.unchecked<2>(); // Access without bounds checking
-    // // Convert edges_cpp to a C++ array
-    // int* edges_cpp = new int[length_edges*4];
-    // for (size_t i = 0; i < length_edges; i++) {
-    //     for (size_t j = 0; j < 4; j++) {
-    //         edges_cpp[i*length_edges + j] = edges_unchecked(i, j);
-    //     }
-    // }
+    // Directly use the pointer to the data in the initial_component array
+    int* initial_component_cpp = static_cast<int*>(initial_component.request().ptr);
 
-    // auto initial_component_unchecked = initial_component.unchecked<2>(); // Access without bounds checking
-    // // Convert initial_component_cpp to a C++ array
-    // int* initial_component_cpp = new int[legth_initial_component*2];
-    // for (size_t i = 0; i < legth_initial_component; i++) {
-    //     for (size_t j = 0; j < 2; j++) {
-    //         initial_component_cpp[i*legth_initial_component + j] = initial_component_unchecked(i, j);
-    //     }
-    // }
+    auto res = build_graph_from_individual(length_individual, individual_cpp, length_edges, edges_cpp, factor_0, factor_not_0, legth_initial_component, initial_component_cpp, build_valid_edges);
 
+    double valid_edges_count = res.first;
+    int* valid_edges = res.second;
+
+    // Convert the valid_edges_python to a NumPy array 1D
+    int fill_length = build_valid_edges ? length_edges : 1;
+
+    py::array_t<int64_t> valid_edges_python(py::array::ShapeContainer({static_cast<long int>(fill_length)}));
+    auto valid_edges_res = valid_edges_python.mutable_unchecked<1>(); // Now correctly a 3D array
+
+    for (size_t i = 0; i < fill_length; i++) {
+        valid_edges_res(i) = valid_edges[i];
+    }
+
+    return {valid_edges_python, valid_edges_count};
+}
+
+// Input is; Nodes Length, Initial DP (shape: (nodes_length, nodes_length, 64), type: bool)
+std::pair<py::array_t<int>, double> build_graph_from_individual_patch_init(
+    int length_individual,
+    py::array_t<int> individual,
+    int length_edges,
+    py::array_t<int> edges,
+    double factor_0,
+    double factor_not_0,
+    int legth_initial_component,
+    py::array_t<int> initial_component,
+    bool build_valid_edges
+    )
+{
     // Directly use the pointer to the data in the individual array
     int* individual_cpp = static_cast<int*>(individual.request().ptr);
 
@@ -1954,4 +1968,6 @@ PYBIND11_MODULE(sheet_generation, m) {
     m.def("graph_skeleton_filter", &skeletonFilterGraph, "Function to filter a Graph per DP skeleton in C++");
 
     m.def("build_graph_from_individual_cpp", &build_graph_from_individual_init, "Function to build graph from individual in C++");
+
+    m.def("build_graph_from_individual_patch_cpp", &build_graph_from_individual_patch_init, "Function to build graph from individual in C++");
 }
