@@ -1628,8 +1628,9 @@ class EvolutionaryGraphEdgesSelection():
             evolved_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask, evolved_graph)
             evolved_graph_temp = deepcopy(evolved_graph)
             # select largest connected component
-            largest_component = evolved_graph_temp.largest_connected_component(delete_nodes=True)
             if start_node is None:
+                start_node_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask)
+                largest_component = start_node_graph.largest_connected_component(delete_nodes=False)
                 start_node = largest_component[0]
             # Compute ks by simple bfs
             self.update_ks(evolved_graph_temp, start_node=start_node)

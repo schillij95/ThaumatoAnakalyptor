@@ -208,7 +208,9 @@ def evalItems(individual):
     # For example, sum of all values (just a placeholder)
     graph_raw = np.frombuffer(var_dict['graph'], dtype=np.int32).reshape(var_dict['graph_shape'])
     initial_component = np.frombuffer(var_dict['initial_component'], dtype=np.int32).reshape(var_dict['initial_component_shape'])
-    _, valid_edges_count = sheet_generation.build_graph_from_individual_cpp(int(individual.shape[0]), individual, int(graph_raw.shape[0]), graph_raw, var_dict['factor_0'], var_dict['factor_not_0'], int(initial_component.shape[0]), initial_component, False)
+    unused_cpp_array, valid_edges_count = sheet_generation.build_graph_from_individual_cpp(int(individual.shape[0]), individual, int(graph_raw.shape[0]), 
+    graph_raw, var_dict['factor_0'], var_dict['factor_not_0'], int(initial_component.shape[0]), initial_component, False)
+    del unused_cpp_array
     # valid_edges_count_gt = build_graph_from_individual(individual, graph_raw, var_dict['factor_0'], var_dict['factor_not_0'], initial_component)
     # if abs(valid_edges_count - valid_edges_count_gt) > 1e-5:
     #     print(f"Valid edges count: {valid_edges_count}, Valid edges count GT: {valid_edges_count_gt}")
