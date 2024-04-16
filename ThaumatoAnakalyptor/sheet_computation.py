@@ -1626,29 +1626,50 @@ class EvolutionaryGraphEdgesSelection():
         graph_centroids = np.array([self.graph.nodes[node]['centroid'] for node in self.graph.nodes])
         graph_centroids_min = int(np.floor(np.min(graph_centroids, axis=0))[1])
         graph_centroids_max = int(np.ceil(np.max(graph_centroids, axis=0))[1])
+        graph_centroids_middle = int(np.round(np.mean(graph_centroids, axis=0))[1])
         print(f"Graph centroids min: {np.floor(np.min(graph_centroids, axis=0))}, max: {np.ceil(np.max(graph_centroids, axis=0))}")
 
         evolved_graph = self.graph.naked_graph()
         start_node = None
-
-        for graph_extraction_start in range(graph_centroids_min, graph_centroids_max+1, z_height_steps):
-            self.edges_by_indices, _, initial_component = self.build_graph_data(self.graph, min_z=graph_extraction_start, max_z=graph_extraction_start+z_height_steps, strict_edges=(graph_extraction_start==graph_centroids_min))
-            print(f"Graph nodes length {len(self.graph.nodes)}, edges length: {len(self.graph.edges)}")
-            print("Number of edges: ", len(self.edges_by_indices))
-            # Solve with genetic algorithm
-            valid_mask, valid_edges_count = self.solve_call(self.edges_by_indices, initial_component=initial_component, problem='k_assignment')
-            # Build graph from edge selection
-            evolved_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask, evolved_graph)
-            evolved_graph_temp = deepcopy(evolved_graph)
-            # select largest connected component
-            largest_component = evolved_graph_temp.largest_connected_component(delete_nodes=False)
-            if start_node is None:
-                # start_node_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask)
-                start_node = largest_component[0]
-            # Compute ks by simple bfs
-            self.update_ks(evolved_graph_temp, start_node=start_node)
-            # Filter PointCloud for max 1 patch per subvolume
-            evolved_graph = self.filter(evolved_graph_temp, graph=evolved_graph)
+        with tqdm(total=2 + (graph_centroids_max - graph_centroids_min) // z_height_steps, desc="Evolving valid graph") as pbar:
+            for graph_extraction_start in range(graph_centroids_middle, graph_centroids_max, z_height_steps):
+                pbar.update(1)
+                self.edges_by_indices, _, initial_component = self.build_graph_data(self.graph, min_z=graph_extraction_start, max_z=graph_extraction_start+z_height_steps, strict_edges=(graph_extraction_start==graph_centroids_min), strict_edges=False)
+                print(f"Graph nodes length {len(self.graph.nodes)}, edges length: {len(self.graph.edges)}")
+                print("Number of edges: ", len(self.edges_by_indices))
+                # Solve with genetic algorithm
+                valid_mask, valid_edges_count = self.solve_call(self.edges_by_indices, initial_component=initial_component, problem='k_assignment')
+                # Build graph from edge selection
+                evolved_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask, evolved_graph)
+                evolved_graph_temp = deepcopy(evolved_graph)
+                # select largest connected component
+                largest_component = evolved_graph_temp.largest_connected_component(delete_nodes=False)
+                if start_node is None:
+                    # start_node_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask)
+                    start_node = largest_component[0]
+                # Compute ks by simple bfs
+                self.update_ks(evolved_graph_temp, start_node=start_node)
+                # Filter PointCloud for max 1 patch per subvolume
+                evolved_graph = self.filter(evolved_graph_temp, graph=evolved_graph)
+            for graph_extraction_start in range(graph_centroids_middle-z_height_steps, graph_centroids_min, -z_height_steps):
+                pbar.update(1)
+                self.edges_by_indices, _, initial_component = self.build_graph_data(self.graph, min_z=graph_extraction_start, max_z=graph_extraction_start+z_height_steps, strict_edges=(graph_extraction_start==graph_centroids_min), strict_edges=False)
+                print(f"Graph nodes length {len(self.graph.nodes)}, edges length: {len(self.graph.edges)}")
+                print("Number of edges: ", len(self.edges_by_indices))
+                # Solve with genetic algorithm
+                valid_mask, valid_edges_count = self.solve_call(self.edges_by_indices, initial_component=initial_component, problem='k_assignment')
+                # Build graph from edge selection
+                evolved_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask, evolved_graph)
+                evolved_graph_temp = deepcopy(evolved_graph)
+                # select largest connected component
+                largest_component = evolved_graph_temp.largest_connected_component(delete_nodes=False)
+                if start_node is None:
+                    # start_node_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask)
+                    start_node = largest_component[0]
+                # Compute ks by simple bfs
+                self.update_ks(evolved_graph_temp, start_node=start_node)
+                # Filter PointCloud for max 1 patch per subvolume
+                evolved_graph = self.filter(evolved_graph_temp, graph=evolved_graph)            
 
         # select largest connected component
         evolved_graph.largest_connected_component()

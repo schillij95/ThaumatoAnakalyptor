@@ -350,6 +350,7 @@ def solve(graph_edges, initial_component=None, problem='k_assignment'):
             # build_graph_from_individual(best_ind, graph_edges, return_valid_mask=True, initial_component=initial_component)
         else:
             # valid_mask, valid_edges_count = build_graph_from_individual_patch(best_ind, graph_edges, var_dict['factor_0'], var_dict['factor_not_0'], return_valid_mask=True)
+            print("Using C++ to build subvolume respecting graph from individual")
             valid_mask, valid_edges_count = sheet_generation.build_graph_from_individual_patch_cpp(int(best_ind.shape[0]), best_ind, int(graph_edges.shape[0]), graph_edges, var_dict['factor_0'], var_dict['factor_not_0'], True)
 
     return valid_mask, valid_edges_count
