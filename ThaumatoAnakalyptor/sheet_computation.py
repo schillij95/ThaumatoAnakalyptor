@@ -1642,7 +1642,7 @@ class EvolutionaryGraphEdgesSelection():
                 # Solve with genetic algorithm
                 valid_mask, valid_edges_count = self.solve_call(self.edges_by_indices, initial_component=initial_component, problem='k_assignment')
                 # Build graph from edge selection
-                evolved_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask, evolved_graph)
+                evolved_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask, evolved_graph, min_z=graph_extraction_start, max_z=graph_extraction_start+z_height_steps)
                 evolved_graph_temp = deepcopy(evolved_graph)
                 # select largest connected component
                 largest_component = evolved_graph_temp.largest_connected_component(delete_nodes=False)
@@ -1692,7 +1692,7 @@ class EvolutionaryGraphEdgesSelection():
         filtered_graph = self.graph_from_edge_selection(self.edges_by_subvolume_indices, graph_to_filter, valid_mask, graph=graph)
         return filtered_graph
 
-    def graph_from_edge_selection(self, edges_indices, input_graph, edges_mask, graph=None):
+    def graph_from_edge_selection(self, edges_indices, input_graph, edges_mask, graph=None, min_z=None, max_z=None):
         """
         Creates a graph from the DP table.
         """
@@ -1719,6 +1719,14 @@ class EvolutionaryGraphEdgesSelection():
                 node1 = nodes[node0_index]
                 node2 = nodes[node1_index]
                 certainty = input_graph.edges[(node1, node2)]['certainty']
+
+                centroid1 = input_graph.nodes[node1]['centroid']
+                centroid2 = input_graph.nodes[node2]['centroid']
+
+                if (min_z is not None) and ((centroid1[1] < min_z) or (centroid2[1] < min_z)):
+                    continue
+                if (max_z is not None) and ((centroid1[1] > max_z) or (centroid2[1] > max_z)):
+                    continue
 
                 assert certainty > 0.0, f"Invalid certainty: {certainty} for edge: {edge}"
                 graph.add_edge(node1, node2, certainty, k, False)

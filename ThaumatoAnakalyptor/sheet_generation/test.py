@@ -4,36 +4,36 @@ import unittest
 import build.sheet_generation as sg
 import random
 
-def bfs_ks(edges_indices, valid_mask):
-        # Use BFS to traverse the graph and compute the ks
-        if start_node is None:
-            start_node = list(graph.nodes)[0]
-        visited = {start_node: True}
-        queue = [start_node]
-        ks = {start_node: 0}
-        while queue:
-            node = queue.pop(0)
-            node_k = ks[node]
-            for edge in graph.nodes[node]['edges']:
-                if edge[0] == node:
-                    other_node = edge[1]
-                else:
-                    other_node = edge[0]
-                if other_node in visited:
-                    # Assert for correct k
-                    k = graph.get_edge_k(node, other_node)
-                    assert ks[other_node] == node_k + k, f"Invalid k: {ks[other_node]} != {node_k + k}"
-                    continue
-                visited[other_node] = True
+def bfs_ks(edges_indices, valid_mask_int):
+    valid_mask = valid_mask_int > 0
+    # Use BFS to traverse the graph and compute the ks
+    start_node = edges_indices[valid_mask][0, 0]
+    visited = {start_node: True}
+    queue = [start_node]
+    ks = {start_node: 0}
+    while queue:
+        node = queue.pop(0)
+        node_k = ks[node]
+        for edge in graph.nodes[node]['edges']:
+            if edge[0] == node:
+                other_node = edge[1]
+            else:
+                other_node = edge[0]
+            if other_node in visited:
+                # Assert for correct k
                 k = graph.get_edge_k(node, other_node)
-                ks[other_node] = node_k + k
-                queue.append(other_node)
+                assert ks[other_node] == node_k + k, f"Invalid k: {ks[other_node]} != {node_k + k}"
+                continue
+            visited[other_node] = True
+            k = graph.get_edge_k(node, other_node)
+            ks[other_node] = node_k + k
+            queue.append(other_node)
 
-        nodes = [node for node in visited]
-        ks = np.array([ks[node] for node in nodes]) # to numpy
-        ks = ks - np.min(ks) # 0 to max
+    nodes = [node for node in visited]
+    ks = np.array([ks[node] for node in nodes]) # to numpy
+    ks = ks - np.min(ks) # 0 to max
 
-        return nodes, ks
+    return nodes, ks
 
 class TestGraphK(unittest.TestCase):
     def random_graph(self):
