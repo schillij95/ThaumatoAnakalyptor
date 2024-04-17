@@ -1651,7 +1651,7 @@ class EvolutionaryGraphEdgesSelection():
 
         factor_0, factor_not_0 = calculate_fitness_k_factors(input)
         # easily switch between dummy and real computation
-        population_size = 500
+        population_size = 5000
         generations = 200
         if problem == 'k_assignment':
             valid_edges_count, valid_mask, solution_weights = evolve_graph.evolution_solve_k_assignment(population_size, generations, input.shape[0], input, factor_0, factor_not_0, initial_component.shape[0], initial_component)
