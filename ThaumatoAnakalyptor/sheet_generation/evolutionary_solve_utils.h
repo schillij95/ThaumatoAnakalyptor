@@ -526,7 +526,7 @@ public:
         
         for (int gen = 0; gen < generations; ++gen) {
             auto [best_fitness, mean_fitness] = evaluate();
-            std::cout << "Generation " << gen << " Best Fitness: " << best_fitness << " Mean Fitness: " << mean_fitness << " Best Individual: " << best_individual.fitness << std::endl;
+            std::cout << "Generation " << gen << " Best Fitness: " << (int)best_fitness << " Mean Fitness: " << (int)mean_fitness << " Best Individual: " << (int)best_individual.fitness << std::endl;
 
             std::vector<std::thread> threads;
             for (int i = 0; i < num_threads; ++i) {
