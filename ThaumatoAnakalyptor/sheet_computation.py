@@ -1656,7 +1656,7 @@ class EvolutionaryGraphEdgesSelection():
         if problem == 'k_assignment':
             valid_edges_count, valid_mask, solution_weights = evolve_graph.evolution_solve_k_assignment(population_size, generations, input.shape[0], input, factor_0, factor_not_0, initial_component.shape[0], initial_component)
         elif problem == 'patch_selection':
-            valid_edges_count, valid_mask, solution_weights = evolve_graph.evolution_solve_patch_selection(population_size, generations, input.shape[0], input, factor_0, factor_not_0)
+            valid_edges_count, valid_mask, solution_weights = evolve_graph.evolution_solve_patches(population_size, generations, input.shape[0], input, factor_0, factor_not_0)
 
         valid_mask = valid_mask > 0
         return valid_mask, valid_edges_count
