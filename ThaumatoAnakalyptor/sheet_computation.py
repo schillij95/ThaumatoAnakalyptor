@@ -1661,7 +1661,7 @@ class EvolutionaryGraphEdgesSelection():
         valid_mask = valid_mask > 0
         return valid_mask, valid_edges_count
 
-    def solve(self, z_height_steps=100):
+    def solve(self, z_height_steps=200):
         graph_centroids = np.array([self.graph.nodes[node]['centroid'] for node in self.graph.nodes])
         graph_centroids_min = int(np.floor(np.min(graph_centroids, axis=0))[1])
         graph_centroids_max = int(np.ceil(np.max(graph_centroids, axis=0))[1])
