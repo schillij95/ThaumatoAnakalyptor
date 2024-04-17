@@ -1734,21 +1734,11 @@ class EvolutionaryGraphEdgesSelection():
         """
         Creates a graph from the DP table.
         """
-        nodes = list(input_graph.nodes.keys())
-        print(f"nodes length: {len(nodes)}")
         if graph is None:
             graph = ScrollGraph(input_graph.overlapp_threshold, input_graph.umbilicus_path)
         # start block and patch id
         graph.start_block = input_graph.start_block
         graph.patch_id = input_graph.patch_id
-        # graph add nodes
-        nr_winding_angles = 0
-        for node in nodes:
-            if input_graph.nodes[node]['winding_angle'] is not None:
-                nr_winding_angles += 1
-            graph.add_node(node, input_graph.nodes[node]['centroid'], winding_angle=input_graph.nodes[node]['winding_angle'])
-        added_edges_count = 0
-        print(f"Number of winding angles: {nr_winding_angles} of {len(nodes)} nodes.")
 
         # Collect selected nodes
         selected_nodes = set()
@@ -1777,6 +1767,20 @@ class EvolutionaryGraphEdgesSelection():
                 selected_nodes.add(node2)
 
         selected_nodes = list(selected_nodes)
+        
+        # graph add nodes
+        nr_winding_angles = 0
+        nodes = list(input_graph.nodes.keys())
+        print(f"input nodes length: {len(nodes)} vs selected nodes length: {len(selected_nodes)}")
+        for node in selected_nodes:
+            if input_graph.nodes[node]['winding_angle'] is not None:
+                nr_winding_angles += 1
+            graph.add_node(node, input_graph.nodes[node]['centroid'], winding_angle=input_graph.nodes[node]['winding_angle'])
+            # Assign k
+            graph.nodes[node]['assigned_k'] = input_graph.nodes[node]['assigned_k']
+        added_edges_count = 0
+        print(f"Number of winding angles: {nr_winding_angles} of output {len(selected_nodes)} nodes.")
+
         start_node = selected_nodes[0]
         selected_nodes = selected_nodes[1:]
         k_start = input_graph.nodes[node1]['assigned_k']
