@@ -544,6 +544,7 @@ public:
             }
             std::swap(population, new_population);
         }
+        std::cout << std::endl;
         return best_individual;
     }
 };

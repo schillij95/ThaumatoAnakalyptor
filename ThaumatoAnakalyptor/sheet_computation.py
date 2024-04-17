@@ -49,6 +49,7 @@ def angle_between(v1, v2=np.array([1, 0])):
     v1_u = unit_vector(v1)
     v2_u = unit_vector(v2)
     angle = np.arctan2(v2_u[1], v2_u[0]) - np.arctan2(v1_u[1], v1_u[0])
+    assert angle is not None, "Angle is None."
     return angle
 
 def surrounding_volumes(volume_id, volume_size=50):
@@ -306,9 +307,11 @@ class Graph:
             raise KeyError(f"No edge found from {node1} to {node2}")
 
     def save_graph(self, path):
+        print(f"Saving graph to {path} ...")
         # Save graph class object to file
         with open(path, 'wb') as file:
             pickle.dump(self, file)
+        print(f"Graph saved to {path}")
 
 def score_same_block_patches(patch1, patch2, overlapp_threshold, umbilicus_distance):
     """
@@ -711,7 +714,7 @@ class ScrollGraph(Graph):
         graph = ScrollGraph(self.overlapp_threshold, self.umbilicus_path)
         # add all nodes
         for node in self.nodes:
-            graph.add_node(node, self.nodes[node]['centroid'])
+            graph.add_node(node, self.nodes[node]['centroid'], winding_angle=self.nodes[node]['winding_angle'])
         return graph
     
     def set_overlapp_threshold(self, overlapp_threshold):
@@ -1392,7 +1395,7 @@ class SkeletonGraphFilterDP():
         graph = ScrollGraph(self.graph.overlapp_threshold, self.graph.umbilicus_path)
         # graph add nodes
         for node in nodes:
-            graph.add_node(node, self.nodes[node]['centroid'])
+            graph.add_node(node, self.nodes[node]['centroid'], winding_angle=self.nodes[node]['winding_angle'])
         added_edges_count = 0
 
         # debug
@@ -1432,7 +1435,7 @@ class SkeletonGraphFilterDP():
         graph = ScrollGraph(self.graph.overlapp_threshold, self.graph.umbilicus_path)
         # graph add nodes
         for node in nodes:
-            graph.add_node(node, self.nodes[node]['centroid'])
+            graph.add_node(node, self.nodes[node]['centroid'], winding_angle=self.nodes[node]['winding_angle'])
         added_edges_count = 0
 
         # debug
@@ -1718,6 +1721,7 @@ class EvolutionaryGraphEdgesSelection():
         # select largest connected component
         evolved_graph.largest_connected_component()
         self.update_ks(evolved_graph, edges_by_indices=self.edges_by_indices, valid_mask=valid_mask)
+        print("Solved graph with genetic algorithm.")
         return evolved_graph
     
     def filter(self, graph_to_filter, min_z=None, max_z=None, graph=None):
