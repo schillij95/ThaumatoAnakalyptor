@@ -1769,7 +1769,9 @@ class EvolutionaryGraphEdgesSelection():
                     continue
 
                 assert certainty > 0.0, f"Invalid certainty: {certainty} for edge: {edge}"
-                
+                assert ('assigned_k' in input_graph.nodes[node1]) == ('assigned_k' in input_graph.nodes[node2]), f"Invalid assigned k: {input_graph.nodes[node1]} != {input_graph.nodes[node2]}"
+                if not ('assigned_k' in input_graph.nodes[node1]):
+                    continue
                 # Add selected nodes
                 selected_nodes.add(node1)
                 selected_nodes.add(node2)
