@@ -241,16 +241,16 @@ class Graph:
         """
         Remove nodes and their edges from the graph.
         """
-        for node in nodes:
-            # Delete Edges
-            for edge in list(self.edges.keys()):
-                if node in edge:
-                    del self.edges[edge]
+        for node in tqdm(nodes, desc="Removing nodes"):
             # Delete Node Edges
             node_edges = list(self.nodes[node]['edges'])
             for edge in node_edges:
                 node_ = edge[0] if edge[0] != node else edge[1]
-                self.nodes[node_]['edges'].remove(edge)
+                if node_ in self.nodes:
+                    self.nodes[node_]['edges'].remove(edge)
+                # Delete Edges
+                if edge in self.edges:
+                    del self.edges[edge]
             # Delete Node
             del self.nodes[node]
         # set length of nodes and edges
