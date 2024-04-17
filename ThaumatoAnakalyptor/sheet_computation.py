@@ -25,6 +25,7 @@ import sys
 ### C++ speed up. not yet fully implemented
 sys.path.append('ThaumatoAnakalyptor/sheet_generation/build')
 import sheet_generation
+import evolve_graph
 
 def unit_vector(vector):
     """ Returns the unit vector of the vector.  """
@@ -1620,13 +1621,43 @@ class EvolutionaryGraphEdgesSelection():
             initial_component = np.array(initial_component, dtype=np.int32)
         return edges_by_indices, edges_by_subvolume_indices, initial_component
     
-    def solve_call(self, input, initial_component=None, problem='k_assignment'):
+    def solve_call_(self, input, initial_component=None, problem='k_assignment'):
         input = input.astype(np.int32)
         if initial_component is None:
             initial_component = np.zeros((0,2), dtype=np.int32)
         initial_component = initial_component.astype(np.int32)
         # easily switch between dummy and real computation
         valid_mask, valid_edges_count = solve_genetic(input, initial_component=initial_component, problem=problem)
+        valid_mask = valid_mask > 0
+        return valid_mask, valid_edges_count
+    
+    def solve_call(self, input, initial_component=None, problem='k_assignment'):
+        input = input.astype(np.int32)
+        if initial_component is None:
+            initial_component = np.zeros((0,2), dtype=np.int32)
+        initial_component = initial_component.astype(np.int32)
+        def calculate_fitness_k_factors(graph):
+            # sum of k == 0 and sum of k != 0
+            assert np.sum(graph[:, 3] <= 0) == 0, "There should be no edges with k == 0"
+            graph_mask = graph[:, 2] == 0
+            k_0 = np.sum(graph[graph_mask, 3])
+            k_not_0 = np.sum(graph[~graph_mask, 3])
+            factor_0 = 1.00
+            factor_not_0 = k_0 / k_not_0
+            print(f"Factor 0: {factor_0}, Factor not 0: {factor_not_0} with k_0: {k_0} and k_not_0: {k_not_0}")
+            print(f"Maximum possible fitness: {2*k_0}")
+
+            return factor_0, factor_not_0
+
+        factor_0, factor_not_0 = calculate_fitness_k_factors(input)
+        # easily switch between dummy and real computation
+        population_size = 500
+        generations = 200
+        if problem == 'k_assignment':
+            valid_edges_count, valid_mask, solution_weights = evolve_graph.evolution_solve_k_assignment(population_size, generations, input.shape[0], input, factor_0, factor_not_0, initial_component.shape[0], initial_component)
+        elif problem == 'patch_selection':
+            valid_edges_count, valid_mask, solution_weights = evolve_graph.evolution_solve_patch_selection(population_size, generations, input.shape[0], input, factor_0, factor_not_0)
+
         valid_mask = valid_mask > 0
         return valid_mask, valid_edges_count
 
@@ -1929,8 +1960,8 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
     # min_z, max_zm umbilicus_max_distance = 900, 1000, 80
     # min_z, max_z, umbilicus_max_distance = None, None, None
     min_z, max_z, umbilicus_max_distance = None, None, 80
-    subgraph = scroll_graph.extract_subgraph(min_z=min_z, max_z=max_z, umbilicus_max_distance=umbilicus_max_distance, add_same_block_edges=True)
-    # subgraph = scroll_graph
+    # subgraph = scroll_graph.extract_subgraph(min_z=min_z, max_z=max_z, umbilicus_max_distance=umbilicus_max_distance, add_same_block_edges=True)
+    subgraph = scroll_graph
     # subgraph.create_dxf_with_colored_polyline(save_path.replace("blocks", "subgraph") + ".dxf", min_z=min_z, max_z=max_z)
     graph_filter = EvolutionaryGraphEdgesSelection(subgraph, save_path)
     evolved_graph = graph_filter.solve()
