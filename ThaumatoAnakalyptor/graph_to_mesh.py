@@ -229,6 +229,7 @@ class WalkToSheet():
         points = []
         normals = []
         colors = []
+        # TODO: multithread this loop
         for node in tqdm(self.graph.nodes, desc="Building points"):
             winding_angle = self.graph.nodes[node]['winding_angle']
             block, patch_id = node[:3], node[3]
@@ -272,9 +273,10 @@ class WalkToSheet():
         # Find pairs of points within the spatial threshold
         pairs = tree.query_pairs(r=spatial_threshold)
         
+        # TODO: multithread this loop
         # Identify indices to delete
         delete_indices = set()
-        for i, j in pairs:
+        for i, j in tqdm(pairs, desc="Filtering points from distance"):
             # Check if the difference in the fourth dimension exceeds the threshold
             if abs(points[i, 3] - points[j, 3]) > angle_threshold:
                 delete_indices.update([i, j])
@@ -300,8 +302,9 @@ class WalkToSheet():
         normals_list = []
         colors_list = []
 
+        # TODO: multithread this loop
         # filter points based on the largest connected component per winding
-        for angle_extraction in np.arange(min_wind, max_wind, 90):
+        for angle_extraction in tqdm(np.arange(min_wind, max_wind, 90), desc="Filtering points per winding"):
             indices = self.points_at_winding_angle(points, angle_extraction, max_angle_diff=90)
             points_ = points[indices]
             normals_ = normals[indices]
@@ -498,7 +501,7 @@ class WalkToSheet():
         
     def pointcloud_from_ordered_pointset(self, ordered_pointset, filename, color=None):
         points, normals = [], []
-        for point, normal in ordered_pointset:
+        for point, normal in tqdm(ordered_pointset, desc="Building pointcloud"):
             if point is not None:
                 points.append(point)
                 normals.append(normal)
@@ -569,7 +572,7 @@ class WalkToSheet():
         print(f"Number of rows: {num_rows}, number of columns: {num_cols}")
 
         # Generate triangles
-        for i in range(num_rows - 1):
+        for i in tqdm(range(num_rows - 1), desc="Generating triangles"):
             for j in range(num_cols - 1):
                 # Current point and the points to its right and below it
                 idx = i * num_cols + j
@@ -642,8 +645,8 @@ class WalkToSheet():
         points, normals, colors = self.build_points()
 
         # filter points
-        points, normals, colors = self.filter_points_multiple_occurrences(points, normals, colors)
-        points, normals, colors = self.filter_points_clustering(points, normals, colors)
+        # points, normals, colors = self.filter_points_multiple_occurrences(points, normals, colors)
+        # points, normals, colors = self.filter_points_clustering(points, normals, colors)
 
         # self.save_4D_ply(points, normals, os.path.join(self.save_path, "4D_points.ply"))
 
