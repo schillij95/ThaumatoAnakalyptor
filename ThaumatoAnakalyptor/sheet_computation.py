@@ -1651,7 +1651,7 @@ class EvolutionaryGraphEdgesSelection():
 
         factor_0, factor_not_0 = calculate_fitness_k_factors(input)
         # easily switch between dummy and real computation
-        population_size = 500
+        population_size = 50
         generations = 200
         if problem == 'k_assignment':
             valid_edges_count, valid_mask, solution_weights = evolve_graph.evolution_solve_k_assignment(population_size, generations, input.shape[0], input, factor_0, factor_not_0, initial_component.shape[0], initial_component)
@@ -1662,33 +1662,41 @@ class EvolutionaryGraphEdgesSelection():
         return valid_mask, valid_edges_count
     
     def solve_subloop(self, pbar, graph_extraction_start, z_height_steps, start_node, evolved_graph):
-        pbar.update(1)
+        # Extract subgraph data for evolutionary algorithm 
         self.edges_by_indices, _, initial_component = self.build_graph_data(self.graph, min_z=graph_extraction_start, max_z=graph_extraction_start+z_height_steps, strict_edges=False, helper_graph=evolved_graph)
         print(f"Graph nodes length {len(self.graph.nodes)}, edges length: {len(self.graph.edges)}")
         print("Number of edges: ", len(self.edges_by_indices))
         print("Initial component shape: ", initial_component.shape)
+
         # Solve with genetic algorithm
         valid_mask, valid_edges_count = self.solve_call(self.edges_by_indices, initial_component=initial_component, problem='k_assignment')
-        # Build graph from edge selection
+
+        # Build graph from genetic algorithm solution (selected edges from the graph)
         evolved_graph_temp = deepcopy(evolved_graph)
         evolved_graph_temp = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask, evolved_graph_temp)
-        # select largest connected component
+        # select largest connected component in solution
         largest_component = evolved_graph_temp.largest_connected_component(delete_nodes=False)
-        if start_node is None:
-            # start_node_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask)
-            start_node_temp = largest_component[0]
-        # Compute ks by simple bfs to filter based on ks and subvolume
-        self.update_ks(evolved_graph_temp, start_node=start_node_temp, edges_by_indices=self.edges_by_indices, valid_mask=valid_mask)
-        # Filter PointCloud for max 1 patch per subvolume
-        evolved_graph = self.filter(evolved_graph_temp, graph=evolved_graph, min_z=graph_extraction_start, max_z=graph_extraction_start+z_height_steps)
-        largest_component = evolved_graph.largest_connected_component(delete_nodes=False)
+
+        # Update start node for Breadth First Search.
         if start_node is None:
             # start_node_graph = self.graph_from_edge_selection(self.edges_by_indices, self.graph, valid_mask)
             start_node = largest_component[0]
-            start_node_temp = start_node
-        # Compute ks by simple bfs
+        
+        # Compute ks by simple bfs to filter based on ks and subvolume
+        self.update_ks(evolved_graph_temp, start_node=start_node, edges_by_indices=self.edges_by_indices, valid_mask=valid_mask)
+
+        # Filter PointCloud for max 1 patch per subvolume (again evolutionary algorithm)
+        evolved_graph = self.filter(evolved_graph_temp, graph=evolved_graph, min_z=graph_extraction_start, max_z=graph_extraction_start+z_height_steps)
+
+        # Extract largest connected component for filtered graph
+        largest_component = evolved_graph.largest_connected_component(delete_nodes=False)
+
+        # Compute final ks by simple bfs (for this subgraph)
         self.update_ks(evolved_graph, start_node=start_node, edges_by_indices=self.edges_by_indices, valid_mask=valid_mask)
-        return start_node, start_node_temp, evolved_graph, valid_mask
+
+        pbar.update(1)
+        
+        return start_node, evolved_graph, valid_mask
 
     def solve(self, z_height_steps=200):
         graph_centroids = np.array([self.graph.nodes[node]['centroid'] for node in self.graph.nodes])
@@ -1702,10 +1710,10 @@ class EvolutionaryGraphEdgesSelection():
         with tqdm(total=2 + (graph_centroids_max - graph_centroids_min) // z_height_steps, desc="Evolving valid graph") as pbar:
             for graph_extraction_start in range(graph_centroids_middle, graph_centroids_max, z_height_steps):
                 # Extract all the nodes and connections of them from one z height cutout in the graph
-                start_node, start_node_temp, evolved_graph, valid_mask = self.solve_subloop(pbar, graph_extraction_start, z_height_steps, start_node, evolved_graph)
+                start_node, evolved_graph, valid_mask = self.solve_subloop(pbar, graph_extraction_start, z_height_steps, start_node, evolved_graph)
             for graph_extraction_start in range(graph_centroids_middle-z_height_steps, graph_centroids_min, -z_height_steps):
                 # Extract all the nodes and connections of them from one z height cutout in the graph
-                start_node, start_node_temp, evolved_graph, valid_mask = self.solve_subloop(pbar, graph_extraction_start, z_height_steps, start_node, evolved_graph)
+                start_node, evolved_graph, valid_mask = self.solve_subloop(pbar, graph_extraction_start, z_height_steps, start_node, evolved_graph)
 
         # select largest connected component
         evolved_graph.largest_connected_component()
@@ -1718,9 +1726,69 @@ class EvolutionaryGraphEdgesSelection():
         _, self.edges_by_subvolume_indices, _ = self.build_graph_data(graph_to_filter, min_z=min_z, max_z=max_z, strict_edges=False)
         # Solve with genetic algorithm
         valid_mask, valid_edges_count = self.solve_call(self.edges_by_subvolume_indices, problem="patch_selection")
-        # Build graph from edge selection
-        filtered_graph = self.graph_from_edge_selection(self.edges_by_subvolume_indices, graph_to_filter, valid_mask, graph=graph)
+        # Build graph selected nodes. maintains connectivity from the unfiltered graph
+        filtered_graph = self.graph_from_node_selection(self.edges_by_subvolume_indices, graph_to_filter, valid_mask, graph=graph)
         return filtered_graph
+    
+    def graph_from_node_selection(self, edges_indices, input_graph, edges_mask, graph=None, min_z=None, max_z=None):
+        """
+        Creates a graph from the DP table.
+        """
+        nodes = list(input_graph.nodes.keys())
+        print(f"nodes length: {len(nodes)}")
+        if graph is None:
+            graph = ScrollGraph(input_graph.overlapp_threshold, input_graph.umbilicus_path)
+        # start block and patch id
+        graph.start_block = input_graph.start_block
+        graph.patch_id = input_graph.patch_id
+        # graph add nodes
+        nr_winding_angles = 0
+        for node in nodes:
+            if input_graph.nodes[node]['winding_angle'] is not None:
+                nr_winding_angles += 1
+            graph.add_node(node, input_graph.nodes[node]['centroid'], winding_angle=input_graph.nodes[node]['winding_angle'])
+        added_edges_count = 0
+        print(f"Number of winding angles: {nr_winding_angles} of {len(nodes)} nodes.")
+
+        # Collect selected nodes
+        selected_nodes = set()
+        for i in tqdm(range(len(edges_mask))):
+            if edges_mask[i]:
+                edge = edges_indices[i]
+                node0_index, node1_index, k = edge[:3]
+                node1 = self.index_nodes_dict[node0_index]
+                node2 = self.index_nodes_dict[node1_index]
+                certainty = input_graph.edges[(node1, node2)]['certainty']
+
+                centroid1 = input_graph.nodes[node1]['centroid']
+                centroid2 = input_graph.nodes[node2]['centroid']
+
+                if (min_z is not None) and ((centroid1[1] < min_z) or (centroid2[1] < min_z)):
+                    continue
+                if (max_z is not None) and ((centroid1[1] > max_z) or (centroid2[1] > max_z)):
+                    continue
+
+                assert certainty > 0.0, f"Invalid certainty: {certainty} for edge: {edge}"
+                
+                # Add selected nodes
+                selected_nodes.add(node1)
+                selected_nodes.add(node2)
+
+        selected_nodes = list(selected_nodes)
+        start_node = selected_nodes[0]
+        selected_nodes = selected_nodes[1:]
+        k_start = input_graph.nodes[node1]['assigned_k']
+        # Connect every selected node with the start node
+        for node in selected_nodes:
+            k_node = input_graph.nodes[node]['assigned_k']
+            k = k_node - k_start
+            graph.add_edge(start_node, node, 1.0, k, False)
+            added_edges_count += 1
+            
+        print(f"Added {added_edges_count} edges to the graph.")
+        graph.compute_node_edges()
+        print(f"Filtered graph created with {len(graph.nodes)} nodes and {len(graph.edges)} edges.")
+        return graph
 
     def graph_from_edge_selection(self, edges_indices, input_graph, edges_mask, graph=None, min_z=None, max_z=None):
         """
