@@ -278,11 +278,11 @@ class WalkToSheet():
             print(f"Color {i}: {colors[i]}")
 
         # Remove indices that are identical in the first three point dimensions
-        unique_indices = np.unique(points[:, :3], axis=0, return_index=True)[1]
-        print(f"Unique indices: {unique_indices.shape[0]}")
-        points = points[unique_indices]
-        normals = normals[unique_indices]
-        colors = colors[unique_indices]
+        # unique_indices = np.unique(points[:, :3], axis=0, return_index=True)[1]
+        # print(f"Unique indices: {unique_indices.shape[0]}")
+        # points = points[unique_indices]
+        # normals = normals[unique_indices]
+        # colors = colors[unique_indices]
 
         return points, normals, colors
     

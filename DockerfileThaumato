@@ -181,7 +181,7 @@ RUN /bin/bash -c "source youssefGP/bin/activate && \
     pip3 install -r https://raw.githubusercontent.com/younader/Vesuvius-Grandprize-Winner/940634f1fe3ffb9a585b733dda6c3dd234540b41/requirements.txt"
 
 # install libarchive for thaumato
-RUN apt-get update && apt-get install -y libarchive-dev libpcl-dev
+RUN apt-get update && apt-get install -y libarchive-dev
 
 # Copy scripts and modules
 COPY ./ThaumatoAnakalyptor/mask3d/ /workspace/ThaumatoAnakalyptor/mask3d/
