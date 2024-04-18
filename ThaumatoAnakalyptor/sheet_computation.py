@@ -1713,7 +1713,7 @@ class EvolutionaryGraphEdgesSelection():
         
         return start_node, evolved_graph, valid_mask
 
-    def solve(self, z_height_steps=50):
+    def solve(self, z_height_steps=200):
         graph_centroids = np.array([self.graph.nodes[node]['centroid'] for node in self.graph.nodes])
         graph_centroids_min = int(np.floor(np.min(graph_centroids, axis=0))[1])
         graph_centroids_max = int(np.ceil(np.max(graph_centroids, axis=0))[1])
