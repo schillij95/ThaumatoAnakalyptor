@@ -1593,25 +1593,24 @@ class EvolutionaryGraphEdgesSelection():
                         initial_component[self.nodes_index_dict[node2]] = int(helper_graph.nodes[node2]["assigned_k"])
                     else:
                         to_add = False
-            if strict_edges and ((not in_range(centroid1, min_z, max_z)) or (not in_range(centroid2, min_z, max_z))):
+            elif strict_edges and ((not in_range(centroid1, min_z, max_z)) or (not in_range(centroid2, min_z, max_z))):
                 to_add = False
             if not to_add:
                 continue
             k = graph.get_edge_k(node1, node2)
-            if "assigned_k" in helper_graph.nodes[node1]:
-                assigned_k1 = helper_graph.nodes[node1]["assigned_k"]
-            else:
-                assigned_k1 = 0
-            if "assigned_k" in helper_graph.nodes[node2]:
-                assigned_k2 = helper_graph.nodes[node2]["assigned_k"]
-            else:
-                assigned_k2 = 0
             certainty = graph.edges[edge]['certainty']
             assert certainty >= 0.0, f"Invalid certainty: {certainty} for edge: {edge}"
             if certainty > 0.0 and certainty != 1.0:
                 nonone_certainty_count += 1
             edges_by_indices.append((self.nodes_index_dict[node1], self.nodes_index_dict[node2], k, 1 + int(100*certainty)))
-            edges_by_subvolume_indices.append((self.nodes_index_dict[node1], self.nodes_index_dict[node2], k, 1 + int(100*certainty), node1[0], node1[1], node1[2], node2[0], node2[1], node2[2], assigned_k1, assigned_k2))
+
+            if ("assigned_k" in helper_graph.nodes[node1]) and ("assigned_k" in helper_graph.nodes[node2]):
+                assigned_k1 = helper_graph.nodes[node1]["assigned_k"]
+                assigned_k2 = helper_graph.nodes[node2]["assigned_k"]
+                if assigned_k2 - assigned_k1 == k:
+                    edges_by_subvolume_indices.append((self.nodes_index_dict[node1], self.nodes_index_dict[node2], k, 1 + int(100*certainty), node1[0], node1[1], node1[2], node2[0], node2[1], node2[2], assigned_k1, assigned_k2))
+                else:
+                    print(f"Assigned k mismatch: {assigned_k1}, {assigned_k2}, {k}")
         print(f"None one certainty edges: {nonone_certainty_count} out of {len(edges_by_indices)} edges.")
         
         edges_by_indices = np.array(edges_by_indices).astype(np.int32)
@@ -1655,8 +1654,14 @@ class EvolutionaryGraphEdgesSelection():
 
         factor_0, factor_not_0 = calculate_fitness_k_factors(input)
         # easily switch between dummy and real computation
-        population_size = 500 # 50 # 500
-        generations = 200 # 40 # 200
+        debug=True
+        if not debug:
+            population_size = 500
+            generations = 200
+        else:
+            population_size = 50 # 500
+            generations = 40 # 200
+
         if problem == 'k_assignment':
             valid_edges_count, valid_mask, solution_weights = evolve_graph.evolution_solve_k_assignment(population_size, generations, input.shape[0], input, factor_0, factor_not_0, initial_component.shape[0], initial_component)
         elif problem == 'patch_selection':
@@ -1689,7 +1694,7 @@ class EvolutionaryGraphEdgesSelection():
             start_node_temp = start_node
         
         # Compute ks by simple bfs to filter based on ks and subvolume
-        self.update_ks(evolved_graph_temp, start_node=start_node_temp, edges_by_indices=self.edges_by_indices, valid_mask=valid_mask)
+        self.update_ks(evolved_graph_temp, start_node=start_node_temp, edges_by_indices=self.edges_by_indices, valid_mask=valid_mask, update_winding_angles=False) # do not update winding angles since this would result in an inconsistent graph
 
         # Filter PointCloud for max 1 patch per subvolume (again evolutionary algorithm)
         evolved_graph = self.filter(evolved_graph_temp, graph=evolved_graph, min_z=graph_extraction_start, max_z=graph_extraction_start+z_height_steps)
@@ -1702,13 +1707,13 @@ class EvolutionaryGraphEdgesSelection():
             start_node = largest_component[0]
 
         # Compute final ks by simple bfs (for this subgraph)
-        self.update_ks(evolved_graph, start_node=start_node, edges_by_indices=self.edges_by_indices, valid_mask=valid_mask)
+        self.update_ks(evolved_graph, start_node=start_node, edges_by_indices=self.edges_by_indices, valid_mask=valid_mask, update_winding_angles=False) # do not update winding angles since this would result in an inconsistent graph
 
         pbar.update(1)
         
         return start_node, evolved_graph, valid_mask
 
-    def solve(self, z_height_steps=200):
+    def solve(self, z_height_steps=50):
         graph_centroids = np.array([self.graph.nodes[node]['centroid'] for node in self.graph.nodes])
         graph_centroids_min = int(np.floor(np.min(graph_centroids, axis=0))[1])
         graph_centroids_max = int(np.ceil(np.max(graph_centroids, axis=0))[1])
@@ -1732,7 +1737,7 @@ class EvolutionaryGraphEdgesSelection():
         print("Finishing up Graph Evolution...")
         # select largest connected component
         evolved_graph.largest_connected_component()
-        self.update_ks(evolved_graph, edges_by_indices=self.edges_by_indices, valid_mask=valid_mask)
+        self.update_ks(evolved_graph, edges_by_indices=self.edges_by_indices, valid_mask=valid_mask, update_winding_angles=True) # update winding angles here at the very end (only once)
         print("Solved graph with genetic algorithm.")
         return evolved_graph
     
@@ -1835,15 +1840,16 @@ class EvolutionaryGraphEdgesSelection():
         for i in tqdm(range(len(edges_mask))):
             if edges_mask[i]:
                 edge = edges_indices[i]
-                node0_index, node1_index, k = edge[:3]
+                node0_index, node1_index = edge[:2]
                 node1 = self.index_nodes_dict[node0_index]
                 node2 = self.index_nodes_dict[node1_index]
+                k = input_graph.get_edge_k(node1, node2)
                 certainty = input_graph.edges[(node1, node2)]['certainty']
 
                 centroid1 = input_graph.nodes[node1]['centroid']
                 centroid2 = input_graph.nodes[node2]['centroid']
 
-                if (min_z is not None) and ((centroid1[1] < min_z) or (centroid2[1] < min_z)):
+                if (min_z is not None) and ((centroid1[1] <= min_z) or (centroid2[1] <= min_z)):
                     continue
                 if (max_z is not None) and ((centroid1[1] > max_z) or (centroid2[1] > max_z)):
                     continue
@@ -1857,12 +1863,12 @@ class EvolutionaryGraphEdgesSelection():
         print(f"Filtered graph created with {len(graph.nodes)} nodes and {len(graph.edges)} edges.")
         return graph
     
-    def update_ks(self, graph, start_node=None, edges_by_indices=None, valid_mask=None):
+    def update_ks(self, graph, start_node=None, edges_by_indices=None, valid_mask=None, update_winding_angles=False):
         condition = self.bfs_ks_indices(edges_by_indices, valid_mask_int=valid_mask)
         # Compute nodes, ks
         nodes, ks = self.bfs_ks(graph, start_node=start_node)
         # Update the ks for the extracted nodes
-        self.update_winding_angles(graph, nodes, ks)
+        self.update_winding_angles(graph, nodes, ks, update_winding_angles=update_winding_angles)
 
     def bfs_ks(self, graph, start_node=None):
         # Use BFS to traverse the graph and compute the ks
@@ -1876,6 +1882,9 @@ class EvolutionaryGraphEdgesSelection():
             node = queue.pop(0)
             node_k = ks[node]
             for edge in graph.nodes[node]['edges']:
+                if edge[0] == edge[1]:
+                    print(f"Self edge: {edge}, strange ... ?")
+                    continue
                 if edge[0] == node:
                     other_node = edge[1]
                 else:
@@ -1939,11 +1948,12 @@ class EvolutionaryGraphEdgesSelection():
                 queue.append(other_node)
         return True
     
-    def update_winding_angles(self, graph, nodes, ks):
+    def update_winding_angles(self, graph, nodes, ks, update_winding_angles=False):
         # Update winding angles
         for i, node in enumerate(nodes):
-            graph.nodes[node]['winding_angle'] = - ks[i]*360 + graph.nodes[node]['winding_angle']
             graph.nodes[node]['assigned_k'] = ks[i]
+            if update_winding_angles:
+                graph.nodes[node]['winding_angle'] = - ks[i]*360 + graph.nodes[node]['winding_angle']
 
 class WalkToSheet():
     def __init__(self, graph, nodes, ks, path, save_path, overlapp_threshold):

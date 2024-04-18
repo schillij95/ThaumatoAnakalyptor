@@ -364,7 +364,7 @@ class WalkToSheet():
     def points_at_angle(self, points, normals, z_positions, angle, max_eucledian_distance=20):
         angle_360 = (angle + int(1 + angle//360) * 360) % 360
         angle_vector = np.array([np.cos(np.radians(angle_360)), 0.0, -np.sin(np.radians(angle_360))])
-        angle_between_control = angle_between(angle_vector[[0,2]])
+        # angle_between_control = angle_between(angle_vector[[0,2]])
         # assert np.isclose((angle + int(1 + angle//360) * 360) % 360, (angle_between_control + int(1 + angle_between_control//360) * 360) % 360), f"Angle {angle} ({(angle + int(1 + angle//360) * 360) % 360}) and angle_between_control {angle_between_control} ({(angle_between_control + int(1 + angle_between_control//360) * 360)}) are not close enough."
 
         # umbilicus position
@@ -465,10 +465,10 @@ class WalkToSheet():
         test_pointset_ply_path = os.path.join(self.save_path, "ordered_pointset_test.ply")
         self.pointcloud_from_ordered_pointset(ordered_pointsets_test, test_pointset_ply_path, color=colors_test)
 
-
+        # TODO: multithread this loop
         # iterate through winding angles
         for winding_angle in tqdm(np.arange(min_wind, max_wind, 2), desc="Winding angles"):
-            extracted_points_indices = self.points_at_winding_angle(points, winding_angle)
+            extracted_points_indices = self.points_at_winding_angle(points, winding_angle) # TODO: optimize this function by first sorting by the winding angle
             extracted_points = points[extracted_points_indices]
             extracted_normals = normals[extracted_points_indices]
 

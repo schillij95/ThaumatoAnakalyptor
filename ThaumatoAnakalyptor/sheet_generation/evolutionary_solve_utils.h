@@ -39,14 +39,14 @@ public:
         int total_weight = path_weight;
 
         // // Path compression
-        // while (p != root) {
-        //     int next = parent[p];
-        //     parent[p] = root;
-        //     int total_weight_ = total_weight - weight[p];  // Update total weight
-        //     weight[p] = total_weight;  // Set the new weight to reflect total path weight
-        //     total_weight = total_weight_;  // Update total weight for next iteration
-        //     p = next;
-        // }
+        while (p != root) {
+            int next = parent[p];
+            parent[p] = root;
+            int total_weight_ = total_weight - weight[p];  // Update total weight delayed
+            weight[p] = total_weight;  // Set the new weight to reflect total path weight
+            total_weight = total_weight_;  // Update total weight for next iteration
+            p = next;
+        }
 
         return root;
     }
@@ -176,7 +176,7 @@ std::pair<double, int*> build_graph_from_individual(int length_individual, float
         int connection_weight;
         
         valid_edges_count += score_edge;
-        if (!(uf.connected(node1, node2, connection_weight))) {
+        if (!(uf.connected(node1, node2, connection_weight))) { // if not connected we can unconditionally add the edge
             // std::cout << "Merging components: " << node1 << " " << node2 << " " << k << std::endl;
             add_node_to_component(uf, node1, node2, k);
             int connection_weight1;
@@ -544,7 +544,7 @@ public:
             }
             std::swap(population, new_population);
         }
-        std::cout << std::endl;
+        std::cout << std::endl << "Evolution completed!" << std::endl;
         return best_individual;
     }
 };
