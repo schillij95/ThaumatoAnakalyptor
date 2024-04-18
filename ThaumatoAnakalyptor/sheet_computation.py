@@ -1654,7 +1654,7 @@ class EvolutionaryGraphEdgesSelection():
 
         factor_0, factor_not_0 = calculate_fitness_k_factors(input)
         # easily switch between dummy and real computation
-        debug=True
+        debug=False
         if not debug:
             population_size = 500
             generations = 200
