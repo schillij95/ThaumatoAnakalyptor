@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.4)
+cmake_minimum_required(VERSION 3.5)
 project(sheet_generation)
 
 # Set the build type if it's not already set
@@ -14,12 +14,19 @@ add_subdirectory(yaml-cpp)
 
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 find_package(Threads REQUIRED)  # Find the threading library
+find_package(LibArchive REQUIRED)
+
+
+# Include directories for external libraries and headers
+include_directories(${LibArchive_INCLUDE_DIRS})
 
 pybind11_add_module(sheet_generation solver.cpp)
 pybind11_add_module(evolve_graph evolutionary_solve.cpp)
+pybind11_add_module(pointcloud_processing pointcloud_processing.cpp)
 # Link YAML-CPP library
 target_link_libraries(sheet_generation PRIVATE yaml-cpp Eigen3::Eigen ${CMAKE_THREAD_LIBS_INIT})
 target_link_libraries(evolve_graph PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(pointcloud_processing PRIVATE ${CMAKE_THREAD_LIBS_INIT} ${LibArchive_LIBRARIES})
 
 # add_executable(evolutionary_solve evolutionary_solve.cpp)  # Include the main entry point and source files
 # target_link_libraries(evolutionary_solve PRIVATE yaml-cpp Eigen3::Eigen ${CMAKE_THREAD_LIBS_INIT})  # Link pthread and other libraries

@@ -9,6 +9,8 @@ from scipy.interpolate import interp1d
 import hdbscan
 from scipy.spatial import cKDTree
 from plyfile import PlyData, PlyElement
+import concurrent.futures
+import time
 
 # Custom imports
 from .instances_to_sheets import select_points
@@ -18,6 +20,10 @@ from .sheet_computation import load_graph, ScrollGraph
 # import colormap from matplotlib
 import matplotlib.pyplot as plt
 import matplotlib
+
+import sys
+sys.path.append('ThaumatoAnakalyptor/sheet_generation/build')
+import pointcloud_processing
 
 def normals_to_skew_symmetric_batch(normals):
     """
@@ -157,21 +163,6 @@ def load_ply(ply_file_path):
     normals = np.asarray(pcd.normals)
     colors = np.asarray(pcd.colors)
 
-    # Derive metadata file path from .ply file path
-    base_filename_without_extension = os.path.splitext(os.path.basename(ply_file_path))[0]
-    metadata_file_path = os.path.join(os.path.dirname(ply_file_path), f"metadata_{base_filename_without_extension}.json")
-
-    # Initialize metadata-related variables
-    coeff, n, score, distance = None, None, None, None
-
-    if os.path.isfile(metadata_file_path):
-        with open(metadata_file_path, 'r') as metafile:
-            metadata = json.load(metafile)
-            coeff = np.array(metadata['coeff']) if 'coeff' in metadata and metadata['coeff'] is not None else None
-            n = int(metadata['n']) if 'n' in metadata and metadata['n'] is not None else None
-            score = metadata.get('score')
-            distance = metadata.get('distance')
-
     return points, normals, colors
 
 def build_patch(winding_angle, subvolume_size, path, sample_ratio=1.0, align_and_flip_normals=False):
@@ -191,31 +182,69 @@ def build_patch(winding_angle, subvolume_size, path, sample_ratio=1.0, align_and
     
     return patch_points, patch_normals, patch_color
 
-def build_patch_tar(main_sheet_patch, subvolume_size, path, sample_ratio=1.0):
+# def build_patch_tar(main_sheet_patch, subvolume_size, path, sample_ratio=1.0):
+#     """
+#     Load surface patch from overlapping subvolumes instances predictions.
+#     """
+
+#     # Standardize subvolume_size to a NumPy array
+#     subvolume_size = np.atleast_1d(subvolume_size).astype(int)
+#     if subvolume_size.shape[0] == 1:
+#         subvolume_size = np.repeat(subvolume_size, 3)
+
+#     xyz, patch_nr, winding_angle = main_sheet_patch
+#     file = path + f"/{xyz[0]:06}_{xyz[1]:06}_{xyz[2]:06}"
+#     tar_filename = f"{file}.tar"
+
+#     if os.path.isfile(tar_filename):
+#         with tarfile.open(tar_filename, 'r') as archive, tempfile.TemporaryDirectory() as temp_dir:
+#             # Extract all .ply files at once
+#             archive.extractall(path=temp_dir, members=archive.getmembers())
+
+#             ply_file = f"surface_{patch_nr}.ply"
+#             ply_file_path = os.path.join(temp_dir, ply_file)
+#             ids = tuple([*map(int, tar_filename.split(".")[-2].split("/")[-1].split("_"))]+[int(ply_file.split(".")[-2].split("_")[-1])])
+#             ids = (int(ids[0]), int(ids[1]), int(ids[2]), int(ids[3]))
+#             res = build_patch(winding_angle, tuple(subvolume_size), ply_file_path, sample_ratio=float(sample_ratio))
+#             return res
+
+def build_patch_tar(main_sheet_patch, path, sample_ratio=1.0):
     """
     Load surface patch from overlapping subvolumes instances predictions.
     """
-
-    # Standardize subvolume_size to a NumPy array
-    subvolume_size = np.atleast_1d(subvolume_size).astype(int)
-    if subvolume_size.shape[0] == 1:
-        subvolume_size = np.repeat(subvolume_size, 3)
-
     xyz, patch_nr, winding_angle = main_sheet_patch
-    file = path + f"/{xyz[0]:06}_{xyz[1]:06}_{xyz[2]:06}"
+    file = os.path.join(path, f"{xyz[0]:06}_{xyz[1]:06}_{xyz[2]:06}")
     tar_filename = f"{file}.tar"
 
     if os.path.isfile(tar_filename):
-        with tarfile.open(tar_filename, 'r') as archive, tempfile.TemporaryDirectory() as temp_dir:
-            # Extract all .ply files at once
-            archive.extractall(path=temp_dir, members=archive.getmembers())
+        with tarfile.open(tar_filename, 'r') as archive:
+            ply_file_name = f"surface_{patch_nr}.ply"
+            member = archive.getmember(ply_file_name)
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # Extract .ply file to temporary directory
+                archive.extract(member, path=temp_dir)
+                ply_file_path = os.path.join(temp_dir, member.name)
+                # Load the point cloud data from the extracted file
+                pcd = o3d.io.read_point_cloud(ply_file_path)
+                points = np.asarray(pcd.points)
+                normals = np.asarray(pcd.normals)
+                colors = np.asarray(pcd.colors)
 
-            ply_file = f"surface_{patch_nr}.ply"
-            ply_file_path = os.path.join(temp_dir, ply_file)
-            ids = tuple([*map(int, tar_filename.split(".")[-2].split("/")[-1].split("_"))]+[int(ply_file.split(".")[-2].split("_")[-1])])
-            ids = (int(ids[0]), int(ids[1]), int(ids[2]), int(ids[3]))
-            res = build_patch(winding_angle, tuple(subvolume_size), ply_file_path, sample_ratio=float(sample_ratio))
-            return res
+                # Process loaded data
+                patch_points, patch_normals, patch_color, _ = select_points(
+                    points, normals, colors, colors, sample_ratio
+                )
+
+                # Add winding angle as 4th dimension to points
+                patch_points = np.hstack((patch_points, np.ones((patch_points.shape[0], 1)) * winding_angle))
+                
+                return patch_points, patch_normals, patch_color
+    else:
+        raise FileNotFoundError(f"File {tar_filename} not found.")
+    
+def build_patch_tar_cpp(patch_info, path, sample_ratio):
+        # Wrapper for C++ function
+        return pointcloud_processing.load_pointclouds([patch_info], path)
 
 class WalkToSheet():
     def __init__(self, graph, path):
@@ -229,19 +258,24 @@ class WalkToSheet():
         points = []
         normals = []
         colors = []
-        # TODO: multithread this loop
+
+        sheet_infos = []
         for node in tqdm(self.graph.nodes, desc="Building points"):
             winding_angle = self.graph.nodes[node]['winding_angle']
             block, patch_id = node[:3], node[3]
             patch_sheet_patch_info = (block, int(patch_id), winding_angle)
-            patch_points, patch_normals, patch_color = build_patch_tar(patch_sheet_patch_info, (50, 50, 50), self.path, sample_ratio=1.0)
-            points.append(patch_points)
-            normals.append(patch_normals)
-            colors.append(patch_color)
-        
-        points = np.concatenate(points, axis=0)
-        normals = np.concatenate(normals, axis=0)
-        colors = np.concatenate(colors, axis=0)
+            sheet_infos.append(patch_sheet_patch_info)
+
+        time_start = time.time()
+        points, normals, colors = pointcloud_processing.load_pointclouds(sheet_infos, self.path)
+        print(f"Time to load pointclouds: {time.time() - time_start}")
+        print(f"Shape of patch_points: {np.array(points).shape}")
+
+        # print first 5 points
+        for i in range(5):
+            print(f"Point {i}: {points[i]}")
+            print(f"Normal {i}: {normals[i]}")
+            print(f"Color {i}: {colors[i]}")
 
         # Remove indices that are identical in the first three point dimensions
         unique_indices = np.unique(points[:, :3], axis=0, return_index=True)[1]
@@ -453,7 +487,7 @@ class WalkToSheet():
         ordered_pointsets = []
 
         # test
-        test_angle = -2090
+        test_angle = -5000
         extracted_points_indices = self.points_at_winding_angle(points, test_angle, max_angle_diff=180)
         points_test = points[extracted_points_indices]
         colors_test = points_test[:,3]
