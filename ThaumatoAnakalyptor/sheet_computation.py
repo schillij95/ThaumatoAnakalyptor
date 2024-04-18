@@ -1804,7 +1804,7 @@ class EvolutionaryGraphEdgesSelection():
 
         start_node = selected_nodes[0]
         selected_nodes = selected_nodes[1:]
-        k_start = input_graph.nodes[node1]['assigned_k']
+        k_start = input_graph.nodes[start_node]['assigned_k']
         # Connect every selected node with the start node
         for node in selected_nodes:
             k_node = input_graph.nodes[node]['assigned_k']
