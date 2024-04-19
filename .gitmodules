@@ -8,3 +8,6 @@
 	path = Vesuvius-Grandprize-Winner
 	url = https://github.com/younader/Vesuvius-Grandprize-Winner
 	branch = Julian-updated-inference-paths
+[submodule "ThaumatoAnakalyptor/sheet_generation/hdbscan-cpp"]
+	path = ThaumatoAnakalyptor/sheet_generation/hdbscan-cpp
+	url = https://github.com/rohanmohapatra/hdbscan-cpp

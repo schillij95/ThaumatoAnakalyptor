@@ -15,6 +15,7 @@ add_subdirectory(yaml-cpp)
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 find_package(Threads REQUIRED)  # Find the threading library
 find_package(LibArchive REQUIRED)
+find_package(TBB REQUIRED)
 
 
 # Include directories for external libraries and headers
@@ -26,7 +27,7 @@ pybind11_add_module(pointcloud_processing pointcloud_processing.cpp)
 # Link YAML-CPP library
 target_link_libraries(sheet_generation PRIVATE yaml-cpp Eigen3::Eigen ${CMAKE_THREAD_LIBS_INIT})
 target_link_libraries(evolve_graph PRIVATE ${CMAKE_THREAD_LIBS_INIT})
-target_link_libraries(pointcloud_processing PRIVATE ${CMAKE_THREAD_LIBS_INIT} ${LibArchive_LIBRARIES})
+target_link_libraries(pointcloud_processing PRIVATE ${CMAKE_THREAD_LIBS_INIT} ${LibArchive_LIBRARIES} TBB::tbb)
 
 # add_executable(evolutionary_solve evolutionary_solve.cpp)  # Include the main entry point and source files
 # target_link_libraries(evolutionary_solve PRIVATE yaml-cpp Eigen3::Eigen ${CMAKE_THREAD_LIBS_INIT})  # Link pthread and other libraries
