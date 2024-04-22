@@ -94,6 +94,25 @@ class Flatboi:
 
         return bnd, bnd_uv, uv
     
+    def ordered_ic(self):
+        uv = np.zeros((self.vertices.shape[0], 2), dtype=np.float64)
+        uvs = self.original_uvs.reshape((self.triangles.shape[0], self.triangles.shape[1], 2))
+        for t in range(self.triangles.shape[0]):
+            for v in range(self.triangles.shape[1]):
+                uv[self.triangles[t,v]] = uvs[t,v]
+
+        bnd = np.array([[0]])
+        bnd_uv = np.zeros((bnd.shape[0], 2), dtype=np.float64)
+        for i in range(bnd.shape[0]):
+            bnd_uv[i] = uv[bnd[i]]
+
+        arap = igl.ARAP(self.vertices, self.triangles, 2, bnd)
+        print("ARAP")
+        for i in range(3):
+            uv = arap.solve(bnd_uv, uv)
+
+        return np.zeros((0, 1), dtype=np.int32), np.zeros((0,2), dtype=np.float64), uv
+    
     def orient_uvs(self, vertices):
         # Rotate vertices and calculate the needed area
         vertices[:, 0] = 1.0 - vertices[:, 0]
@@ -134,6 +153,9 @@ class Flatboi:
             # generating harmonic boundary, boundary uvs, and uvs
             print("Using Harmonic Condition")
             bnd, bnd_uv, uv = self.harmonic_ic()
+        elif initial_condition == 'ordered':
+            print("Using Ordered Condition")
+            bnd, bnd_uv, uv = self.ordered_ic()
 
         # initializing SLIM with Symmetric Dirichlet Distortion Energy (isometric)
         slim = igl.SLIM(self.vertices, self.triangles, v_init=uv, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_SYMMETRIC_DIRICHLET, soft_penalty=0)

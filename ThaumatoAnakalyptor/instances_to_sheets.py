@@ -515,12 +515,12 @@ def select_points(points, normals, colors, angles, original_ratio):
     if len(indices[0]) == 0:
         indices = np.array([0])
     
-    points = points[indices]
-    normals = normals[indices]
-    colors = colors[indices]
-    angles = angles[indices]
+    points_ = points[indices]
+    normals_ = normals[indices]
+    colors_ = colors[indices]
+    angles_ = angles[indices]
     
-    return points, normals, colors, angles
+    return points_, normals_, colors_, angles_
 
 def add_overlapp_entries_to_patches_list(patches_list):
     for i in range(len(patches_list)):

@@ -11,11 +11,16 @@ from scipy.spatial import cKDTree
 from plyfile import PlyData, PlyElement
 import concurrent.futures
 import time
+import multiprocessing
+from multiprocessing import cpu_count, shared_memory, Process, Manager
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 # Custom imports
 from .instances_to_sheets import select_points
 from .sheet_to_mesh import umbilicus_xz_at_y
 from .sheet_computation import load_graph, ScrollGraph
+from .slim_uv import Flatboi, print_array_to_file
 
 # import colormap from matplotlib
 import matplotlib.pyplot as plt
@@ -24,6 +29,10 @@ import matplotlib
 import sys
 sys.path.append('ThaumatoAnakalyptor/sheet_generation/build')
 import pointcloud_processing
+
+from PIL import Image
+# This disables the decompression bomb protection in Pillow
+Image.MAX_IMAGE_PIXELS = None
 
 def normals_to_skew_symmetric_batch(normals):
     """
@@ -246,12 +255,117 @@ def build_patch_tar_cpp(patch_info, path, sample_ratio):
         # Wrapper for C++ function
         return pointcloud_processing.load_pointclouds([patch_info], path)
 
+def create_shared_array(input_array, shape, dtype, name="shared_points"):
+    array_size = np.prod(shape) * np.dtype(dtype).itemsize
+    try:
+        # Create a shared array
+        shm = shared_memory.SharedMemory(create=True, size=array_size, name=name)
+    except FileExistsError:
+        print(f"Shared memory with name {name} already exists.")
+        # Clean up the shared memory if it already exists
+        shm = shared_memory.SharedMemory(create=False, size=array_size, name=name)
+    except Exception as e:
+        print(f"Error creating shared memory: {e}")
+        raise e
+
+    arr = np.ndarray(shape, dtype=dtype, buffer=shm.buf)
+    # Fill array with input data
+    arr.fill(0)  # Initialize the array with zeros
+    arr[:] = input_array[:]
+    return arr, shm
+
+def attach_shared_array(shape, dtype, name="shared_points"):
+    while True:
+        try:
+            # Attach to an existing shared array
+            shm = shared_memory.SharedMemory(name=name, create=False)
+            arr = np.ndarray(shape, dtype=dtype, buffer=shm.buf)
+            assert arr.shape == shape, f"Expected shape {shape} but got {arr.shape}"
+            assert arr.dtype == dtype, f"Expected dtype {dtype} but got {arr.dtype}"
+            # print("Attached to shared memory")
+            # print(f"Memory state: size={shm.size}, name={shm.name}")
+            # print(f"Array details: shape={arr.shape}, dtype={arr.dtype}, strides={arr.strides}, offset={arr.__array_interface__['data'][0] - shm.buf.tobytes().find(arr.tobytes())}")
+
+            return arr, shm
+        except FileNotFoundError:
+            time.sleep(0.2)
+
+def worker_clustering(args):
+    angle_extraction, points_shape, dtype, max_single_dist, min_cluster_size = args
+    points, points_shm = attach_shared_array(points_shape, dtype, name="shared_points")
+    # print(points)
+    # print(f"Multithreading first and last angular value: {points[0, 3]}, {points[-1, 3]}")
+    mask, mask_shm = attach_shared_array((points_shape[0],), bool, name="shared_mask")
+
+    try:
+        if points[-1,3] < angle_extraction-90:
+            print(f"Angle {angle_extraction} is not in the range of the pointcloud. Breaking.")
+            return False
+
+        index_start = np.searchsorted(points[:,3], angle_extraction-90, side='right')
+        # print(f"Index start: {index_start}")
+        index_end = np.searchsorted(points[:,3], angle_extraction+90, side='left')
+        # print("Hi from inside loop. Shapes points: ", points.shape, "mask: ", mask.shape)
+        # print(f"Index end: {index_end}")
+        print(f"Processing angle {angle_extraction} with indices {index_start} to {index_end}")
+        if index_start == index_end:
+            print(f"No points found for angle {angle_extraction}")
+            return False
+        sub_points = points[index_start:index_end]
+        partial_mask = filter_points_clustering_half_windings(sub_points[:,:3], max_single_dist, min_cluster_size)
+        index_start_45 = np.searchsorted(points[:,3], angle_extraction-45, side='right')
+        index_end_45 = np.searchsorted(points[:,3], angle_extraction+45, side='left')
+        index_start_45_subpoints = np.searchsorted(sub_points[:,3], angle_extraction-45, side='right')
+        index_end_45_subpoints = np.searchsorted(sub_points[:,3], angle_extraction+45, side='left')
+        mask[index_start_45:index_end_45] = partial_mask[index_start_45_subpoints:index_end_45_subpoints]
+        print(f"MULTITHREADED: (mask: {np.sum(mask)}), Selected {np.sum(partial_mask[index_start_45_subpoints:index_end_45_subpoints])} points from {index_end_45_subpoints-index_start_45_subpoints} points at angle {angle_extraction} when filtering pointcloud with max_single_dist {max_single_dist} in single linkage agglomerative clustering")
+    except Exception as e:
+        print(f"Error in worker: {e}. Start {angle_extraction}")
+        print(f"Error in worker: {e}. Start {angle_extraction}")
+
+    print(f"Worker {angle_extraction} finished.")
+    
+    points_shm.close()
+    mask_shm.close()
+    del points_shm, mask_shm
+    print(f"Worker {angle_extraction} exited.")
+    return True
+
+def filter_points_clustering_half_windings(points, max_single_dist=20, min_cluster_size=8000):
+    """
+    Filter points based on the largest connected component.
+
+    Parameters:
+    points (np.ndarray): The point cloud data (Nx3).
+    normals (np.ndarray): The normals associated with the points (Nx3).
+    max_single_dist (float): The maximum single linkage distance to define connectivity.
+
+    Returns:
+    np.ndarray: Points and normals belonging to the largest connected component.
+    """
+
+    clusterer = hdbscan.HDBSCAN(min_cluster_size=2, min_samples=1, cluster_selection_epsilon=max_single_dist)
+    clusters = clusterer.fit_predict(points)
+
+    # find all clusters of size 10000 or more
+    cluster_labels, cluster_counts = np.unique(clusters, return_counts=True)
+    large_clusters = cluster_labels[cluster_counts >= min_cluster_size]
+    large_clusters = large_clusters[large_clusters != -1]
+
+    # filter points and normals based on the largest clusters
+    mask = np.isin(clusters, large_clusters)
+
+    print(f"Selected {np.sum(mask)} points from {len(points)} points when filtering pointcloud with max_single_dist {max_single_dist} in single linkage agglomerative clustering")
+
+    return mask
+
 class WalkToSheet():
     def __init__(self, graph, path):
         self.graph = graph
         self.path = path
         start_point = [3164, 3476, 3472]
         self.save_path = os.path.dirname(path) + f"/{start_point[0]}_{start_point[1]}_{start_point[2]}/" + path.split("/")[-1]
+        self.lock = threading.Lock()
 
     def build_points(self):
         # Building the pointcloud 4D (position) + 3D (Normal) + 3D (Color, randomness) representation of the graph
@@ -326,6 +440,76 @@ class WalkToSheet():
 
         print(f"Deleted {len(delete_indices)} points from {len(points)} (before filtering) points.")
         return filtered_points, filtered_normals, filtered_colors
+
+    def is_sorted(self, arr):
+        return np.all(np.diff(arr) >= 0)
+
+    def filter_points_clustering_multithreaded(self, points, normals, colors, max_single_dist=20, min_cluster_size=8000):
+        num_processes = cpu_count() // 2
+        print(f"Using {num_processes} processes for filtering points.")
+        print(f"Points are sorted: {self.is_sorted(points[:, 3])}")
+        shape = points.shape
+        dtype = points.dtype
+
+        shared_points, shm_points = create_shared_array(points, shape, dtype, name="shared_points")
+        print(f"Shared points are sorted: {self.is_sorted(shared_points[:, 3])}")
+        print(f"Shared points equal to points: {np.allclose(shared_points, points)}")
+        print(f"Sorted like: {shared_points[0]}, to {shared_points[-1]}")
+        mask = np.zeros((shape[0],), bool)
+        shared_mask, shm_mask = create_shared_array(mask, mask.shape, bool, name="shared_mask")
+        
+        processes = []
+        min_angle = int(np.floor(np.min(points[:, 3])))
+        max_angle = int(np.ceil(np.max(points[:, 3])))
+        print(f"Searchsorted middle index: {np.searchsorted(points[:,3], (min_angle + max_angle) / 2)}")
+        task_queue = []
+
+        for angle_extraction in range(min_angle, max_angle, 90):
+            task_queue.append(angle_extraction)
+
+        with ThreadPoolExecutor(max_workers=num_processes) as executor:
+            # Using a dictionary to identify which future is which
+            futur_list = [executor.submit(worker_clustering, (task, shape, dtype, max_single_dist, min_cluster_size)) for task in task_queue]
+            length = len(futur_list)
+            count = 0
+            for future in as_completed(futur_list):
+                count += 1
+                try:
+                    result = future.result()
+                except Exception as exc:
+                    print(f"{future} generated an exception: {exc}")
+                else:
+                    print(result, f"({count}/{length})")
+
+        # for i in range(num_processes):
+        #     # self.worker_clustering(task_queue, shape, dtype, max_single_dist, min_cluster_size)
+        #     p = Process(target=worker_clustering, args=(i, task_queue, shape, dtype, max_single_dist, min_cluster_size))
+        #     processes.append(p)
+        #     p.start()
+
+        # for i, p in enumerate(processes):
+        #     p.join()
+        #     print(f"Process {i} joined.")
+        print("All processes joined.")
+        print(f"sum of shared mask: {np.sum(shared_mask)}")
+
+        
+        selected_points = points[shared_mask]
+        selected_normals = normals[shared_mask]
+        selected_colors = colors[shared_mask]
+
+        unselected_points = points[~shared_mask]
+        unselected_normals = normals[~shared_mask]
+        unselected_colors = colors[~shared_mask]
+
+        print(f"ON END FILTERING: Selected {np.sum(shared_mask)} points from {len(points)} points when filtering pointcloud with max_single_dist {max_single_dist} in single linkage agglomerative clustering")
+        
+        shm_points.close()
+        shm_points.unlink()
+        shm_mask.close()
+        shm_mask.unlink()
+
+        return (selected_points, selected_normals, selected_colors), (unselected_points, unselected_normals, unselected_colors)
     
     def filter_points_clustering(self, points, normals, colors, max_single_dist=20, min_cluster_size=8000):
         winding_angles = points[:, 3]
@@ -339,10 +523,10 @@ class WalkToSheet():
         # TODO: multithread this loop
         # filter points based on the largest connected component per winding
         for angle_extraction in tqdm(np.arange(min_wind, max_wind, 90), desc="Filtering points per winding"):
-            indices = self.points_at_winding_angle(points, angle_extraction, max_angle_diff=90)
-            points_ = points[indices]
-            normals_ = normals[indices]
-            colors_ = colors[indices]
+            start_index, end_index = self.points_at_winding_angle(points, angle_extraction, max_angle_diff=90)
+            points_ = points[start_index:end_index]
+            normals_ = normals[start_index:end_index]
+            colors_ = colors[start_index:end_index]
 
             # filter points based on the largest connected component
             mask = self.filter_points_clustering_half_windings(points_[:,:3], max_single_dist=max_single_dist, min_cluster_size=min_cluster_size)
@@ -351,10 +535,10 @@ class WalkToSheet():
             normals_ = normals_[mask]
             colors_ = colors_[mask]
             # only get core part
-            indices = self.points_at_winding_angle(points_, angle_extraction, max_angle_diff=45)
-            points_ = points_[indices]
-            normals_ = normals_[indices]
-            colors_ = colors_[indices]
+            start_index, end_index = self.points_at_winding_angle(points_, angle_extraction, max_angle_diff=45)
+            points_ = points_[start_index:end_index]
+            normals_ = normals_[start_index:end_index]
+            colors_ = colors_[start_index:end_index]
 
             points_list.append(points_)
             normals_list.append(normals_)
@@ -365,35 +549,6 @@ class WalkToSheet():
         colors = np.concatenate(colors_list, axis=0)
 
         return points, normals, colors
-        
-
-    def filter_points_clustering_half_windings(self, points, max_single_dist=20, min_cluster_size=8000):
-        """
-        Filter points based on the largest connected component.
-
-        Parameters:
-        points (np.ndarray): The point cloud data (Nx3).
-        normals (np.ndarray): The normals associated with the points (Nx3).
-        max_single_dist (float): The maximum single linkage distance to define connectivity.
-
-        Returns:
-        np.ndarray: Points and normals belonging to the largest connected component.
-        """
-
-        clusterer = hdbscan.HDBSCAN(min_cluster_size=2, min_samples=1, cluster_selection_epsilon=max_single_dist)
-        clusters = clusterer.fit_predict(points)
-
-        # find all clusters of size 10000 or more
-        cluster_labels, cluster_counts = np.unique(clusters, return_counts=True)
-        large_clusters = cluster_labels[cluster_counts >= min_cluster_size]
-        large_clusters = large_clusters[large_clusters != -1]
-
-        # filter points and normals based on the largest clusters
-        mask = np.isin(clusters, large_clusters)
-
-        print(f"Selected {np.sum(mask)} points from {len(points)} points when filtering pointcloud with max_single_dist {max_single_dist} in single linkage agglomerative clustering")
-
-        return mask
 
     def points_at_angle(self, points, normals, z_positions, angle, max_eucledian_distance=20):
         angle_360 = (angle + int(1 + angle//360) * 360) % 360
@@ -411,9 +566,9 @@ class WalkToSheet():
         for z in z_positions:
             umbilicus_positions = umbilicus_func(z) # shape is 3
             # extract all points at most max_eucledian_distance from the line defined by the umbilicus_positions and the angle vector
-            distances = distances_points_to_line(points[:, :3], umbilicus_positions, angle_vector)
+            # distances = distances_points_to_line(points[:, :3], umbilicus_positions, angle_vector)
             distances2, points_on_line, t = closest_points_and_distances(points[:, :3], umbilicus_positions, angle_vector)
-            assert np.allclose(distances, distances2), f"Distance calculation is not correct: {distances} != {distances2}"
+            # assert np.allclose(distances, distances2), f"Distance calculation is not correct: {distances} != {distances2}"
             mask = distances2 < max_eucledian_distance
             t_valid_mask = t >= 0
             mask = np.logical_and(mask, np.logical_not(t_valid_mask))
@@ -464,9 +619,13 @@ class WalkToSheet():
         return interpolated_points, interpolated_normals, interpolated_t, angle_vector
 
     def points_at_winding_angle(self, points, winding_angle, max_angle_diff=30):
+        """
+        Assumes points are sorted by winding angle ascendingly
+        """
         # extract all points indices with winding angle within max_angle_diff of winding_angle
-        indices = np.where(np.abs(points[:, 3] - winding_angle) < max_angle_diff)
-        return indices
+        start_index = np.searchsorted(points[:, 3], winding_angle - max_angle_diff, side='left')
+        end_index = np.searchsorted(points[:, 3], winding_angle + max_angle_diff, side='right')
+        return start_index, end_index
 
     def rolled_ordered_pointset(self, points, normals):
         # umbilicus position
@@ -482,32 +641,63 @@ class WalkToSheet():
         min_z = np.min(points[:, 1])
         max_z = np.max(points[:, 1])
 
-        z_positions = np.arange(min_z, max_z, 2)
+        z_positions = np.arange(min_z, max_z, 10)
 
         ordered_pointsets = []
 
         # test
         test_angle = -5000
-        extracted_points_indices = self.points_at_winding_angle(points, test_angle, max_angle_diff=180)
-        points_test = points[extracted_points_indices]
+        start_index, end_index = self.points_at_winding_angle(points, test_angle, max_angle_diff=180)
+        points_test = points[start_index:end_index]
         colors_test = points_test[:,3]
         points_test = points_test[:,:3]
-        normals_test = normals[extracted_points_indices]
+        normals_test = normals[start_index:end_index]
         print(f"extracted {len(points_test)} points at {test_angle} degrees")
         # save as ply
         ordered_pointsets_test = [(points_test, normals_test)]
         test_pointset_ply_path = os.path.join(self.save_path, "ordered_pointset_test.ply")
-        self.pointcloud_from_ordered_pointset(ordered_pointsets_test, test_pointset_ply_path, color=colors_test)
+        try:
+            self.pointcloud_from_ordered_pointset(ordered_pointsets_test, test_pointset_ply_path, color=colors_test)
+        except:
+            print("Error saving test pointset")
 
-        # TODO: multithread this loop
-        # iterate through winding angles
-        for winding_angle in tqdm(np.arange(min_wind, max_wind, 2), desc="Winding angles"):
-            extracted_points_indices = self.points_at_winding_angle(points, winding_angle) # TODO: optimize this function by first sorting by the winding angle
-            extracted_points = points[extracted_points_indices]
-            extracted_normals = normals[extracted_points_indices]
+        angles_step = 6
+        # Array to store results in the order of their winding angles
+        num_angles = len(np.arange(min_wind, max_wind, angles_step))
+        ordered_pointsets = [None] * num_angles
 
-            res = self.points_at_angle(extracted_points, extracted_normals, z_positions, winding_angle, max_eucledian_distance=4)
-            ordered_pointsets.append(res)
+        # Define the task to be executed by each thread
+        def process_winding_angle(winding_angle):
+            start_index, end_index = self.points_at_winding_angle(points, winding_angle)
+            extracted_points = points[start_index:end_index]
+            extracted_normals = normals[start_index:end_index]
+
+            result = self.points_at_angle(extracted_points, extracted_normals, z_positions, winding_angle, max_eucledian_distance=4)
+            return result
+
+        # Using ThreadPoolExecutor to manage a pool of threads
+        with ThreadPoolExecutor() as executor:
+            # List to hold futures
+            future_to_index = {executor.submit(process_winding_angle, wa): idx for idx, wa in enumerate(np.arange(min_wind, max_wind, angles_step))}
+            
+            # Collect results as they complete, respecting submission order
+            for future in tqdm(as_completed(future_to_index), total=len(future_to_index), desc="Processing Winding Angles"):
+                index = future_to_index[future]
+                try:
+                    result = future.result()
+                    ordered_pointsets[index] = result
+                except Exception as e:
+                    print(f"Error processing index {index}: {e}")
+
+        # # TODO: multithread this loop
+        # # iterate through winding angles
+        # for winding_angle in tqdm(np.arange(min_wind, max_wind, angles_step), desc="Winding angles"):
+        #     start_index, end_index = self.points_at_winding_angle(points, winding_angle)
+        #     extracted_points = points[start_index:end_index]
+        #     extracted_normals = normals[start_index:end_index]
+
+        #     res = self.points_at_angle(extracted_points, extracted_normals, z_positions, winding_angle, max_eucledian_distance=4)
+        #     ordered_pointsets.append(res)
 
         ordered_pointsets_final = []
         # Interpolate None ordered_pointset from good neighbours, do it by t's on same z values
@@ -546,12 +736,15 @@ class WalkToSheet():
         points[:, :3] = scale_points(points[:, :3])
         # Rotate back to original axis
         points, normals = shuffling_points_axis(points, normals)
+        # invert normals (layer 0 in the papyrus, layer 64 on top and outside the papyrus, layer 32 surface layer (for 64 layer surface volume))
+        normals = -normals
 
         print(f"Saving {points.shape} points to {filename}")
 
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(points)
         pcd.normals = o3d.utility.Vector3dVector(normals)
+        
         if not color is None:
             # color is shape n, 1, go to rgb with hsv
             color = (color - np.min(color)) / (np.max(color) - np.min(color))
@@ -567,6 +760,27 @@ class WalkToSheet():
         # Save as a PLY file
         o3d.io.write_point_cloud(filename, pcd)
 
+    def ordered_pointset_from_pointcloud(self, filename, length_ordered_pointset):
+        # Load the point cloud data from the extracted file
+        pcd = o3d.io.read_point_cloud(filename)
+        points = np.asarray(pcd.points)
+        normals = np.asarray(pcd.normals)
+
+        axis_indices=[1, 2, 0]
+        points, normals = shuffling_points_axis(points, normals, axis_indices=axis_indices)
+        points[:, :3] = scale_points(points[:, :3], scale=0.25, axis_offset=125)
+        normals = -normals
+        # Rotate back to original axis
+
+        len_outside_pointset = len(points) // length_ordered_pointset
+
+        # Process loaded data
+        ordered_pointset = []
+        for i in range(0, len(points), len_outside_pointset):
+            ordered_pointset.append((points[i:i+len_outside_pointset], normals[i:i+len_outside_pointset]))
+
+        return ordered_pointset
+
     def mesh_from_ordered_pointset(self, ordered_pointsets):
         """
         Creates a mesh from an ordered list of point sets. Each point set is a list of entries, and each entry is a tuple of point and normal.
@@ -581,6 +795,7 @@ class WalkToSheet():
         vertices = []
         normals = []
         triangles = []
+        tringles_uv = []
 
         # First, convert all pointsets into a single list of vertices
         vertices, normals = [], []
@@ -591,7 +806,8 @@ class WalkToSheet():
         # Convert to Open3D compatible format
         vertices = np.concatenate(vertices, axis=0)
         normals = np.concatenate(normals, axis=0)
-
+        # Invert normals
+        normals = -normals
 
         # Scale and translate vertices to original coordinate system
         vertices[:, :3] = scale_points(vertices[:, :3])
@@ -611,17 +827,61 @@ class WalkToSheet():
                 # Current point and the points to its right and below it
                 idx = i * num_cols + j
                 triangles.append([idx, idx + 1, idx + num_cols])
+                tringles_uv.append(((i / num_rows, j / num_cols), (i / num_rows, (j + 1) / num_cols), ((i+1) / num_rows, j / num_cols)))
                 triangles.append([idx + 1, idx + num_cols + 1, idx + num_cols])
+                tringles_uv.append(((i / num_rows, (j+1) / num_cols), ((i + 1) / num_rows, (j + 1) / num_cols), ((i+1) / num_rows, j / num_cols)))
 
         # Create the mesh
         mesh = o3d.geometry.TriangleMesh()
         mesh.vertices = o3d.utility.Vector3dVector(vertices)
         mesh.vertex_normals = o3d.utility.Vector3dVector(normals)
         mesh.triangles = o3d.utility.Vector3iVector(triangles)
+        mesh.triangle_uvs = o3d.utility.Vector2dVector(np.array(tringles_uv).reshape((-1, 2)))
+        # compute triangle normals and normals
+        mesh = mesh.compute_triangle_normals()
+        mesh = mesh.compute_vertex_normals()
 
-        return mesh
+        # Create a grayscale image with a specified size
+        n, m = int(np.ceil(num_rows)), int(np.ceil(num_cols))  # replace with your dimensions
+        uv_image = Image.new('L', (n, m), color=255)  # 255 for white background, 0 for black
+
+        return mesh, uv_image
     
-    def save_mesh(self, mesh, filename):
+    def mesh_initial_uv(self, mesh, ordered_pointsets):
+        # Create a mesh with initial UV coordinates based on the ordered pointsets
+        num_vertices = len(mesh.vertices)
+        triangles = np.asarray(mesh.triangles)
+        vertices = np.asarray(mesh.vertices)
+
+        # Create a UV map based on the ordered pointsets
+        uv_map = np.zeros((num_vertices, 2), dtype=np.float64)
+        for i, (points, _) in enumerate(ordered_pointsets):
+            for j, point in enumerate(points):
+                # find point in vertices vertices[idx] == point
+                idx = np.where(np.all(vertices == point, axis=1))[0][0]
+                assert np.all(vertices[idx] == point), f"Point {point} not found in vertices."
+                uv_map[idx] = [i / len(ordered_pointsets), j / len(points)]
+
+        uv_triangle_map = np.zeros((len(triangles), 3, 2), dtype=np.float64)
+        for i, triangle in enumerate(triangles):
+            for j, vertex in enumerate(triangle):
+                uv_triangle_map[i, j] = uv_map[vertex]
+
+        # Assign UV coordinates to the mesh
+        mesh.triangle_uvs = o3d.utility.Vector2dVector(uv_triangle_map.reshape(-1, 2))
+
+        min_z = np.min(vertices[:, 2])
+        max_z = np.max(vertices[:, 2])
+        size_z = max_z - min_z
+
+        # empty image
+        # Create a grayscale image with a specified size
+        n, m = int(np.ceil(size_z)), int(np.ceil(size_z))  # replace with your dimensions
+        uv_image = Image.new('L', (n, m), color=255)  # 255 for white background, 0 for black
+
+        return mesh, uv_image
+    
+    def save_mesh(self, mesh, uv_image, filename):
         """
         Save a mesh to a file.
 
@@ -634,6 +894,10 @@ class WalkToSheet():
 
         # Save as a PLY file
         o3d.io.write_triangle_mesh(filename, mesh)
+
+        # Save the UV image
+        if uv_image is not None:
+            uv_image.save(filename[:-4] + ".png")
 
     def save_4D_ply(self, points, normals, filename):
         """
@@ -674,24 +938,124 @@ class WalkToSheet():
         # Write to a file
         PlyData([el], text=False).write(filename)
 
+    def flatten(self, mesh_path):
+        flatboi = Flatboi(mesh_path, 5)
+        harmonic_uvs, harmonic_energies = flatboi.slim(initial_condition='ordered')
+        flatboi.save_img(harmonic_uvs)
+        flatboi.save_obj(harmonic_uvs)
+        # Get the directory of the input file
+        input_directory = os.path.dirname(mesh_path)
+        # Filename for the energies file
+        energies_file = os.path.join(input_directory, 'energies_flatboi.txt')
+        print_array_to_file(harmonic_energies, energies_file)       
+        flatboi.save_mtl()
+
+    def flatten_vc(self, mesh_path):
+        # load uv mesh
+        uv_mesh_path = mesh_path[:-4] + "_abf.obj"
+        uv_mesh = o3d.io.read_triangle_mesh(uv_mesh_path)
+        vertices = np.asarray(uv_mesh.vertices)
+        uvs = vertices[:, [0, 2]]
+        uvs_min_x = np.min(uvs[:, 0])
+        uvs_min_y = np.min(uvs[:, 1])
+
+        uvs = uvs - np.array([uvs_min_x, uvs_min_y])
+
+        # load mesh
+        mesh = o3d.io.read_triangle_mesh(mesh_path)
+        vertices = np.asarray(mesh.vertices)
+        triangles = np.asarray(mesh.triangles)
+
+        # assign uv to mesh
+        mesh.triangle_uvs = o3d.utility.Vector2dVector(uvs[triangles].reshape(-1, 2))
+
+        # save mesh
+        vc_mesh_path = mesh_path[:-4] + "_vc.obj"
+        
+        size_x = np.max(uvs[:, 0])
+        size_y = np.max(uvs[:, 1])
+
+        # Create a grayscale image with a specified size
+        n, m = int(np.ceil(size_x)), int(np.ceil(size_y))  # replace with your dimensions
+        uv_image = Image.new('L', (n, m), color=255)  # 255 for white background, 0 for black
+
+        self.save_mesh(mesh, uv_image, vc_mesh_path)
+
     def unroll(self):
-        # get points
+        # # get points
         points, normals, colors = self.build_points()
+
+        # Save as npz
+        with open(os.path.join(self.save_path, "points.npz"), 'wb') as f:
+            np.savez(f, points=points, normals=normals, colors=colors)
+
+        # # Open the npz file
+        # with open(os.path.join(self.save_path, "points.npz"), 'rb') as f:
+        #     npzfile = np.load(f)
+        #     points = npzfile['points']
+        #     normals = npzfile['normals']
+        #     colors = npzfile['colors']
+
+        # # take first debug_nr_points
+        # debug_nr_points = 5000000
+        # index_start = np.searchsorted(points[:, 3], -5270)
+        # index_end = np.searchsorted(points[:, 3], -4780)
+        # print(f"Selected {index_end - index_start} points from {points.shape[0]} points.")
+        # points = points[index_start:index_end]
+        # normals = normals[index_start:index_end]
+        # colors = colors[index_start:index_end]
+
+        # Subsample points:
+        points_subsampled, normals_subsampled, colors_subsampled, _ = select_points(points, normals, colors, colors, original_ratio=0.1)
+
+        # random points
+        # points = np.random.rand(1000, 4)
+        # normals = np.random.rand(1000, 3)
+        # colors = np.random.rand(1000, 3)
 
         # filter points
         # points, normals, colors = self.filter_points_multiple_occurrences(points, normals, colors)
-        # points, normals, colors = self.filter_points_clustering(points, normals, colors)
+        (points_selected, normals_selected, colors_selected), (points_unselected, normals_unselected, colors_unselected) = self.filter_points_clustering_multithreaded(points_subsampled, normals_subsampled, colors_subsampled)
+
+        # Extract selected points from original points
+        original_selected_mask = pointcloud_processing.upsample_pointclouds(points, points_selected, points_unselected)
+        points_originals_selected = points[original_selected_mask]
+        normals_oiginals_selected = normals[original_selected_mask]
+        print(f"Upsampled {points_originals_selected.shape[0]} points from {points.shape[0]} points. With the help of {points_selected.shape[0]} subsampled points (which got selected out of {points_subsampled.shape[0]} points).")
+
+        # Save as npz
+        with open(os.path.join(self.save_path, "points_selected.npz"), 'wb') as f:
+            np.savez(f, points=points_originals_selected, normals=normals_oiginals_selected)
+
+        # # Open the npz file
+        # with open(os.path.join(self.save_path, "points_selected.npz"), 'rb') as f:
+        #     npzfile = np.load(f)
+        #     points_originals_selected = npzfile['points']
+        #     normals_oiginals_selected = npzfile['normals']
+
+        print(f"Shape of points_originals_selected: {points_originals_selected.shape}")
+        # points_originals_selected = points_originals_selected[:1000000]
+        # normals_oiginals_selected = normals_oiginals_selected[:1000000]
+        # print(f"Shape of points_originals_selected: {points_originals_selected.shape}")
 
         # self.save_4D_ply(points, normals, os.path.join(self.save_path, "4D_points.ply"))
 
-        # get nodes
-        ordered_pointsets = self.rolled_ordered_pointset(points, normals)
         pointset_ply_path = os.path.join(self.save_path, "ordered_pointset.ply")
+        # get nodes
+        ordered_pointsets = self.rolled_ordered_pointset(points_originals_selected, normals_oiginals_selected)
+
+        # print(f"Number of ordered pointsets: {len(ordered_pointsets)}", len(ordered_pointsets[0]))
         self.pointcloud_from_ordered_pointset(ordered_pointsets, pointset_ply_path)
 
-        mesh = self.mesh_from_ordered_pointset(ordered_pointsets)
+        # ordered_pointsets = self.ordered_pointset_from_pointcloud(pointset_ply_path, 349)
+
+        mesh, uv_image = self.mesh_from_ordered_pointset(ordered_pointsets)
+
         mesh_path = os.path.join(self.save_path, "mesh.obj")
-        self.save_mesh(mesh, mesh_path)
+        self.save_mesh(mesh, uv_image, mesh_path)
+
+        # Flatten mesh
+        self.flatten(mesh_path)
 
 if __name__ == '__main__':
     import argparse

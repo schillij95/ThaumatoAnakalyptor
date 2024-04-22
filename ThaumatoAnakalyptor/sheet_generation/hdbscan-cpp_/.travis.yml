@@ -1,0 +1,29 @@
+# Enable C++ support
+language: cpp
+
+# Compiler selection
+compiler:
+  - g++ 
+  - gcc
+  
+before_install:
+  - pip install --user cpp-coveralls
+  
+sudo: required
+script:
+  - sudo unlink /usr/bin/g++ && sudo ln -s /usr/bin/g++-5 /usr/bin/g++
+  - sudo unlink /usr/bin/gcc && sudo ln -s /usr/bin/gcc-5 /usr/bin/gcc
+  - gcc --version
+  - make all clean  
+  
+after_success:
+  - coveralls --gcov-options '\-lp'
+  
+
+addons:
+  apt:
+    sources:
+    - ubuntu-toolchain-r-test
+    packages:
+    - gcc-5
+    - g++-5

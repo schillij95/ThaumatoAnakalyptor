@@ -5,10 +5,12 @@ import open3d as o3d
 import argparse
 import os
 import numpy as np
-import torch.distributed
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Semaphore
+# Set max_split_size_mb to a smaller value
+os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:128'  # or another value you deem appropriate
+import torch.distributed
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.functional import normalize
@@ -293,6 +295,7 @@ class MeshDataset(Dataset):
         tif_path = os.path.join(working_path, f"{base_name}.tif")
         png_path = os.path.join(working_path, f"{base_name}.png")
         mtl_path = os.path.join(working_path, f"{base_name}.mtl")
+        print(f"Names: {tif_path}, {png_path}, {mtl_path}", end="\n")
 
         # Check if the .tif version exists
         if os.path.exists(tif_path):
@@ -323,7 +326,9 @@ class MeshDataset(Dataset):
                 y_size, x_size = img.size
         print(f"Y-size: {y_size}, X-size: {x_size}", end="\n")
 
-        self.mesh = o3d.io.read_triangle_mesh(path)
+        print(f"Loading mesh from {path}", end="\n")
+        mesh = o3d.io.read_triangle_mesh(path)
+        self.mesh = mesh
         print(f"Loaded mesh from {path}", end="\n")
 
         self.vertices = np.asarray(self.mesh.vertices)
@@ -716,6 +721,9 @@ class PPMAndTextureModel(pl.LightningModule):
         # reorder grid_points
         grid_points = grid_points[:, [2, 0, 1]]
 
+        # Empty the cache to free up memory
+        torch.cuda.empty_cache()
+
         # Return the 3D Surface Volume coordinates and the values
         return values, grid_points
     
@@ -758,7 +766,7 @@ def custom_collate_fn(batch):
     # Return a single batch containing all aggregated items
     return grid_coords, grid_cells, vertices, normals, uv_coords_triangles, grid_index
     
-def ppm_and_texture(obj_path, grid_cell_path, output_path=None, grid_size=500, gpus=1, batch_size=1, r=32, format='jpg', max_side_triangle: int = 10, display=False):
+def ppm_and_texture(obj_path, grid_cell_path, output_path=None, grid_size=500, gpus=1, batch_size=1, r=32, format='jpg', max_side_triangle: int = 10, display=False, nr_workers=None, prefetch_factor=2):
     # Number of workers
     num_threads = multiprocessing.cpu_count() // int(1.5 * int(gpus))
     num_treads_for_gpus = 12
@@ -768,12 +776,16 @@ def ppm_and_texture(obj_path, grid_cell_path, output_path=None, grid_size=500, g
     max_workers = max(1, min(multiprocessing.cpu_count()//2, 20))
     max_workers = min(max_workers, 20)
 
+    if nr_workers is not None:
+        num_workers = nr_workers
+        max_workers = nr_workers
+
     # Template for the grid cell files
     grid_cell_template = os.path.join(grid_cell_path, "cell_yxz_{:03}_{:03}_{:03}.tif")
 
     # Initialize the dataset and dataloader
     dataset = MeshDataset(obj_path, grid_cell_template, output_path=output_path, grid_size=grid_size, r=r, max_side_triangle=max_side_triangle, max_workers=max_workers, display=display)
-    dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=custom_collate_fn, shuffle=False, num_workers=num_workers, prefetch_factor=2)
+    dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=custom_collate_fn, shuffle=False, num_workers=num_workers, prefetch_factor=prefetch_factor)
     model = PPMAndTextureModel(r=r, max_side_triangle=max_side_triangle)
     
     writer = dataset.get_writer()
@@ -796,10 +808,12 @@ if __name__ == '__main__':
     parser.add_argument('--r', type=int, default=32)
     parser.add_argument('--format', type=str, default='jpg')
     parser.add_argument('--display', action='store_true')
+    parser.add_argument('--nr_workers', type=int, default=None)
+    parser.add_argument('--prefetch_factor', type=int, default=2)
     args = parser.parse_known_args()[0]
 
     print(f"Rendering args: {args}")
     if args.display:
         print("[INFO]: Displaying the rendering image slows down the rendering process by about 20%.")
 
-    ppm_and_texture(args.obj, gpus=args.gpus, grid_cell_path=args.grid_cell, output_path=args.output_path, r=args.r, format=args.format, display=args.display)
+    ppm_and_texture(args.obj, gpus=args.gpus, grid_cell_path=args.grid_cell, output_path=args.output_path, r=args.r, format=args.format, display=args.display, nr_workers=args.nr_workers, prefetch_factor=args.prefetch_factor)

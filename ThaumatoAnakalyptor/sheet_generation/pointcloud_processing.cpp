@@ -19,6 +19,7 @@
 #include <filesystem>
 #include "happly.h"
 #include "nanoflann.h"
+#include "hdbscan/Hdbscan/hdbscan.hpp"
 
 namespace fs = std::filesystem;
 namespace py = pybind11;
@@ -40,6 +41,56 @@ public:
 
     // Initialize with a vector of points
     explicit PointCloud(const std::vector<Point>& points) : pts(points) {}
+
+    // Initialize with a NumPy array
+    explicit PointCloud(py::array_t<float> points, py::array_t<float> normals, py::array_t<float> colors) {
+        auto points_r = points.unchecked<2>();
+        auto normals_r = normals.unchecked<2>();
+        auto colors_r = colors.unchecked<2>();
+
+        size_t total_points = points_r.shape(0);
+        pts.reserve(total_points);
+
+        for (size_t i = 0; i < total_points; ++i) {
+            Point point;
+            point.x = points_r(i, 0);
+            point.y = points_r(i, 1);
+            point.z = points_r(i, 2);
+            point.w = points_r(i, 3);
+            point.nx = normals_r(i, 0);
+            point.ny = normals_r(i, 1);
+            point.nz = normals_r(i, 2);
+            point.r = static_cast<unsigned char>(colors_r(i, 0) * 255);
+            point.g = static_cast<unsigned char>(colors_r(i, 1) * 255);
+            point.b = static_cast<unsigned char>(colors_r(i, 2) * 255);
+
+            pts.push_back(point);
+        }
+    }
+
+    // Initialize with a NumPy array, points only
+    explicit PointCloud(py::array_t<float> points) {
+        auto points_r = points.unchecked<2>();
+
+        size_t total_points = points_r.shape(0);
+        pts.reserve(total_points);
+
+        for (size_t i = 0; i < total_points; ++i) {
+            Point point;
+            point.x = points_r(i, 0);
+            point.y = points_r(i, 1);
+            point.z = points_r(i, 2);
+            point.w = points_r(i, 3);
+            point.nx = 0.0;
+            point.ny = 0.0;
+            point.nz = 0.0;
+            point.r = static_cast<unsigned char>(0.0);
+            point.g = static_cast<unsigned char>(0.0);
+            point.b = static_cast<unsigned char>(0.0);
+
+            pts.push_back(point);
+        }
+    }
 
     // Add a point to the cloud
     void addPoint(const Point& point) {
@@ -369,34 +420,76 @@ public:
         deleteMarkedPoints();
     }
 
-    // void filterPointsUsingKDTree(double spatial_threshold, double angle_threshold) {
-    //     // Create a KD-tree for 3D points
-    //     MyKDTree index(3 /*dim*/, cloud_, nf::KDTreeSingleIndexAdaptorParams(10 /* max leaf */));
-    //     index.buildIndex();
+    void filterPointsClustering(double max_single_dist, int min_cluster_size) {
+        sortPointsWZYX();
 
-    //     for (size_t i = 0; i < cloud_.pts.size(); ++i) {
-    //         // One line progress
-    //         std::cout << "Progress: " << i << "/" << cloud_.pts.size() << "\r";
-    //         std::vector<nf::ResultItem<size_t, double>> ret_matches;
-    //         nf::SearchParameters params;
-    //         const double query_pt[3] = { cloud_.pts[i].x, cloud_.pts[i].y, cloud_.pts[i].z };
+        double min_wind = cloud_.pts.front().w;
+        double max_wind = cloud_.pts.back().w;
 
-    //         // Radius search
-    //         const double radius = spatial_threshold * spatial_threshold;
-    //         index.radiusSearch(&query_pt[0], radius, ret_matches, params);
+        int nr_windings = 0;
+        for (double angle = min_wind; angle <= max_wind; angle += 180) {
+            ++nr_windings;
+        }
 
-    //         for (auto& match : ret_matches) {
-    //             if (i != match.first && std::abs(cloud_.pts[i].w - cloud_.pts[match.first].w) > angle_threshold) {
-    //                 cloud_.pts[i].marked_for_deletion = true;
-    //                 cloud_.pts[match.first].marked_for_deletion = true;
-    //             }
-    //         }
-    //     }
-    //     std::cout << std::endl;
+        progress = 0;
+        problem_size = nr_windings;
 
-    //     // Apply deletions
-    //     deleteMarkedPoints();
-    // }
+        size_t num_threads = std::thread::hardware_concurrency() / 4; // Number of concurrent threads supported
+        // num_threads = 1;
+        std::vector<std::thread> threads(num_threads);
+        int windings_per_thread = nr_windings / num_threads;
+
+        std::vector<Point> filteredPoints;
+        for (int i = 0; i < num_threads; ++i) {
+            int start = min_wind + i * windings_per_thread * 180;
+            int end = (i == num_threads - 1) ? max_wind : start + windings_per_thread * 180;
+            threads[i] = std::thread(&PointCloudProcessor::applyHDBSCANthreaded, this, start, end, max_single_dist, min_cluster_size);
+        }
+
+        for (auto& thread : threads) {
+            thread.join();
+        }
+
+        std::cout << std::endl;
+
+        // Replace old points with filtered
+        cloud_.pts = filteredPoints;
+    }
+
+    void add_pointcloud_to_hdbscan(int start, int end, Hdbscan& hdbscan) {
+        std::vector<std::vector<double>> points;
+        for (size_t i = 0; i < cloud_.size(); ++i) {
+            if (cloud_.pts[i].w < start) {
+                continue;
+            }
+            else if (cloud_.pts[i].w >= end) {
+                break; // sorted by winding angle
+            }
+            points.push_back({ cloud_.pts[i].x, cloud_.pts[i].y, cloud_.pts[i].z });
+        }
+        hdbscan.dataset = points;
+    }
+
+    void applyHDBSCANthreaded(int start, int end, double max_single_dist, int min_cluster_size) {
+        for (int winding_angle = start; winding_angle < end; winding_angle += 180) {
+            applyHDBSCAN(winding_angle, winding_angle + 180, max_single_dist, min_cluster_size);
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                print_progress();
+            }
+        }
+    }
+
+    void applyHDBSCAN(int start, int end, double max_single_dist, int min_cluster_size) {
+        Hdbscan hdbscan("dummy value");  // Assuming an appropriate constructor or method to set points
+        add_pointcloud_to_hdbscan(start, end, hdbscan);
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            std::cout << "Applying HDBSCAN for winding angle range: " << start << " to " << end << std::endl;
+        }
+        hdbscan.execute(min_cluster_size, 1, "Euclidean");
+        // Filter subCloud.pts based on HDBSCAN results
+    }
 
     PointCloud get_results() const {
         return cloud_;
@@ -531,6 +624,8 @@ private:
             }
         }
     }
+
+    
 };
 
 std::tuple<py::array_t<float>, py::array_t<float>, py::array_t<float>> to_array(PointCloud& cloud) {
@@ -567,6 +662,23 @@ std::tuple<py::array_t<float>, py::array_t<float>, py::array_t<float>> to_array(
     return std::make_tuple(points, normals, colors);
 }
 
+py::array_t<bool> vector_to_array(std::vector<bool> selected_originals) {
+    // Create NumPy arrays for points mask
+    long int total_points = selected_originals.size();
+    py::array_t<bool> points_mask;
+    points_mask = py::array_t<bool>(py::array::ShapeContainer{total_points});
+
+    auto pts_mask = points_mask.mutable_unchecked<1>();  // for direct access without bounds checking
+
+    // add the data to the numpy arrays
+    for (size_t i = 0; i < total_points; ++i) {
+        // add mask entry
+        pts_mask(i) = selected_originals[i];
+    }
+
+    return points_mask;
+}
+
 std::tuple<py::array_t<float>, py::array_t<float>, py::array_t<float>> load_pointclouds(const std::vector<std::tuple<std::vector<int>, int, double>>& nodes, const std::string& path) {
     PointCloudLoader loader(nodes, path);
     loader.load_all();
@@ -579,13 +691,76 @@ std::tuple<py::array_t<float>, py::array_t<float>, py::array_t<float>> load_poin
     processor.deleteMarkedPoints();
     std::cout << "Deleted marked points" << std::endl;
     processor.filterPointsUsingKDTree(2.0, 90.0);
-    PointCloud processed_points = processor.get_results();
     std::cout << "Filtered points using KDTree" << std::endl;
+    processor.sortPointsWZYX();
+    // Following is NOT working (use python version, quite fast-ish)
+    // processor.filterPointsClustering(2.0, 8000); 
+    // std::cout << "Filtered points using HDBSCAN" << std::endl;
+    PointCloud processed_points = processor.get_results();
     return to_array(processed_points);
+}
+
+py::array_t<bool> upsample_pointclouds(py::array_t<float> original_points, py::array_t<float> selected_subsamples, py::array_t<float> unselected_subsamples) {
+    // Create KD-trees for selected and unselected points
+    PointCloud selectedPC(selected_subsamples);
+    PointCloud unselectedPC(unselected_subsamples);
+    MyKDTree tree_selected(3 /*dim*/, selectedPC, {10 /* max leaf */});
+    MyKDTree tree_unselected(3 /*dim*/, unselectedPC, {10 /* max leaf */});
+    tree_selected.buildIndex();
+    tree_unselected.buildIndex();
+
+    std::vector<bool> selected_originals;
+
+    // Assign each original point to selected or unselected based on closest distance
+    auto original_points_r = original_points.unchecked<2>();
+    std::cout << "Original points shape: " << original_points_r.shape(0) << std::endl;
+    for (int i = 0; i < original_points.shape(0); ++i) {
+        Point pt;
+        pt.x = original_points_r(i, 0);
+        pt.y = original_points_r(i, 1);
+        pt.z = original_points_r(i, 2);
+        pt.w = original_points_r(i, 3);
+        double query_pt[3] = { pt.x, pt.y, pt.z };
+        size_t closest_idx;
+        double out_dist_sqr;
+
+        tree_selected.knnSearch(&query_pt[0], 1, &closest_idx, &out_dist_sqr);
+        double dist_selected = out_dist_sqr;
+        double w_selected = selectedPC.pts[closest_idx].w;  // Assuming PointCloud and MyKDTree provide access to points
+
+        tree_unselected.knnSearch(&query_pt[0], 1, &closest_idx, &out_dist_sqr);
+        double dist_unselected = out_dist_sqr;
+        double w_unselected = unselectedPC.pts[closest_idx].w;  // Assuming PointCloud and MyKDTree provide access to points
+
+        if (dist_selected > 2.0 && dist_unselected > 2.0) {
+            selected_originals.push_back(false);
+        }
+        else if (dist_selected <= dist_unselected) {
+            if (std::abs(pt.w - w_selected) <= 90) {
+                selected_originals.push_back(true);
+            }
+            else {
+                selected_originals.push_back(false);
+            }
+        }
+        else {
+            if (std::abs(pt.w - w_unselected) <= 90) {
+                selected_originals.push_back(true);
+            }
+            else {
+                selected_originals.push_back(false);
+            }
+        }
+    }
+    std::cout << "Selected originals size: " << selected_originals.size() << std::endl;
+    // Convert selected originals back to numpy array
+    return vector_to_array(selected_originals);
 }
 
 PYBIND11_MODULE(pointcloud_processing, m) {
     m.doc() = "pybind11 module for parallel point cloud processing";
 
     m.def("load_pointclouds", &load_pointclouds, "Function to load point clouds and return points, normals, and colors.");
+
+    m.def("upsample_pointclouds", &upsample_pointclouds, "Function to load point clouds and return points, normals, and colors.");
 }

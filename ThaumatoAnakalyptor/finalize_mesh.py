@@ -12,6 +12,7 @@ def load_obj(path: str, delauny=False) -> o3d.geometry.TriangleMesh:
     """
     Load an .obj file and return the TriangleMesh object.
     """
+    print(f"Loading mesh from {path}", end="\n")
     mesh = o3d.io.read_triangle_mesh(path)
 
     # png 
