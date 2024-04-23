@@ -19,8 +19,8 @@ from copy import deepcopy
 
 from .instances_to_sheets import select_points, get_vector_mean, alpha_angles, adjust_angles_zero, adjust_angles_offset, add_overlapp_entries_to_patches_list, assign_points_to_tiles, compute_overlap_for_pair, overlapp_score, fit_sheet, winding_switch_sheet_score_raw_precomputed_surface, find_starting_patch, save_main_sheet, update_main_sheet
 from .sheet_to_mesh import load_xyz_from_file, scale_points, umbilicus_xz_at_y
-from .genetic_sheet_stitching import solve as solve_genetic
-from .genetic_sheet_stitching import solve_ as solve_genetic_
+# from .genetic_sheet_stitching import solve as solve_genetic
+# from .genetic_sheet_stitching import solve_ as solve_genetic_
 import sys
 ### C++ speed up. not yet fully implemented
 sys.path.append('ThaumatoAnakalyptor/sheet_generation/build')
@@ -1624,15 +1624,15 @@ class EvolutionaryGraphEdgesSelection():
             initial_component = np.array(initial_component, dtype=np.int32)
         return edges_by_indices, edges_by_subvolume_indices, initial_component
     
-    def solve_call_(self, input, initial_component=None, problem='k_assignment'):
-        input = input.astype(np.int32)
-        if initial_component is None:
-            initial_component = np.zeros((0,2), dtype=np.int32)
-        initial_component = initial_component.astype(np.int32)
-        # easily switch between dummy and real computation
-        valid_mask, valid_edges_count = solve_genetic(input, initial_component=initial_component, problem=problem)
-        valid_mask = valid_mask > 0
-        return valid_mask, valid_edges_count
+    # def solve_call_(self, input, initial_component=None, problem='k_assignment'):
+    #     input = input.astype(np.int32)
+    #     if initial_component is None:
+    #         initial_component = np.zeros((0,2), dtype=np.int32)
+    #     initial_component = initial_component.astype(np.int32)
+    #     # easily switch between dummy and real computation
+    #     valid_mask, valid_edges_count = solve_genetic(input, initial_component=initial_component, problem=problem)
+    #     valid_mask = valid_mask > 0
+    #     return valid_mask, valid_edges_count
     
     def solve_call(self, input, initial_component=None, problem='k_assignment'):
         input = input.astype(np.int32)
