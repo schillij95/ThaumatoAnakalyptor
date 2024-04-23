@@ -461,7 +461,7 @@ class WalkToSheet():
     def is_sorted(self, arr):
         return np.all(np.diff(arr) >= 0)
 
-    def filter_points_clustering_multithreaded(self, points, normals, colors, max_single_dist=20, min_cluster_size=8000, z_size=800, z_padding=200):
+    def filter_points_clustering_multithreaded(self, points, normals, colors, max_single_dist=20, min_cluster_size=8000, z_size=400, z_padding=200):
         num_processes = cpu_count() // 2
         print(f"Using {num_processes} processes for filtering points.")
         print(f"Points are sorted: {self.is_sorted(points[:, 3])}")
