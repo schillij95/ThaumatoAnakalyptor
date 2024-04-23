@@ -290,8 +290,30 @@ def attach_shared_array(shape, dtype, name="shared_points"):
         except FileNotFoundError:
             time.sleep(0.2)
 
+def get_subpoints_masks(points, angle_extraction, z_height, z_size, z_padding):
+    mask_angle_90 = np.logical_and(points[:,3] >= angle_extraction-90, points[:,3] < angle_extraction+90)
+    mask_z_pad = np.logical_and(points[:,1] >= z_height - z_padding, points[:,1] < z_height + z_size + z_padding)
+    mask_points = np.logical_and(mask_angle_90, mask_z_pad)
+
+    mask_angle_45 = np.logical_and(points[:,3] >= angle_extraction-45, points[:,3] < angle_extraction+45)
+    mask_z_strict = np.logical_and(points[:,1] >= z_height, points[:,1] < z_height + z_size)
+    mask_strict_points = np.logical_and(mask_angle_45, mask_z_strict)
+
+    print(f"Processing angle {angle_extraction} with nr indices: {np.sum(mask_points)}")
+    if np.sum(mask_points) == 0:
+        print(f"No points found for angle {angle_extraction}")
+        return None
+    
+    sub_points = points[mask_points]
+    # extract at z height with padding
+    mask_angle_45_subpoints = np.logical_and(sub_points[:,3] >= angle_extraction-45, sub_points[:,3] < angle_extraction+45)
+    mask_z_strict_subpoints = np.logical_and(sub_points[:,1] >= z_height, sub_points[:,1] < z_height + z_size)
+    mask_strict_subpoints = np.logical_and(mask_angle_45_subpoints, mask_z_strict_subpoints)
+
+    return sub_points, mask_strict_points, mask_strict_subpoints
+
 def worker_clustering(args):
-    angle_extraction, points_shape, dtype, max_single_dist, min_cluster_size = args
+    angle_extraction, z_height, z_size, z_padding, points_shape, dtype, max_single_dist, min_cluster_size = args
     points, points_shm = attach_shared_array(points_shape, dtype, name="shared_points")
     # print(points)
     # print(f"Multithreading first and last angular value: {points[0, 3]}, {points[-1, 3]}")
@@ -302,23 +324,18 @@ def worker_clustering(args):
             print(f"Angle {angle_extraction} is not in the range of the pointcloud. Breaking.")
             return False
 
-        index_start = np.searchsorted(points[:,3], angle_extraction-90, side='right')
-        # print(f"Index start: {index_start}")
-        index_end = np.searchsorted(points[:,3], angle_extraction+90, side='left')
-        # print("Hi from inside loop. Shapes points: ", points.shape, "mask: ", mask.shape)
-        # print(f"Index end: {index_end}")
-        print(f"Processing angle {angle_extraction} with indices {index_start} to {index_end}")
-        if index_start == index_end:
-            print(f"No points found for angle {angle_extraction}")
+        res_sm = get_subpoints_masks(points, angle_extraction, z_height, z_size, z_padding)
+        if res_sm is None:
             return False
-        sub_points = points[index_start:index_end]
+        
+        sub_points, mask_strict_points, mask_strict_subpoints = res_sm
+        
         partial_mask = filter_points_clustering_half_windings(sub_points[:,:3], max_single_dist, min_cluster_size)
-        index_start_45 = np.searchsorted(points[:,3], angle_extraction-45, side='right')
-        index_end_45 = np.searchsorted(points[:,3], angle_extraction+45, side='left')
-        index_start_45_subpoints = np.searchsorted(sub_points[:,3], angle_extraction-45, side='right')
-        index_end_45_subpoints = np.searchsorted(sub_points[:,3], angle_extraction+45, side='left')
-        mask[index_start_45:index_end_45] = partial_mask[index_start_45_subpoints:index_end_45_subpoints]
-        print(f"MULTITHREADED: (mask: {np.sum(mask)}), Selected {np.sum(partial_mask[index_start_45_subpoints:index_end_45_subpoints])} points from {index_end_45_subpoints-index_start_45_subpoints} points at angle {angle_extraction} when filtering pointcloud with max_single_dist {max_single_dist} in single linkage agglomerative clustering")
+
+        mask[mask_strict_points] = partial_mask[mask_strict_subpoints]
+
+
+        print(f"MULTITHREADED: (mask: {np.sum(mask)}), Selected {np.sum(partial_mask[mask_strict_subpoints])} points from {partial_mask.shape[0]} points at angle {angle_extraction} when filtering pointcloud with max_single_dist {max_single_dist} in single linkage agglomerative clustering")
     except Exception as e:
         print(f"Error in worker: {e}. Start {angle_extraction}")
         print(f"Error in worker: {e}. Start {angle_extraction}")
@@ -444,7 +461,7 @@ class WalkToSheet():
     def is_sorted(self, arr):
         return np.all(np.diff(arr) >= 0)
 
-    def filter_points_clustering_multithreaded(self, points, normals, colors, max_single_dist=20, min_cluster_size=8000):
+    def filter_points_clustering_multithreaded(self, points, normals, colors, max_single_dist=20, min_cluster_size=8000, z_size=800, z_padding=200):
         num_processes = cpu_count() // 2
         print(f"Using {num_processes} processes for filtering points.")
         print(f"Points are sorted: {self.is_sorted(points[:, 3])}")
@@ -463,13 +480,17 @@ class WalkToSheet():
         max_angle = int(np.ceil(np.max(points[:, 3])))
         print(f"Searchsorted middle index: {np.searchsorted(points[:,3], (min_angle + max_angle) / 2)}")
         task_queue = []
+        z_min = int(np.floor(np.min(points[:, 1])))
+        z_max = int(np.ceil(np.max(points[:, 1])))
 
+        # TODO: add z_min, z_max, z_padding
         for angle_extraction in range(min_angle, max_angle, 90):
-            task_queue.append(angle_extraction)
+            for z_height in range(z_min, z_max, z_size):
+                task_queue.append((angle_extraction, z_height))
 
         with ThreadPoolExecutor(max_workers=num_processes) as executor:
             # Using a dictionary to identify which future is which
-            futur_list = [executor.submit(worker_clustering, (task, shape, dtype, max_single_dist, min_cluster_size)) for task in task_queue]
+            futur_list = [executor.submit(worker_clustering, (task, z_height, z_size, z_padding, shape, dtype, max_single_dist, min_cluster_size)) for task, z_height in task_queue]
             length = len(futur_list)
             count = 0
             for future in as_completed(futur_list):
@@ -983,20 +1004,20 @@ class WalkToSheet():
 
     def unroll(self):
         # # get points
-        points, normals, colors = self.build_points()
+        # points, normals, colors = self.build_points()
 
-        # Make directory if it doesn't exist
-        os.makedirs(self.save_path, exist_ok=True)
-        # Save as npz
-        with open(os.path.join(self.save_path, "points.npz"), 'wb') as f:
-            np.savez(f, points=points, normals=normals, colors=colors)
+        # # Make directory if it doesn't exist
+        # os.makedirs(self.save_path, exist_ok=True)
+        # # Save as npz
+        # with open(os.path.join(self.save_path, "points.npz"), 'wb') as f:
+        #     np.savez(f, points=points, normals=normals, colors=colors)
 
-        # # Open the npz file
-        # with open(os.path.join(self.save_path, "points.npz"), 'rb') as f:
-        #     npzfile = np.load(f)
-        #     points = npzfile['points']
-        #     normals = npzfile['normals']
-        #     colors = npzfile['colors']
+        # Open the npz file
+        with open(os.path.join(self.save_path, "points.npz"), 'rb') as f:
+            npzfile = np.load(f)
+            points = npzfile['points']
+            normals = npzfile['normals']
+            colors = npzfile['colors']
 
         # # take first debug_nr_points
         # debug_nr_points = 5000000

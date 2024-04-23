@@ -1,4 +1,4 @@
-### Julian Schilliger - ThaumatoAnakalyptor - Vesuvius Challenge 2023
+### Julian Schilliger - ThaumatoAnakalyptor - 2024
 
 import numpy as np
 from tqdm import tqdm

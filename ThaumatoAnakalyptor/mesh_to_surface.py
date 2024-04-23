@@ -653,76 +653,99 @@ class PPMAndTextureModel(pl.LightningModule):
         # Floor and ceil the UV coordinates
         min_uv = torch.floor(min_uv)
 
-        # Step 2: Generate Meshgrids for All Triangles
-        # create grid points tensor: T x W*H x 2
-        grid_points = self.create_grid_points_tensor(min_uv, self.max_side_triangle, self.max_side_triangle)
-        del min_uv
+        nr_triangles = vertices.shape[0]
+        max_triangles_per_loop = 10000
+        values_list = []
+        grid_points_list = []
+        for i in range(0, nr_triangles, max_triangles_per_loop):
+            min_uv_ = min_uv[i:i+max_triangles_per_loop]
+            grid_coords_ = grid_coords[i:i+max_triangles_per_loop]
+            vertices_ = vertices[i:i+max_triangles_per_loop]
+            normals_ = normals[i:i+max_triangles_per_loop]
+            uv_coords_triangles_ = uv_coords_triangles[i:i+max_triangles_per_loop]
+            grid_index_ = grid_index[i:i+max_triangles_per_loop]
 
-        # Step 3: Compute Barycentric Coordinates for all Triangles grid_points
-        # baryicentric_coords: T x W*H x 3, is_inside: T x W*H
-        baryicentric_coords, is_inside = self.ppm(grid_points, uv_coords_triangles)
-        grid_points = grid_points[is_inside] # S x 2
+            # Step 2: Generate Meshgrids for All Triangles
+            # create grid points tensor: T x W*H x 2
+            grid_points = self.create_grid_points_tensor(min_uv_, self.max_side_triangle, self.max_side_triangle)
+            del min_uv_
 
-        # adjust to new_order
-        vertices = vertices[:, self.new_order, :]
-        normals = normals[:, self.new_order, :]
+            # Step 3: Compute Barycentric Coordinates for all Triangles grid_points
+            # baryicentric_coords: T x W*H x 3, is_inside: T x W*H
+            baryicentric_coords, is_inside = self.ppm(grid_points, uv_coords_triangles_)
+            grid_points = grid_points[is_inside] # S x 2
 
-        # vertices: T x 3 x 3, normals: T x 3 x 3, baryicentric_coords: T x W*H x 3
-        coords = torch.einsum('ijk,isj->isk', vertices, baryicentric_coords).squeeze()
-        norms = normalize(torch.einsum('ijk,isj->isk', normals, baryicentric_coords).squeeze(),dim=2)
-        del vertices, normals, uv_coords_triangles
+            # adjust to new_order
+            vertices_ = vertices_[:, self.new_order, :]
+            normals_ = normals_[:, self.new_order, :]
 
-        # broadcast grid index to T x W*H -> S
-        grid_index = grid_index.unsqueeze(-1).expand(-1, baryicentric_coords.shape[1])
-        grid_index = grid_index[is_inside]
-        # broadcast grid_coords to T x W*H x 3 -> S x 3
-        grid_coords = grid_coords.unsqueeze(-2).expand(-1, baryicentric_coords.shape[1], -1)
-        coords = coords - grid_coords # Reorient coordinate system origin to 0 for extraction on grid_cells
-        del baryicentric_coords, grid_coords
+            # vertices: T x 3 x 3, normals: T x 3 x 3, baryicentric_coords: T x W*H x 3
+            coords = torch.einsum('ijk,isj->isk', vertices_, baryicentric_coords).squeeze()
+            norms = normalize(torch.einsum('ijk,isj->isk', normals_, baryicentric_coords).squeeze(),dim=2)
+            del vertices_, normals_, uv_coords_triangles_
 
-        # coords: S x 3, norms: S x 3
-        coords = coords[is_inside]
-        norms = norms[is_inside]
+            # broadcast grid index to T x W*H -> S
+            grid_index_ = grid_index_.unsqueeze(-1).expand(-1, baryicentric_coords.shape[1])
+            grid_index_ = grid_index_[is_inside]
+            # broadcast grid_coords to T x W*H x 3 -> S x 3
+            grid_coords_ = grid_coords_.unsqueeze(-2).expand(-1, baryicentric_coords.shape[1], -1)
+            coords = coords - grid_coords_ # Reorient coordinate system origin to 0 for extraction on grid_cells
+            del baryicentric_coords, grid_coords_
 
-        # Poper axis order
-        coords = coords[:, self.new_order]
-        norms = norms[:, self.new_order]
+            # coords: S x 3, norms: S x 3
+            coords = coords[is_inside]
+            norms = norms[is_inside]
 
-        # Step 4: Compute the 3D coordinates for every r slice
-        r_arange = torch.arange(-self.r, self.r+1, device=coords.device).reshape(1, -1, 1)
+            # Poper axis order
+            coords = coords[:, self.new_order]
+            norms = norms[:, self.new_order]
 
-        # coords: S x 2*r+1 x 3, grid_index: S x 2*r+1 x 1
-        coords = coords.unsqueeze(-2).expand(-1, 2*self.r+1, -1) + r_arange * norms.unsqueeze(-2).expand(-1, 2*self.r+1, -1)
-        grid_index = grid_index.unsqueeze(-1).unsqueeze(-1).expand(-1, 2*self.r+1, -1)
+            # Step 4: Compute the 3D coordinates for every r slice
+            r_arange = torch.arange(-self.r, self.r+1, device=coords.device).reshape(1, -1, 1)
 
-        # Expand and add 3rd dimension to grid points
-        r_arange = r_arange.expand(grid_points.shape[0], -1, -1) + self.r # [0 to 2*r]
-        grid_points = grid_points.unsqueeze(-2).expand(-1, 2*self.r+1, -1)
-        grid_points = torch.cat((grid_points, r_arange), dim=-1)
-        del r_arange, is_inside
+            # coords: S x 2*r+1 x 3, grid_index: S x 2*r+1 x 1
+            coords = coords.unsqueeze(-2).expand(-1, 2*self.r+1, -1) + r_arange * norms.unsqueeze(-2).expand(-1, 2*self.r+1, -1)
+            grid_index_ = grid_index_.unsqueeze(-1).unsqueeze(-1).expand(-1, 2*self.r+1, -1)
 
-        # Step 5: Filter out the points that are outside the grid_cells
-        mask_coords = (coords[:, :, 0] >= 0) & (coords[:, :, 0] < grid_cells.shape[1]) & (coords[:, :, 1] >= 0) & (coords[:, :, 1] < grid_cells.shape[2]) & (coords[:, :, 2] >= 0) & (coords[:, :, 2] < grid_cells.shape[3])
+            # Expand and add 3rd dimension to grid points
+            r_arange = r_arange.expand(grid_points.shape[0], -1, -1) + self.r # [0 to 2*r]
+            grid_points = grid_points.unsqueeze(-2).expand(-1, 2*self.r+1, -1)
+            grid_points = torch.cat((grid_points, r_arange), dim=-1)
+            del r_arange, is_inside
 
-        # coords: S' x 3, norms: S' x 3
-        coords = coords[mask_coords]
-        grid_points = grid_points[mask_coords] # S' x 2
-        grid_index = grid_index[mask_coords] # S'
+            # Step 5: Filter out the points that are outside the grid_cells
+            mask_coords = (coords[:, :, 0] >= 0) & (coords[:, :, 0] < grid_cells.shape[1]) & (coords[:, :, 1] >= 0) & (coords[:, :, 1] < grid_cells.shape[2]) & (coords[:, :, 2] >= 0) & (coords[:, :, 2] < grid_cells.shape[3])
 
-        # Step 5: Extract the values from the grid cells
-        # grid_cells: T x W x H x D, coords: S' x 3, grid_index: S' x 1
-        values = extract_from_image_4d(grid_cells, grid_index, coords)
-        del coords, grid_cells, mask_coords
+            # coords: S' x 3, norms: S' x 3
+            coords = coords[mask_coords]
+            grid_points = grid_points[mask_coords] # S' x 2
+            grid_index_ = grid_index_[mask_coords] # S'
 
-        # Step 6: Return the 3D Surface Volume coordinates and the values
-        values = values.reshape(-1)
-        grid_points = grid_points.reshape(-1, 3) # grid_points: S' x 3
+            # Step 5: Extract the values from the grid cells
+            # grid_cells: T x W x H x D, coords: S' x 3, grid_index: S' x 1
+            values = extract_from_image_4d(grid_cells, grid_index_, coords)
+            del coords, mask_coords, grid_index_
+
+            # Step 6: Return the 3D Surface Volume coordinates and the values
+            values = values.reshape(-1)
+            grid_points = grid_points.reshape(-1, 3) # grid_points: S' x 3
+            
+            # reorder grid_points
+            grid_points = grid_points[:, [2, 0, 1]]
+
+            values_list.append(values)
+            grid_points_list.append(grid_points)
+
+            # Empty the cache to free up memory
+            torch.cuda.empty_cache()
         
-        # reorder grid_points
-        grid_points = grid_points[:, [2, 0, 1]]
+        del grid_cells, grid_index, min_uv, vertices, normals, uv_coords_triangles
 
-        # Empty the cache to free up memory
-        torch.cuda.empty_cache()
+        if len(values_list) == 0:
+            return None, None
+        
+        values = torch.cat(values_list, dim=0)
+        grid_points = torch.cat(grid_points_list, dim=0)
 
         # Return the 3D Surface Volume coordinates and the values
         return values, grid_points
@@ -766,7 +789,7 @@ def custom_collate_fn(batch):
     # Return a single batch containing all aggregated items
     return grid_coords, grid_cells, vertices, normals, uv_coords_triangles, grid_index
     
-def ppm_and_texture(obj_path, grid_cell_path, output_path=None, grid_size=500, gpus=1, batch_size=1, r=32, format='jpg', max_side_triangle: int = 10, display=False, nr_workers=None, prefetch_factor=2):
+def ppm_and_texture(obj_path, grid_cell_path, output_path=None, grid_size=500, gpus=1, batch_size=1, r=32, format='jpg', max_side_triangle: int = 5, display=False, nr_workers=None, prefetch_factor=2):
     # Number of workers
     num_threads = multiprocessing.cpu_count() // int(1.5 * int(gpus))
     num_treads_for_gpus = 12
@@ -803,7 +826,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('obj', type=str)
     parser.add_argument('grid_cell', type=str)
-    parser.add_argument('--output_path', type=str, default=None)
+    parser.add_argument('--output_path', type=str, default=None, help="Output folder path that shall contain the layers folder.")
     parser.add_argument('--gpus', type=int, default=1)
     parser.add_argument('--r', type=int, default=32)
     parser.add_argument('--format', type=str, default='jpg')
