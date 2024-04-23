@@ -985,6 +985,8 @@ class WalkToSheet():
         # # get points
         points, normals, colors = self.build_points()
 
+        # Make directory if it doesn't exist
+        os.makedirs(self.save_path, exist_ok=True)
         # Save as npz
         with open(os.path.join(self.save_path, "points.npz"), 'wb') as f:
             np.savez(f, points=points, normals=normals, colors=colors)
