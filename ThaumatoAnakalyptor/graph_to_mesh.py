@@ -305,6 +305,7 @@ def get_subpoints_masks(points, angle_extraction, z_height, z_size, z_padding):
         return None
     
     sub_points = points[mask_points]
+    print(f"Extracted subpoints with shape: {sub_points.shape}")
     # extract at z height with padding
     mask_angle_45_subpoints = np.logical_and(sub_points[:,3] >= angle_extraction-45, sub_points[:,3] < angle_extraction+45)
     mask_z_strict_subpoints = np.logical_and(sub_points[:,1] >= z_height, sub_points[:,1] < z_height + z_size)
@@ -463,6 +464,7 @@ class WalkToSheet():
 
     def filter_points_clustering_multithreaded(self, points, normals, colors, max_single_dist=20, min_cluster_size=8000, z_size=400, z_padding=200):
         num_processes = cpu_count() // 2
+        num_processes = min(num_processes, 32)
         print(f"Using {num_processes} processes for filtering points.")
         print(f"Points are sorted: {self.is_sorted(points[:, 3])}")
         shape = points.shape
