@@ -335,7 +335,6 @@ def worker_clustering(args):
 
         mask[mask_strict_points] = partial_mask[mask_strict_subpoints]
 
-
         print(f"MULTITHREADED: (mask: {np.sum(mask)}), Selected {np.sum(partial_mask[mask_strict_subpoints])} points from {partial_mask.shape[0]} points at angle {angle_extraction} when filtering pointcloud with max_single_dist {max_single_dist} in single linkage agglomerative clustering")
     except Exception as e:
         print(f"Error in worker: {e}. Start {angle_extraction}")
@@ -348,6 +347,18 @@ def worker_clustering(args):
     del points_shm, mask_shm
     print(f"Worker {angle_extraction} exited.")
     return True
+
+def worker_clustering_copy_points(args):
+    sub_points, max_single_dist, min_cluster_size = args
+
+    try:        
+        partial_mask = filter_points_clustering_half_windings(sub_points[:,:3], max_single_dist, min_cluster_size)
+        print(f"MULTITHREADED: Selected {np.sum(partial_mask)} points from {partial_mask.shape[0]} points with linkage agglomerative clustering")
+    except Exception as e:
+        print(f"Error in worker: {e}.")
+        return None
+
+    return partial_mask
 
 def filter_points_clustering_half_windings(points, max_single_dist=20, min_cluster_size=8000):
     """
@@ -463,8 +474,8 @@ class WalkToSheet():
         return np.all(np.diff(arr) >= 0)
 
     def filter_points_clustering_multithreaded(self, points, normals, colors, max_single_dist=20, min_cluster_size=8000, z_size=400, z_padding=200):
-        num_processes = cpu_count() // 2
-        num_processes = min(num_processes, 32)
+        num_processes = cpu_count()
+        # num_processes = min(num_processes, 32)
         print(f"Using {num_processes} processes for filtering points.")
         print(f"Points are sorted: {self.is_sorted(points[:, 3])}")
         shape = points.shape
@@ -490,19 +501,44 @@ class WalkToSheet():
             for z_height in range(z_min, z_max, z_size):
                 task_queue.append((angle_extraction, z_height))
 
+        # with ThreadPoolExecutor(max_workers=num_processes) as executor:
+        #     # Using a dictionary to identify which future is which
+        #     futur_list = [executor.submit(worker_clustering, (task, z_height, z_size, z_padding, shape, dtype, max_single_dist, min_cluster_size)) for task, z_height in task_queue]
+        #     length = len(futur_list)
+        #     count = 0
+        #     for future in as_completed(futur_list):
+        #         count += 1
+        #         try:
+        #             result = future.result()
+        #         except Exception as exc:
+        #             print(f"{future} generated an exception: {exc}")
+        #         else:
+        #             print(result, f"({count}/{length})")
+
         with ThreadPoolExecutor(max_workers=num_processes) as executor:
             # Using a dictionary to identify which future is which
-            futur_list = [executor.submit(worker_clustering, (task, z_height, z_size, z_padding, shape, dtype, max_single_dist, min_cluster_size)) for task, z_height in task_queue]
-            length = len(futur_list)
+            futur_dict = {}
+            for task, z_height in task_queue:
+                res_sub = get_subpoints_masks(points, task, z_height, z_size, z_padding)
+                if res_sub is None:
+                    continue
+                sub_points, mask_strict_points, mask_strict_subpoints = res_sub
+                fut = executor.submit(worker_clustering_copy_points, (sub_points, max_single_dist, min_cluster_size))
+                futur_dict[fut] = (mask_strict_points, mask_strict_subpoints)
+            length = len(futur_dict)
             count = 0
-            for future in as_completed(futur_list):
+            for future in as_completed(futur_dict):
                 count += 1
                 try:
                     result = future.result()
+                    if result is None:
+                        continue
+                    mask_strict_points, mask_strict_subpoints = futur_dict[future]
+                    shared_mask[mask_strict_points] = result[mask_strict_subpoints]
                 except Exception as exc:
                     print(f"{future} generated an exception: {exc}")
                 else:
-                    print(result, f"({count}/{length})")
+                    print(f"({count}/{length})")
 
         # for i in range(num_processes):
         #     # self.worker_clustering(task_queue, shape, dtype, max_single_dist, min_cluster_size)
