@@ -26,10 +26,23 @@ namespace py = pybind11;
 namespace nf = nanoflann;
 
 struct Point {
-    double x, y, z, w;   // Coordinates and winding angle
-    double nx, ny, nz;   // Normal vector components
+    float x, y, z, w;   // Coordinates and winding angle
+    float nx, ny, nz;   // Normal vector components
     unsigned char r, g, b; // Color components
     bool marked_for_deletion = false;  // Flag to mark points for deletion
+
+    // Default constructor
+    Point() = default;
+
+    // Define a constructor that initializes all members
+    explicit Point(float x, float y, float z, float w,
+          float nx, float ny, float nz,
+          unsigned char r, unsigned char g, unsigned char b,
+          bool marked_for_deletion)
+        : x(x), y(y), z(z), w(w),
+          nx(nx), ny(ny), nz(nz),
+          r(r), g(g), b(b),
+          marked_for_deletion(marked_for_deletion) {}
 };
 
 class PointCloud {
@@ -52,19 +65,12 @@ public:
         pts.reserve(total_points);
 
         for (size_t i = 0; i < total_points; ++i) {
-            Point point;
-            point.x = points_r(i, 0);
-            point.y = points_r(i, 1);
-            point.z = points_r(i, 2);
-            point.w = points_r(i, 3);
-            point.nx = normals_r(i, 0);
-            point.ny = normals_r(i, 1);
-            point.nz = normals_r(i, 2);
-            point.r = static_cast<unsigned char>(colors_r(i, 0) * 255);
-            point.g = static_cast<unsigned char>(colors_r(i, 1) * 255);
-            point.b = static_cast<unsigned char>(colors_r(i, 2) * 255);
-
-            pts.push_back(point);
+            pts.emplace_back(
+                points_r(i, 0), points_r(i, 1), points_r(i, 2), points_r(i, 3), // coordinates and winding angle
+                normals_r(i, 0), normals_r(i, 1), normals_r(i, 2),  // normal vector components
+                static_cast<unsigned char>(colors_r(i, 0) * 255), static_cast<unsigned char>(colors_r(i, 1) * 255), static_cast<unsigned char>(colors_r(i, 2) * 255),  // color components
+                false  // not marked for deletion
+            );
         }
     }
 
@@ -76,19 +82,12 @@ public:
         pts.reserve(total_points);
 
         for (size_t i = 0; i < total_points; ++i) {
-            Point point;
-            point.x = points_r(i, 0);
-            point.y = points_r(i, 1);
-            point.z = points_r(i, 2);
-            point.w = points_r(i, 3);
-            point.nx = 0.0;
-            point.ny = 0.0;
-            point.nz = 0.0;
-            point.r = static_cast<unsigned char>(0.0);
-            point.g = static_cast<unsigned char>(0.0);
-            point.b = static_cast<unsigned char>(0.0);
-
-            pts.push_back(point);
+            pts.emplace_back(
+                points_r(i, 0), points_r(i, 1), points_r(i, 2), points_r(i, 3), // coordinates and winding angle
+                0.0f, 0.0f, 0.0f,  // normal vector components (defaults)
+                0, 0, 0,  // color components (defaults)
+                false  // not marked for deletion (defaults)
+            );
         }
     }
 
@@ -149,7 +148,7 @@ public:
         a = archive_read_new();
         archive_read_support_filter_all(a);
         archive_read_support_format_all(a);
-        r = archive_read_open_filename(a, tar_path.c_str(), 10240); // Note: 10240 is the buffer size
+        r = archive_read_open_filename(a, tar_path.c_str(), 65536); // 64 KB = 65,536 Bytes is the buffer size.
         if (r != ARCHIVE_OK) {
             return false;
         }
@@ -213,22 +212,15 @@ public:
                 std::vector<unsigned char> g = std::get<1>(std::get<2>(vertices));
                 std::vector<unsigned char> b = std::get<2>(std::get<2>(vertices));
 
-                // print_progress();
                 std::vector<Point> points;
+                points.reserve(x.size());
                 for (size_t i = 0; i < x.size(); ++i) {
-                    Point point;
-                    point.x = x[i];
-                    point.y = y[i];
-                    point.z = z[i];
-                    point.w = winding_angle; // Assuming 'w' is the same for all points in this patch
-                    point.nx = nx[i];
-                    point.ny = ny[i];
-                    point.nz = nz[i];
-                    point.r = r[i];
-                    point.g = g[i];
-                    point.b = b[i];
-
-                    points.push_back(point);
+                    points.emplace_back(
+                        static_cast<float>(x[i]), static_cast<float>(y[i]), static_cast<float>(z[i]), static_cast<float>(winding_angle), // coordinates and winding angle
+                        static_cast<float>(nx[i]), static_cast<float>(ny[i]), static_cast<float>(nz[i]),  // normal vector components
+                        static_cast<unsigned char>(r[i]), static_cast<unsigned char>(g[i]), static_cast<unsigned char>(b[i]),  // color components
+                        false  // not marked for deletion
+                    );
                 }
 
                 std::lock_guard<std::mutex> lock(mutex_);
@@ -276,6 +268,10 @@ public:
         std::vector<std::thread> threads;
         size_t total_nodes = node_data_.size();
         size_t chunk_size = std::ceil(total_nodes / static_cast<double>(num_threads));
+        
+        // Set up progress tracking
+        problem_size = total_nodes;
+        progress = 0;
 
         for (size_t i = 0; i < num_threads; ++i) {
             size_t start = i * chunk_size;
@@ -289,6 +285,7 @@ public:
 
         // Reset progress
         std::cout << std::endl;
+        problem_size = -1;
         progress = 0;
 
         // Calculate offsets and total points
@@ -304,19 +301,19 @@ public:
 
     void load_all() {
         size_t total_nodes = node_data_.size();
-        all_points.reserve(total_nodes);
-        problem_size = total_nodes;
-        offset_per_node = new int[total_nodes];
+        offset_per_node = std::make_unique<int[]>(total_nodes); // smart pointer
         std::cout << "Loading all nodes..." << std::endl;
         long int total_points = find_total_points();
+        all_points.reserve(total_points);
         std::cout << "Total points: " << total_points << std::endl;
-        // points = py::array_t<double>(py::array::ShapeContainer{total_points, (long int)4});
-        // normals = py::array_t<double>(py::array::ShapeContainer{total_points, (long int)3});
-        // colors = py::array_t<double>(py::array::ShapeContainer{total_points, (long int)3});
 
         size_t num_threads = std::thread::hardware_concurrency(); // Number of threads
         std::vector<std::thread> threads;
         size_t chunk_size = std::ceil(total_nodes / static_cast<double>(num_threads));
+
+        // Set up progress tracking
+        problem_size = total_nodes;
+        progress = 0;
 
         for (size_t i = 0; i < num_threads; ++i) {
             size_t start = i * chunk_size;
@@ -331,8 +328,8 @@ public:
         std::cout << "All nodes have been processed." << std::endl;
     }
 
-    PointCloud get_results() const {
-        return PointCloud(all_points);
+    PointCloud get_results() {
+        return PointCloud(std::move(all_points));  // Move the points instead of copying
     }
 
 private:
@@ -340,7 +337,7 @@ private:
     // Preallocated NumPy arrays
     // py::array_t<float> points, normals, colors;
     std::vector<Point> all_points;
-    int* offset_per_node;
+    std::unique_ptr<int[]> offset_per_node;
     std::string base_path_;
     mutable std::mutex mutex_;
     int progress = 0;
@@ -349,12 +346,13 @@ private:
 
 class PointCloudProcessor {
 public:
-    PointCloudProcessor(PointCloud& cloud) : cloud_(cloud) {}
+    explicit PointCloudProcessor(PointCloud& cloud) : cloud_(cloud) {}
 
     void deleteMarkedPoints() {
         cloud_.pts.erase(std::remove_if(cloud_.pts.begin(), cloud_.pts.end(), [](const Point& p) {
             return p.marked_for_deletion;
         }), cloud_.pts.end());
+        // cloud_.pts.shrink_to_fit(); // Shrink to fit after erasing marked points
     }
 
     void sortPointsWZYX() {
@@ -491,8 +489,8 @@ public:
         // Filter subCloud.pts based on HDBSCAN results
     }
 
-    PointCloud get_results() const {
-        return cloud_;
+    PointCloud get_results() {
+        return PointCloud(std::move(cloud_));  // Move the points instead of copying
     }
 
 private:
@@ -628,13 +626,13 @@ private:
     
 };
 
-std::tuple<py::array_t<float>, py::array_t<float>, py::array_t<float>> to_array(PointCloud& cloud) {
+std::tuple<py::array_t<float>, py::array_t<float>, py::array_t<float>> to_array(const PointCloud& cloud) {
     // Create NumPy arrays for points, normals, and colors
     long int total_points = cloud.size();
     py::array_t<float> points, normals, colors;
-    points = py::array_t<double>(py::array::ShapeContainer{total_points, (long int)4});
-    normals = py::array_t<double>(py::array::ShapeContainer{total_points, (long int)3});
-    colors = py::array_t<double>(py::array::ShapeContainer{total_points, (long int)3});
+    points = py::array_t<float>(py::array::ShapeContainer{total_points, (long int)4});
+    normals = py::array_t<float>(py::array::ShapeContainer{total_points, (long int)3});
+    colors = py::array_t<float>(py::array::ShapeContainer{total_points, (long int)3});
 
     auto pts = points.mutable_unchecked<2>();  // for direct access without bounds checking
     auto nrm = normals.mutable_unchecked<2>();
@@ -697,7 +695,7 @@ std::tuple<py::array_t<float>, py::array_t<float>, py::array_t<float>> load_poin
     // processor.filterPointsClustering(2.0, 8000); 
     // std::cout << "Filtered points using HDBSCAN" << std::endl;
     PointCloud processed_points = processor.get_results();
-    return to_array(processed_points);
+    return to_array(std::move(processed_points));
 }
 
 py::array_t<bool> upsample_pointclouds(py::array_t<float> original_points, py::array_t<float> selected_subsamples, py::array_t<float> unselected_subsamples) {

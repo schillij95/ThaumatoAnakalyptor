@@ -1017,11 +1017,16 @@ class WalkToSheet():
         # points, normals, colors = self.filter_points_multiple_occurrences(points, normals, colors)
         (points_selected, normals_selected, colors_selected), (points_unselected, normals_unselected, colors_unselected) = self.filter_points_clustering_multithreaded(points_subsampled, normals_subsampled, colors_subsampled)
 
+        points_subsampled_shape = points_subsampled.shape
+        del points_subsampled, normals_subsampled, colors_subsampled, normals_selected, colors_selected, normals_unselected, colors_unselected, colors
+
         # Extract selected points from original points
         original_selected_mask = pointcloud_processing.upsample_pointclouds(points, points_selected, points_unselected)
         points_originals_selected = points[original_selected_mask]
         normals_oiginals_selected = normals[original_selected_mask]
-        print(f"Upsampled {points_originals_selected.shape[0]} points from {points.shape[0]} points. With the help of {points_selected.shape[0]} subsampled points (which got selected out of {points_subsampled.shape[0]} points).")
+        print(f"Upsampled {points_originals_selected.shape[0]} points from {points.shape[0]} points. With the help of {points_selected.shape[0]} subsampled points (which got selected out of {points_subsampled_shape[0]} points).")
+
+        del points_selected, points_unselected, points, normals
 
         # Save as npz
         with open(os.path.join(self.save_path, "points_selected.npz"), 'wb') as f:
