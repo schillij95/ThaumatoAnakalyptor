@@ -515,6 +515,21 @@ class WalkToSheet():
         #         else:
         #             print(result, f"({count}/{length})")
 
+        # TODO in process get_subpoints_masks
+        # with ThreadPoolExecutor(max_workers=num_processes) as executor:
+        #     # Using a dictionary to identify which future is which
+        #     futur_list = [executor.submit(get_subpoints_masks, (task, z_height, z_size, z_padding, shape, dtype, max_single_dist, min_cluster_size)) for task, z_height in task_queue]
+        #     length = len(futur_list)
+        #     count = 0
+        #     for future in as_completed(futur_list):
+        #         count += 1
+        #         try:
+        #             result = future.result()
+        #         except Exception as exc:
+        #             print(f"{future} generated an exception: {exc}")
+        #         else:
+        #             print(result, f"({count}/{length})")
+
         with ThreadPoolExecutor(max_workers=num_processes) as executor:
             # Using a dictionary to identify which future is which
             futur_dict = {}
@@ -1041,14 +1056,14 @@ class WalkToSheet():
         self.save_mesh(mesh, uv_image, vc_mesh_path)
 
     def unroll(self):
-        # # get points
-        # points, normals, colors = self.build_points()
+        # get points
+        points, normals, colors = self.build_points()
 
-        # # Make directory if it doesn't exist
-        # os.makedirs(self.save_path, exist_ok=True)
-        # # Save as npz
-        # with open(os.path.join(self.save_path, "points.npz"), 'wb') as f:
-        #     np.savez(f, points=points, normals=normals, colors=colors)
+        # Make directory if it doesn't exist
+        os.makedirs(self.save_path, exist_ok=True)
+        # Save as npz
+        with open(os.path.join(self.save_path, "points.npz"), 'wb') as f:
+            np.savez(f, points=points, normals=normals, colors=colors)
 
         # Open the npz file
         with open(os.path.join(self.save_path, "points.npz"), 'rb') as f:
@@ -1076,18 +1091,23 @@ class WalkToSheet():
 
         # filter points
         # points, normals, colors = self.filter_points_multiple_occurrences(points, normals, colors)
-        (points_selected, normals_selected, colors_selected), (points_unselected, normals_unselected, colors_unselected) = self.filter_points_clustering_multithreaded(points_subsampled, normals_subsampled, colors_subsampled)
+        enable_clustering = False
+        if enable_clustering:
+            (points_selected, normals_selected, colors_selected), (points_unselected, normals_unselected, colors_unselected) = self.filter_points_clustering_multithreaded(points_subsampled, normals_subsampled, colors_subsampled)
 
-        points_subsampled_shape = points_subsampled.shape
-        del points_subsampled, normals_subsampled, colors_subsampled, normals_selected, colors_selected, normals_unselected, colors_unselected, colors
+            points_subsampled_shape = points_subsampled.shape
+            del points_subsampled, normals_subsampled, colors_subsampled, normals_selected, colors_selected, normals_unselected, colors_unselected, colors
 
-        # Extract selected points from original points
-        original_selected_mask = pointcloud_processing.upsample_pointclouds(points, points_selected, points_unselected)
-        points_originals_selected = points[original_selected_mask]
-        normals_oiginals_selected = normals[original_selected_mask]
-        print(f"Upsampled {points_originals_selected.shape[0]} points from {points.shape[0]} points. With the help of {points_selected.shape[0]} subsampled points (which got selected out of {points_subsampled_shape[0]} points).")
+            # Extract selected points from original points
+            original_selected_mask = pointcloud_processing.upsample_pointclouds(points, points_selected, points_unselected)
+            points_originals_selected = points[original_selected_mask]
+            normals_oiginals_selected = normals[original_selected_mask]
+            print(f"Upsampled {points_originals_selected.shape[0]} points from {points.shape[0]} points. With the help of {points_selected.shape[0]} subsampled points (which got selected out of {points_subsampled_shape[0]} points).")
 
-        del points_selected, points_unselected, points, normals
+            del points_selected, points_unselected, points, normals
+        else:
+            points_originals_selected = points
+            normals_oiginals_selected = normals
 
         # Save as npz
         with open(os.path.join(self.save_path, "points_selected.npz"), 'wb') as f:

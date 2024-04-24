@@ -45,6 +45,7 @@ std::tuple<double, py::array_t<int>, py::array_t<float>> evolution_solve_k_assig
     py::array_t<int> edges,
     double factor_0,
     double factor_not_0,
+    double max_invalid_edges_factor,
     int legth_initial_component,
     py::array_t<int> initial_component
     )
@@ -55,7 +56,7 @@ std::tuple<double, py::array_t<int>, py::array_t<float>> evolution_solve_k_assig
     // Directly use the pointer to the data in the initial_component array
     int* initial_component_cpp = static_cast<int*>(initial_component.request().ptr);
 
-    auto res = evolution_solve_k_assignment(population_size, generations, length_edges, edges_cpp, factor_0, factor_not_0, legth_initial_component, initial_component_cpp);
+    auto res = evolution_solve_k_assignment(population_size, generations, length_edges, edges_cpp, factor_0, factor_not_0, max_invalid_edges_factor, legth_initial_component, initial_component_cpp);
 
     double valid_edges_count = std::get<0>(res);
     int* valid_edges = std::get<1>(res);
@@ -87,13 +88,14 @@ std::tuple<double, py::array_t<int>, py::array_t<float>> evolution_solve_patches
     int length_edges,
     py::array_t<int> edges,
     double factor_0,
-    double factor_not_0
+    double factor_not_0,
+    double max_invalid_edges_factor
     )
 {
     // Directly use the pointer to the data in the edges array
     int* edges_cpp = static_cast<int*>(edges.request().ptr);
 
-    auto res = evolution_solve_patches(population_size, generations, length_edges, edges_cpp, factor_0, factor_not_0);
+    auto res = evolution_solve_patches(population_size, generations, length_edges, edges_cpp, factor_0, factor_not_0, max_invalid_edges_factor);
 
     double valid_edges_count = std::get<0>(res);
     int* valid_edges = std::get<1>(res);

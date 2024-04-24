@@ -1641,7 +1641,7 @@ class EvolutionaryGraphEdgesSelection():
         initial_component = initial_component.astype(np.int32)
         def calculate_fitness_k_factors(graph):
             # sum of k == 0 and sum of k != 0
-            assert np.sum(graph[:, 3] <= 0) == 0, "There should be no edges with k == 0"
+            assert np.sum(graph[:, 3] <= 0) == 0, "There should be no edges with zero,negative certainty"
             graph_mask = graph[:, 2] == 0
             k_0 = np.sum(graph[graph_mask, 3])
             k_not_0 = np.sum(graph[~graph_mask, 3])
@@ -1651,21 +1651,30 @@ class EvolutionaryGraphEdgesSelection():
             print(f"Maximum possible fitness: {2*k_0}")
 
             return factor_0, factor_not_0
+        
+        def find_nr_nodes(input_edges):
+            nodes1 = np.unique(input_edges[:, 0])
+            nodes2 = np.unique(input_edges[:, 1])
+            nodes = np.unique(np.concatenate((nodes1, nodes2)))
+            return len(nodes)
 
+        max_invalid_edges_factor = 1.0
         factor_0, factor_not_0 = calculate_fitness_k_factors(input)
+        nr_active_nodes = find_nr_nodes(input)
+        print(f"There are {nr_active_nodes} unique active nodes in the graph. Max possible fittnes is {2*nr_active_nodes + nr_active_nodes*np.log(nr_active_nodes)}")
         # easily switch between dummy and real computation
         debug=False
         if not debug:
-            population_size = 500
-            generations = 200
+            population_size = 50
+            generations = 2000
         else:
             population_size = 50 # 500
             generations = 40 # 200
 
         if problem == 'k_assignment':
-            valid_edges_count, valid_mask, solution_weights = evolve_graph.evolution_solve_k_assignment(population_size, generations, input.shape[0], input, factor_0, factor_not_0, initial_component.shape[0], initial_component)
+            valid_edges_count, valid_mask, solution_weights = evolve_graph.evolution_solve_k_assignment(population_size, generations, input.shape[0], input, factor_0, factor_not_0, max_invalid_edges_factor, initial_component.shape[0], initial_component)
         elif problem == 'patch_selection':
-            valid_edges_count, valid_mask, solution_weights = evolve_graph.evolution_solve_patches(population_size, generations, input.shape[0], input, factor_0, factor_not_0)
+            valid_edges_count, valid_mask, solution_weights = evolve_graph.evolution_solve_patches(population_size, generations, input.shape[0], input, factor_0, factor_not_0, max_invalid_edges_factor)
 
         valid_mask = valid_mask > 0
         return valid_mask, valid_edges_count
