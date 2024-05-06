@@ -8,10 +8,31 @@ from PIL import Image
 # max image size None
 Image.MAX_IMAGE_PIXELS = None
 
+def copy_obj(path: str, output_folder: str):
+    """
+    Copy the .obj file and the texture image to the output folder.
+    """
+    # Copy the .obj file
+    obj_filename = os.path.basename(path)
+    output_obj_path = os.path.join(output_folder, obj_filename)
+    os.makedirs(output_folder, exist_ok=True)
+    os.system(f"cp {path} {output_obj_path}")
+    print(f"Copied {path} to {output_obj_path}")
+
+    # Copy the texture image
+    # png 
+    path_png = path[:-4] + "_0.png"
+    output_png_path = os.path.join(output_folder, obj_filename[:-4] + "_0.png")
+    os.system(f"cp {path_png} {output_png_path}")
+    print(f"Copied {path_png} to {output_png_path}")
+
+    return output_obj_path, output_png_path
+
 def load_obj(path: str, delauny=False) -> o3d.geometry.TriangleMesh:
     """
     Load an .obj file and return the TriangleMesh object.
     """
+    print(f"Loading mesh from {path}", end="\n")
     mesh = o3d.io.read_triangle_mesh(path)
 
     # png 
@@ -173,40 +194,46 @@ def save_cut(i, output_filename, cut_mesh, cut_mesh_texture_size):
 
     print(f"Saved cut mesh piece {i} to {output_filename}")
 
-def main(args):
-    output_folder = args.output_folder if args.output_folder is not None else "/".join(os.path.dirname(args.input_mesh).split("/")[:-1]) + "/working"
+def main(output_folder, input_mesh, scale_factor, cut_size, delauny):
+    output_folder = output_folder if output_folder is not None else "/".join(os.path.dirname(input_mesh).split("/")[:-1]) + "/working"
     # Ensure output directory exists
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
+    # Copy mesh and png to 
+    obj_path, _ = copy_obj(input_mesh, output_folder)
+
     # Load mesh
-    mesh, texture_size = load_obj(args.input_mesh, args.delauny)
-    mesh_filename = os.path.basename(args.input_mesh)
+    mesh, texture_size = load_obj(obj_path, delauny)
+    mesh_filename = os.path.basename(input_mesh)
 
     # Scale mesh
-    mesh = scale_mesh(mesh, args.scale_factor)
-    texture_size = (texture_size * args.scale_factor).astype(np.int32)
+    mesh = scale_mesh(mesh, scale_factor)
+    texture_size = (texture_size * scale_factor).astype(np.int32)
 
     # Cut mesh into pieces and normalize UVs
-    cut_mesh_list = cut_meshes(mesh, texture_size, args.cut_size)
+    cut_mesh_list = cut_meshes(mesh, texture_size, cut_size)
 
+    obj_paths = []
     # Save each cut piece and adjust the texture if necessary
     for i, (cut_mesh, cut_mesh_texture_size) in enumerate(cut_mesh_list):
-        start_point = args.input_mesh.split("/")[-2]
+        start_point = input_mesh.split("/")[-2]
         working_folder = f"working_{start_point}" + (f"_{i}" if i > 0 else "")
         output_filename = os.path.join(output_folder, working_folder, f"{mesh_filename.split('.')[0]}.obj")
         save_cut(i, output_filename, cut_mesh, cut_mesh_texture_size)
-        
+        obj_paths.append(output_filename)
+
+    return obj_paths
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Scale and cut a mesh into pieces, normalize UVs, and handle textures")
     parser.add_argument("--input_mesh", type=str, required=True, help="Path to the input mesh file")
     parser.add_argument("--scale_factor", type=float, help="Scaling factor for vertices", default=2.0)
-    parser.add_argument("--cut_size", type=float, help="Size of each cut piece along the X axis", default=20000.0)
+    parser.add_argument("--cut_size", type=int, help="Size of each cut piece along the X axis", default=20000)
     parser.add_argument("--delauny", action="store_true", help="Use Delauny triangulation")
     parser.add_argument("--output_folder", type=str, help="Folder to save the cut meshes", default=None)
 
     args = parser.parse_args()
-    main(args)
+    main(args.output_folder, args.input_mesh, args.scale_factor, args.cut_size, args.delauny)
 
 # python3 finalize_mesh.py --input_mesh /media/julian/SSD4TB/scroll3_surface_points/<start_point_location>/point_cloud_colorized_verso_subvolume_blocks_uv.obj
