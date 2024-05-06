@@ -127,8 +127,7 @@ class MyPredictionWriter(BasePredictionWriter):
                 return
 
             values, indexes_3d = prediction
-            indexes_3d = indexes_3d.cpu().numpy().astype(np.int32)
-            values = values.cpu().numpy().astype(np.uint16)
+            
             if indexes_3d.shape[0] == 0:
                 return
 
@@ -205,6 +204,17 @@ class MyPredictionWriter(BasePredictionWriter):
             for future in tqdm(as_completed(futures), desc="Writing TIF"):
                 future.result()
 
+        # Create Composite max image from all tifs
+        composite_image = np.zeros((self.surface_volume_np.shape[1], self.surface_volume_np.shape[2]), dtype=np.float32)
+        for i in range(self.surface_volume_np.shape[0]):
+            composite_image = np.maximum(composite_image, self.surface_volume_np[i])
+
+        composite_image = composite_image.astype(np.uint16)
+        composite_image = composite_image.T
+        composite_image = composite_image[::-1, :]
+        tifffile.imsave(os.path.join(os.path.dirname(self.save_path), "composite.tif"), composite_image)
+
+
     def write_jpg(self, quality=60):  # Adjust the default quality value as needed
         def save_jpg(i, filename):
             image = self.surface_volume_np[i]
@@ -224,6 +234,17 @@ class MyPredictionWriter(BasePredictionWriter):
             # Wait for all futures to complete if needed
             for future in tqdm(as_completed(futures), desc="Writing JPG"):
                 future.result()
+
+        # Create Composite max image from all jpgs
+        composite_image = np.zeros((self.surface_volume_np.shape[1], self.surface_volume_np.shape[2]), dtype=np.float32)
+        for i in range(self.surface_volume_np.shape[0]):
+            composite_image = np.maximum(composite_image, self.surface_volume_np[i])
+
+        composite_image = composite_image.astype(np.uint16)
+        composite_image = (composite_image / 256).astype(np.uint8)
+        composite_image = composite_image.T
+        composite_image = composite_image[::-1, :]
+        cv2.imwrite(os.path.join(os.path.dirname(self.save_path), f"composite.jpg"), composite_image, [cv2.IMWRITE_JPEG_QUALITY, quality])
 
     def write_memmap(self):
         # save to disk as memmap
@@ -654,7 +675,7 @@ class PPMAndTextureModel(pl.LightningModule):
         min_uv = torch.floor(min_uv)
 
         nr_triangles = vertices.shape[0]
-        max_triangles_per_loop = 10000
+        max_triangles_per_loop = 5000
         values_list = []
         grid_points_list = []
         for i in range(0, nr_triangles, max_triangles_per_loop):
@@ -730,22 +751,28 @@ class PPMAndTextureModel(pl.LightningModule):
             values = values.reshape(-1)
             grid_points = grid_points.reshape(-1, 3) # grid_points: S' x 3
             
+            # Empty the cache to free up memory
+            torch.cuda.empty_cache()
+
             # reorder grid_points
             grid_points = grid_points[:, [2, 0, 1]]
 
             values_list.append(values)
             grid_points_list.append(grid_points)
 
-            # Empty the cache to free up memory
-            torch.cuda.empty_cache()
         
         del grid_cells, grid_index, min_uv, vertices, normals, uv_coords_triangles
+        # Empty the cache to free up memory
+        torch.cuda.empty_cache()
 
         if len(values_list) == 0:
             return None, None
         
         values = torch.cat(values_list, dim=0)
         grid_points = torch.cat(grid_points_list, dim=0)
+
+        values = values.cpu().numpy().astype(np.uint16)
+        grid_points = grid_points.cpu().numpy().astype(np.int32)
 
         # Return the 3D Surface Volume coordinates and the values
         return values, grid_points
@@ -789,7 +816,7 @@ def custom_collate_fn(batch):
     # Return a single batch containing all aggregated items
     return grid_coords, grid_cells, vertices, normals, uv_coords_triangles, grid_index
     
-def ppm_and_texture(obj_path, grid_cell_path, output_path=None, grid_size=500, gpus=1, batch_size=1, r=32, format='jpg', max_side_triangle: int = 5, display=False, nr_workers=None, prefetch_factor=2):
+def ppm_and_texture(obj_path, grid_cell_path, output_path=None, grid_size=500, gpus=1, batch_size=1, r=32, format='jpg', max_side_triangle: int = 10, display=False, nr_workers=None, prefetch_factor=2):
     # Number of workers
     num_threads = multiprocessing.cpu_count() // int(1.5 * int(gpus))
     num_treads_for_gpus = 12
@@ -830,6 +857,7 @@ if __name__ == '__main__':
     parser.add_argument('--gpus', type=int, default=1)
     parser.add_argument('--r', type=int, default=32)
     parser.add_argument('--format', type=str, default='jpg')
+    parser.add_argument('--max_side_triangle', type=int, default=10)
     parser.add_argument('--display', action='store_true')
     parser.add_argument('--nr_workers', type=int, default=None)
     parser.add_argument('--prefetch_factor', type=int, default=2)
@@ -839,4 +867,4 @@ if __name__ == '__main__':
     if args.display:
         print("[INFO]: Displaying the rendering image slows down the rendering process by about 20%.")
 
-    ppm_and_texture(args.obj, gpus=args.gpus, grid_cell_path=args.grid_cell, output_path=args.output_path, r=args.r, format=args.format, display=args.display, nr_workers=args.nr_workers, prefetch_factor=args.prefetch_factor)
+    ppm_and_texture(args.obj, gpus=args.gpus, grid_cell_path=args.grid_cell, output_path=args.output_path, r=args.r, format=args.format, max_side_triangle=args.max_side_triangle, display=args.display, nr_workers=args.nr_workers, prefetch_factor=args.prefetch_factor)

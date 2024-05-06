@@ -1,5 +1,6 @@
 import numpy as np
 import os
+import shutil
 import json
 import open3d as o3d
 import tarfile
@@ -429,6 +430,33 @@ class WalkToSheet():
 
         return points, normals, colors
     
+    def build_points_reference(self, graph_path):
+        graph = load_graph(graph_path)
+
+        # Building the pointcloud 4D (position) + 3D (Normal) + 3D (Color, randomness) representation of the graph
+        points = []
+        normals = []
+        colors = []
+
+        sheet_infos = []
+        for node in tqdm(graph.nodes, desc="Building points"):
+            winding_angle = 0.0
+            block, patch_id = node[:3], node[3]
+            patch_sheet_patch_info = (block, int(patch_id), winding_angle)
+            sheet_infos.append(patch_sheet_patch_info)
+
+        time_start = time.time()
+        points, normals, colors = pointcloud_processing.load_pointclouds(sheet_infos, self.path)
+        print(f"Time to load pointclouds: {time.time() - time_start}")
+        print(f"Shape of patch_points: {np.array(points).shape}")
+
+        # print first 5 points
+        for i in range(5):
+            print(f"Point {i}: {points[i]}")
+            print(f"Normal {i}: {normals[i]}")
+            print(f"Color {i}: {colors[i]}")
+
+        return points, normals, colors
     
     def filter_points_multiple_occurrences(self, points, normals, colors, spatial_threshold=2.0, angle_threshold=90):
         """
@@ -642,14 +670,25 @@ class WalkToSheet():
             # extract all points at most max_eucledian_distance from the line defined by the umbilicus_positions and the angle vector
             # distances = distances_points_to_line(points[:, :3], umbilicus_positions, angle_vector)
             distances2, points_on_line, t = closest_points_and_distances(points[:, :3], umbilicus_positions, angle_vector)
+            umbilicus_distances = np.linalg.norm(points[:, :3] - umbilicus_positions, axis=1)
             # assert np.allclose(distances, distances2), f"Distance calculation is not correct: {distances} != {distances2}"
             mask = distances2 < max_eucledian_distance
-            t_valid_mask = t >= 0
+            t_valid_mask = t > 0
             mask = np.logical_and(mask, np.logical_not(t_valid_mask))
 
             if np.sum(mask) > 0:
-                close_points = points_on_line[mask][:, :3]
-                ordered_pointset_dict[z] = np.mean(close_points, axis=0)
+                # cylindrical coordinate system
+                umbilicus_distances = umbilicus_distances[mask] # radiuses from points to umbilicus
+                mean_umbilicus_distance = np.mean(umbilicus_distances)
+                # calculate mean t value for angle vector and mean umbilicus distance
+                mean_t = mean_umbilicus_distance / np.linalg.norm(angle_vector)
+                mean_angle_vector_point = umbilicus_positions - mean_t * angle_vector
+                ordered_pointset_dict[z] = mean_angle_vector_point
+
+                # going a little more archaic at the problem then with cylindrical coordinate system
+                # close_points = points_on_line[mask][:, :3]
+                # ordered_pointset_dict[z] = np.mean(close_points, axis=0)
+
                 close_normals = normals[mask]
                 mean_normal = np.mean(close_normals, axis=0)
                 ordered_pointset_dict_normals[z] = mean_normal / np.linalg.norm(mean_normal)
@@ -701,7 +740,7 @@ class WalkToSheet():
         end_index = np.searchsorted(points[:, 3], winding_angle + max_angle_diff, side='right')
         return start_index, end_index
 
-    def rolled_ordered_pointset(self, points, normals):
+    def rolled_ordered_pointset(self, points, normals, debug=False):
         # umbilicus position
         umbilicus_func = lambda z: umbilicus_xz_at_y(self.graph.umbilicus_data, z)
 
@@ -721,19 +760,33 @@ class WalkToSheet():
 
         # test
         test_angle = -5000
-        start_index, end_index = self.points_at_winding_angle(points, test_angle, max_angle_diff=180)
-        points_test = points[start_index:end_index]
-        colors_test = points_test[:,3]
-        points_test = points_test[:,:3]
-        normals_test = normals[start_index:end_index]
-        print(f"extracted {len(points_test)} points at {test_angle} degrees")
-        # save as ply
-        ordered_pointsets_test = [(points_test, normals_test)]
-        test_pointset_ply_path = os.path.join(self.save_path, "ordered_pointset_test.ply")
-        try:
-            self.pointcloud_from_ordered_pointset(ordered_pointsets_test, test_pointset_ply_path, color=colors_test)
-        except:
-            print("Error saving test pointset")
+        # remove test folder
+        test_folder = os.path.join(self.save_path, "test_winding_angles")
+        if os.path.exists(test_folder):
+            shutil.rmtree(test_folder)
+        os.makedirs(test_folder)
+        for test_angle in range(int(min_wind), int(max_wind), 360):
+            start_index, end_index = self.points_at_winding_angle(points, test_angle, max_angle_diff=180)
+            points_test = points[start_index:end_index]
+            colors_test = points_test[:,3]
+            points_test = points_test[:,:3]
+            normals_test = normals[start_index:end_index]
+            print(f"extracted {len(points_test)} points at {test_angle} degrees")
+            # save as ply
+            ordered_pointsets_test = [(points_test, normals_test)]
+            test_pointset_ply_path = os.path.join(test_folder, f"ordered_pointset_test_{test_angle}.ply")
+            try:
+                self.pointcloud_from_ordered_pointset(ordered_pointsets_test, test_pointset_ply_path, color=colors_test)
+            except:
+                print("Error saving test pointset")
+
+        if debug:
+            # save complete pointcloud
+            complete_pointset_ply_path = os.path.join(test_folder, "complete_pointset.ply")
+            try:
+                self.pointcloud_from_ordered_pointset([(points, normals)], complete_pointset_ply_path, color=points[:,3])
+            except:
+                print("Error saving complete pointset")
 
         angles_step = 6
         # Array to store results in the order of their winding angles
@@ -746,7 +799,7 @@ class WalkToSheet():
             extracted_points = points[start_index:end_index]
             extracted_normals = normals[start_index:end_index]
 
-            result = self.points_at_angle(extracted_points, extracted_normals, z_positions, winding_angle, max_eucledian_distance=4)
+            result = self.points_at_angle(extracted_points, extracted_normals, z_positions, winding_angle, max_eucledian_distance=10)
             return result
 
         # Using ThreadPoolExecutor to manage a pool of threads
@@ -796,6 +849,21 @@ class WalkToSheet():
             ordered_pointsets_final.append((np.array([p[0] for p in ordered_pointset]), np.array([p[1] for p in ordered_pointset])))
 
         return ordered_pointsets_final
+    
+    def save_graph_pointcloud(self, graph_path):
+        save_path = os.path.join(self.save_path, "graph_pointcloud.ply")
+        print(save_path)
+        points, normals, colors = self.build_points_reference(graph_path)
+
+        # Scale and translate points to original coordinate system
+        points = scale_points(np.array(points[:, :3]))
+        # Rotate back to original axis
+        points, normals = shuffling_points_axis(points, np.array(normals))
+        # open3d
+        pcl = o3d.geometry.PointCloud()
+        pcl.points = o3d.utility.Vector3dVector(points)
+        pcl.normals = o3d.utility.Vector3dVector(normals)
+        o3d.io.write_point_cloud(save_path, pcl)
         
     def pointcloud_from_ordered_pointset(self, ordered_pointset, filename, color=None):
         points, normals = [], []
@@ -1055,7 +1123,7 @@ class WalkToSheet():
 
         self.save_mesh(mesh, uv_image, vc_mesh_path)
 
-    def unroll(self):
+    def unroll(self, debug=False):
         # get points
         points, normals, colors = self.build_points()
 
@@ -1128,7 +1196,7 @@ class WalkToSheet():
 
         pointset_ply_path = os.path.join(self.save_path, "ordered_pointset.ply")
         # get nodes
-        ordered_pointsets = self.rolled_ordered_pointset(points_originals_selected, normals_oiginals_selected)
+        ordered_pointsets = self.rolled_ordered_pointset(points_originals_selected, normals_oiginals_selected, debug=debug)
 
         # print(f"Number of ordered pointsets: {len(ordered_pointsets)}", len(ordered_pointsets[0]))
         self.pointcloud_from_ordered_pointset(ordered_pointsets, pointset_ply_path)
@@ -1148,9 +1216,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Unroll a graph to a sheet')
     parser.add_argument('--path', type=str, help='Path to the instances', required=True)
     parser.add_argument('--graph', type=str, help='Path to the graph file from --Path', required=True)
+    parser.add_argument('--debug', action='store_true', help='Debug mode')
     args = parser.parse_args()
 
     graph_path = os.path.join(os.path.dirname(args.path), args.graph)
     graph = load_graph(graph_path)
+    reference_path = graph_path.replace("evolved_graph", "subgraph")
     walk = WalkToSheet(graph, args.path)
-    walk.unroll()
+    # walk.save_graph_pointcloud(reference_path)
+    walk.unroll(debug=args.debug)

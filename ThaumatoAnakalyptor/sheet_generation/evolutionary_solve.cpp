@@ -43,20 +43,25 @@ std::tuple<double, py::array_t<int>, py::array_t<float>> evolution_solve_k_assig
     int generations,
     int length_edges,
     py::array_t<int> edges,
+    py::array_t<bool> same_block,
+    int length_bad_edges,
+    py::array_t<int> bad_edges,
     double factor_0,
     double factor_not_0,
-    double max_invalid_edges_factor,
+    double factor_bad,
     int legth_initial_component,
     py::array_t<int> initial_component
     )
 {
     // Directly use the pointer to the data in the edges array
     int* edges_cpp = static_cast<int*>(edges.request().ptr);
+    bool* same_block_cpp = static_cast<bool*>(same_block.request().ptr);
+    int* bad_edges_cpp = static_cast<int*>(bad_edges.request().ptr);
 
     // Directly use the pointer to the data in the initial_component array
     int* initial_component_cpp = static_cast<int*>(initial_component.request().ptr);
 
-    auto res = evolution_solve_k_assignment(population_size, generations, length_edges, edges_cpp, factor_0, factor_not_0, max_invalid_edges_factor, legth_initial_component, initial_component_cpp);
+    auto res = evolution_solve_k_assignment(population_size, generations, length_edges, edges_cpp, same_block_cpp, length_bad_edges, bad_edges_cpp, factor_0, factor_not_0, factor_bad, legth_initial_component, initial_component_cpp);
 
     double valid_edges_count = std::get<0>(res);
     int* valid_edges = std::get<1>(res);
@@ -87,15 +92,20 @@ std::tuple<double, py::array_t<int>, py::array_t<float>> evolution_solve_patches
     int generations,
     int length_edges,
     py::array_t<int> edges,
+    py::array_t<bool> same_block,   
+    int length_bad_edges,
+    py::array_t<int> bad_edges,
     double factor_0,
     double factor_not_0,
-    double max_invalid_edges_factor
+    double factor_bad
     )
 {
     // Directly use the pointer to the data in the edges array
     int* edges_cpp = static_cast<int*>(edges.request().ptr);
+    bool* same_block_cpp = static_cast<bool*>(same_block.request().ptr);
+    int* bad_edges_cpp = static_cast<int*>(bad_edges.request().ptr);
 
-    auto res = evolution_solve_patches(population_size, generations, length_edges, edges_cpp, factor_0, factor_not_0, max_invalid_edges_factor);
+    auto res = evolution_solve_patches(population_size, generations, length_edges, edges_cpp, same_block_cpp, length_bad_edges, bad_edges_cpp, factor_0, factor_not_0, factor_bad);
 
     double valid_edges_count = std::get<0>(res);
     int* valid_edges = std::get<1>(res);
