@@ -641,8 +641,8 @@ private:
     const double crossover_rate = 0.01;
     const double mutation_rate = 0.1;
     const double fix_percentage = 0.05;
-    const double max_fix_percentage = 0.80;
-    const int fix_step = 50; // Fix the best genes every 20 epochs. INFORMATION: the larger the problem length (graph length), the more fix steps are needed. try 20, 50, 100 at least and see how it converges.
+    const double max_fix_percentage = 0.40;
+    const int fix_step = 10; // Fix the best genes every 20 epochs. INFORMATION: the larger the problem length (graph length), the more fix steps are needed. try 20, 50, 100 at least and see how it converges.
     int tournament_size = 5;
     std::function<double(const Individual&, int*, bool*, int, int*, int, double, double, double, int, int*)> evaluate_function;
     int* graph;

@@ -602,7 +602,7 @@ class ScrollGraph(Graph):
         blocks_tar_files = [blocks_tar_files[i] for i in range(len(blocks_tar_files)) if filter_mask[i]]
         return blocks_tar_files
     
-    def largest_connected_component(self, delete_nodes=True):
+    def largest_connected_component(self, delete_nodes=True, min_size=None):
         print("Finding largest connected component...")        
         # walk the graph from the start node
         visited = set()
@@ -657,7 +657,13 @@ class ScrollGraph(Graph):
         print(f"number of nodes: {nodes_total}, number of edges: {edges_total}")
 
         # largest component
-        largest_component = max(components, key=len)
+        if min_size is not None:
+            components = [component for component in components if len(component) >= min_size]
+            largest_component = []
+            for component in components:
+                largest_component.extend(component)
+        else:
+            largest_component = max(components, key=len)
         # Remove all other Nodes, Edges and Node Edges
         if delete_nodes:
             other_nodes = [node for node in self.nodes if node not in largest_component]
@@ -1246,13 +1252,13 @@ class EvolutionaryGraphEdgesSelection():
         nr_active_nodes = find_nr_nodes(input_graph)
         # print(f"There are {nr_active_nodes} unique active nodes in the graph. Max possible fittnes is {2*nr_active_nodes + nr_active_nodes*np.log(nr_active_nodes)}")
         # easily switch between dummy and real computation
-        debug=False
+        debug=True
         if not debug:
             population_size = 300
             generations = 600
         else:
-            population_size = 50 # 500
-            generations = 40 # 200
+            population_size = 200 # 500
+            generations = 200 # 200
         generations -= 1 # because of fixing in the genes. you dont want to fix the genes in the last generation
 
         if problem == 'k_assignment':
@@ -1337,8 +1343,8 @@ class EvolutionaryGraphEdgesSelection():
             valid_mask, valid_edges_count = solutions[i]
             solution_graph = self.transition_graph_from_edge_selection(edges_by_indices, original_graph, valid_mask, index_nodes_dict, graph_blocks[i], graph=solution_graph)
             # In the end also add the remaining same block edges that make up the connected graph
-            if last_iteration:
-                solution_graph = self.same_block_graph_from_edge_selection(edges_by_indices, original_graph, valid_mask, index_nodes_dict, graph_blocks[i], graph=solution_graph)
+            # if last_iteration:
+            #     solution_graph = self.same_block_graph_from_edge_selection(edges_by_indices, original_graph, valid_mask, index_nodes_dict, graph_blocks[i], graph=solution_graph)
 
             edges_indices_list.append(edges_by_indices)
             edges_mask_list.append(valid_mask)
@@ -1372,13 +1378,13 @@ class EvolutionaryGraphEdgesSelection():
         side_length = start_block_side_length
         padding = 50
         iteration = 0
-        blocking_factor = 2
+        blocking_factor = 4
         k_factors = None
 
         # Divide and conquer block size. start small and work way up.
         while True:
             break_criteria = side_length > graph_size_max
-            # break_criteria = True
+            break_criteria = True
             print(colored(f"Side length: {side_length} maximum graph size: {graph_size_max}", 'yellow'))
             graph_blocks_ = self.build_graph_blocks(graph, iteration=iteration, side_length=side_length, padding=padding)
             if len(graph_blocks_) <= 0: # no more blocks to process
@@ -1402,7 +1408,7 @@ class EvolutionaryGraphEdgesSelection():
         print("Finishing up Graph Evolution...")
         # select largest connected component
         solution_graph.compute_node_edges()
-        solution_graph.largest_connected_component()
+        solution_graph.largest_connected_component(min_size=20)
         edges_by_indices = graph_blocks[0][0][0]
         valid_mask = results[0][0]
         self.update_ks(solution_graph, edges_by_indices=edges_by_indices, valid_mask=valid_mask, update_winding_angles=True) # update winding angles here at the very end (only once)
@@ -1914,7 +1920,7 @@ class EvolutionaryGraphEdgesSelection():
                     if not uf_cores[pos].connected(node1_root, node2_root):
                         continue
                     k_adjusted = uf_cores[pos].connection_weight(node1_root, node2_root)
-                    if abs(k_adjusted) > 1:
+                    if abs(k_adjusted) > 3:
                         continue
 
                     first_node = node2_root if node2_root < node1_root else node1_root
@@ -1929,49 +1935,49 @@ class EvolutionaryGraphEdgesSelection():
                     size_2 = ufs[pos].size[node2_root]
                     contracted_edges[(first_node, second_node)][k_adjusted] += min(size_1, size_2)
 
-        # original bad edges approach
-        # Build up list of contracted edges (same block edges)
-        for edge in input_graph.edges:
-            node1, node2 = edge
-            if not (node1 in block_id_dict) or not (node2 in block_id_dict):
-                continue
-            pos1 = block_id_dict[node1]
-            pos2 = block_id_dict[node2]
-            if pos2 != pos1:
-                continue
-            if (node1 in ufs[pos1].parent) and (node2 in ufs[pos1].parent):
-                ks = input_graph.get_edge_ks(node1, node2)
-                for k in ks:
-                    if input_graph.edges[edge][k]['bad_edge']:
-                        continue
-                    certainty = input_graph.edges[(node1, node2)][k]['certainty']
-                    same_block = input_graph.edges[(node1, node2)][k]['same_block']
-                    # only look at same block edges
-                    if not same_block:
-                        continue
+        # # original bad edges approach
+        # # Build up list of contracted edges (same block edges)
+        # for edge in input_graph.edges:
+        #     node1, node2 = edge
+        #     if not (node1 in block_id_dict) or not (node2 in block_id_dict):
+        #         continue
+        #     pos1 = block_id_dict[node1]
+        #     pos2 = block_id_dict[node2]
+        #     if pos2 != pos1:
+        #         continue
+        #     if (node1 in ufs[pos1].parent) and (node2 in ufs[pos1].parent):
+        #         ks = input_graph.get_edge_ks(node1, node2)
+        #         for k in ks:
+        #             if input_graph.edges[edge][k]['bad_edge']:
+        #                 continue
+        #             certainty = input_graph.edges[(node1, node2)][k]['certainty']
+        #             same_block = input_graph.edges[(node1, node2)][k]['same_block']
+        #             # only look at same block edges
+        #             if not same_block:
+        #                 continue
 
-                    node1_root, k1 = ufs[pos1].find(node1)
-                    node2_root, k2 = ufs[pos1].find(node2)
+        #             node1_root, k1 = ufs[pos1].find(node1)
+        #             node2_root, k2 = ufs[pos1].find(node2)
 
-                    if not core_node(graph_blocks[pos1], node1_root) or not core_node(graph_blocks[pos1], node2_root):
-                        continue
+        #             if not core_node(graph_blocks[pos1], node1_root) or not core_node(graph_blocks[pos1], node2_root):
+        #                 continue
 
-                    # discard self loops
-                    if node1_root == node2_root:
-                        continue
+        #             # discard self loops
+        #             if node1_root == node2_root:
+        #                 continue
 
-                    # proper order of nodes
-                    first_node = node2_root if node2_root < node1_root else node1_root
-                    second_node = node1_root if node2_root < node1_root else node2_root
-                    k_adjusted = - int(- k1 + k + k2)
-                    k_adjusted = k_adjusted if node2_root < node1_root else -k_adjusted
+        #             # proper order of nodes
+        #             first_node = node2_root if node2_root < node1_root else node1_root
+        #             second_node = node1_root if node2_root < node1_root else node2_root
+        #             k_adjusted = - int(- k1 + k + k2)
+        #             k_adjusted = k_adjusted if node2_root < node1_root else -k_adjusted
 
-                    if not (first_node, second_node) in contracted_edges:
-                        contracted_edges[(first_node, second_node)] = {}
+        #             if not (first_node, second_node) in contracted_edges:
+        #                 contracted_edges[(first_node, second_node)] = {}
 
-                    if not k_adjusted in contracted_edges[(first_node, second_node)]:
-                        contracted_edges[(first_node, second_node)][k_adjusted] = 0.0
-                    contracted_edges[(first_node, second_node)][k_adjusted] += certainty
+        #             if not k_adjusted in contracted_edges[(first_node, second_node)]:
+        #                 contracted_edges[(first_node, second_node)][k_adjusted] = 0.0
+        #             contracted_edges[(first_node, second_node)][k_adjusted] += certainty
 
         # Add contracted edges information to graph
         added_edges_count = 0
@@ -2269,6 +2275,9 @@ class EvolutionaryGraphEdgesSelection():
                 if same_block: # only add transitioning edges
                     continue
 
+                if k != 0:
+                    print(f"Selected edge: {node1}, {node2}, {k}, {certainty}")
+
                 assert certainty > 0.0, f"Invalid certainty: {certainty} for edge: {edge}"
                 graph.add_edge(node1, node2, certainty, k, False)
                 added_edges_count += 1
@@ -2331,43 +2340,67 @@ class EvolutionaryGraphEdgesSelection():
         self.update_winding_angles(graph, nodes, ks, update_winding_angles=update_winding_angles)
 
     def bfs_ks(self, graph, start_node=None):
-        # Use BFS to traverse the graph and compute the ks
-        if start_node is None:
+        unused_nodes = set([node for node in graph.nodes])
+        ks_list = []
+        nodes_list = []
+        len_visited = 0
+        while len(unused_nodes) > 0:
+            # Use BFS to traverse the graph and compute the ks
             print("No start node provided, using first node in the graph.")
-            start_node = list(graph.nodes)[0]
-        visited = {start_node: True}
-        queue = [start_node]
-        ks = {start_node: 0}
-        while queue:
-            node = queue.pop(0)
-            node_k = ks[node]
-            for edge in graph.nodes[node]['edges']:
-                if edge[0] == edge[1]:
-                    print(f"Self edge: {edge}, strange ... ?")
-                    continue
-                if edge[0] == node:
-                    other_node = edge[1]
-                else:
-                    other_node = edge[0]
-                if other_node in visited:
-                    # Assert for correct k
+            start_node = list(unused_nodes)[0]
+            visited = {start_node: True}
+            queue = [start_node]
+            ks = {start_node: 0}
+            while queue:
+                node = queue.pop(0)
+                unused_nodes.remove(node)
+                node_k = ks[node]
+                for edge in graph.nodes[node]['edges']:
+                    if edge[0] == edge[1]:
+                        print(f"Self edge: {edge}, strange ... ?")
+                        continue
+                    if edge[0] == node:
+                        other_node = edge[1]
+                    else:
+                        other_node = edge[0]
+                    if other_node in visited:
+                        # Assert for correct k
+                        ks_edge = graph.get_edge_ks(node, other_node)
+                        assert (ks[other_node] - node_k) in ks_edge, f"Invalid k: {ks[other_node]} != {node_k} + {ks_edge}"
+                        continue
+                    visited[other_node] = True
                     ks_edge = graph.get_edge_ks(node, other_node)
-                    assert (ks[other_node] - node_k) in ks_edge, f"Invalid k: {ks[other_node]} != {node_k} + {ks_edge}"
-                    continue
-                visited[other_node] = True
-                ks_edge = graph.get_edge_ks(node, other_node)
-                assert len(ks_edge) == 1, f"Invalid ks_edge: {ks_edge}"
-                k = ks_edge[0]
-                ks[other_node] = node_k + k
-                queue.append(other_node)
+                    assert len(ks_edge) == 1, f"Invalid ks_edge: {ks_edge}"
+                    k = ks_edge[0]
+                    ks[other_node] = node_k + k
+                    queue.append(other_node)
 
-        nodes = [node for node in visited]
-        ks = np.array([ks[node] for node in nodes]) # to numpy
-        ks = ks - np.min(ks) # 0 to max
+            nodes = [node for node in visited]
+            ks = np.array([ks[node] for node in nodes]) # to numpy
+            ks = ks - np.min(ks) # 0 to max
+            ks_list.append(ks)
+            nodes_list.append(nodes)
+            len_visited += len(visited)
 
-        print(f"Visited {len(visited)} nodes. During Breadth First Search.")
+        # assign unique k ranges to each entry
+        start_k = 0
+        ks_list_assigned = []
+        nodes_assigned = []
+        for i in range(len(ks_list)):
+            nodes = nodes_list[i]
+            ks = ks_list[i]
+            min_k = np.min(ks)
+            ks = ks - min_k + start_k
+            start_k = np.max(ks) + 10
+            ks_list_assigned.append(ks)
+            nodes_assigned.extend(nodes)
 
-        return nodes, ks
+        # concat to numpy
+        ks_list = np.concatenate(ks_list_assigned)
+
+        print(f"Visited {len_visited} nodes. During Breadth First Search.")
+
+        return nodes_assigned, ks_list
     
     def bfs_ks_indices_transition(self, input_graph, graph_block, index_nodes_dict, edges_indices, valid_mask_int):
         valid_mask = valid_mask_int > 0
@@ -2525,10 +2558,8 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
     recompute = recompute or not os.path.exists(recompute_path)
 
     continue_segmentation_path = path.replace("blocks", "scroll_graph_progress") + ".pkl"
-    
 
-
-    update_graph = False
+    update_graph = True
     if update_graph:
         # Build graph
         if recompute:
@@ -2552,8 +2583,10 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
 
         # min_x, max_x, min_y, max_y = None, None, None, None
         # min_z, max_z, umbilicus_max_distance = 600, 1000, 200
-        min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = 700, 800, 650, 850, 800, 900, None # 2 blocks without middle
+        # min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = 700, 800, 650, 850, 800, 900, None # 2 blocks without middle
         # min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = 475, 875, 525, 925, 600, 1000, None # 4x4x4 blocks with middle
+        min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = 450, 750, 625, 925, 800, 900, None # 3x3x1 blocks with middle
+        # min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = 575, 775, 625, 825, 700, 900, None # 2x2x2 blocks with middle
         # min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = 575, 775, 725, 825, 800, 900, None # 2 blocks with middle
         # min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = 600, 1000, 550, 950, 600, 1000, None
         # min_z, max_z, umbilicus_max_distance = None, None, None
