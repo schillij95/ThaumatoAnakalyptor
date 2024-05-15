@@ -264,7 +264,7 @@ std::pair<double, int*> build_graph_from_individual__(int length_individual, flo
 }
 
 // Main function to build the graph from given inputs
-std::pair<double, int*> build_graph_from_individual(int length_individual, float* individual, int graph_raw_length, int* graph_raw, bool* same_block, int length_bad_edges, int* bad_edges, double factor_0, double factor_not_0, double factor_bad, int legth_initial_component, int* initial_component, bool build_valid_edges) {
+std::pair<double, int*> build_graph_from_individual(int length_individual, float* individual, int graph_raw_length, int* graph_raw, bool* same_block, int length_bad_edges, int* bad_edges, double factor_0, double factor_not_0, double factor_bad, int legth_initial_component, int* initial_component, bool build_valid_edges, bool use_ignoring) {
     // Initialize the graph components with the maximum node id + 1
     WeightedUF uf;
 
@@ -280,6 +280,10 @@ std::pair<double, int*> build_graph_from_individual(int length_individual, float
     std::iota(sorted_indices.begin(), sorted_indices.end(), 0);
     std::sort(sorted_indices.begin(), sorted_indices.end(), 
               [&individual](int i1, int i2) { return individual[i1] < individual[i2]; });
+
+    //print first and last gene sorted by value
+    // std::cout << "First gene: " << individual[sorted_indices[0]] << std::endl;
+    // std::cout << "Last gene: " << individual[sorted_indices[graph_raw_length-1]] << std::endl;
 
     double valid_edges_count = 0;
     double invalid_edges_count = 1;
@@ -302,6 +306,9 @@ std::pair<double, int*> build_graph_from_individual(int length_individual, float
         int node2 = graph_raw[4*index + 1];
         int k = graph_raw[4*index + 2];
         int certainty = graph_raw[4*index + 3];
+        if (certainty <= 0) {
+            std::cout << "Invalid certainty value: " << certainty << std::endl;
+        }
 
         double k_factor = same_block[index] ? factor_not_0 : factor_0;
         double score_edge = k_factor * ((double)certainty);
@@ -312,7 +319,7 @@ std::pair<double, int*> build_graph_from_individual(int length_individual, float
         int connection_weight;
         bool connected_nodes = uf.connected(node1, node2, connection_weight);
         if (!connected_nodes) { // if not connected we can unconditionally add the edge
-            if (max_building_edge_gene >= individual[index]) { // if the gene is smaller than the max building edge gene, we can add the edge
+            if (!use_ignoring || max_building_edge_gene >= individual[index]) { // if the gene is smaller than the max building edge gene, we can add the edge
                 add_node_to_component(uf, node1, node2, k);
                 valid_edges_count += score_edge;
                 if (build_valid_edges){
@@ -333,7 +340,7 @@ std::pair<double, int*> build_graph_from_individual(int length_individual, float
                 if (build_valid_edges){
                         valid_edges[index] = 0;
                 }
-                if (max_building_edge_gene >= individual[index]) { // Only count invalid edges that were not unselected by the individual
+                if (!use_ignoring || max_building_edge_gene >= individual[index]) { // Only count invalid edges that were not unselected by the individual
                     invalid_edges_count += score_edge;
                 }
                 // if (check_very_bad_direction(connection_weight, k)) {
@@ -498,7 +505,7 @@ std::pair<double, int*> build_graph_from_individual_partially_working(int length
 }
 
 // Main function to build the graph from given inputs
-std::pair<double, int*> build_graph_from_individual_patch(int length_individual, float* individual, int graph_raw_length, int* graph_raw, bool* same_block, int length_bad_edges, int* bad_edges, double factor_0, double factor_not_0, double factor_bad, bool build_valid_edges) {
+std::pair<double, int*> build_graph_from_individual_patch(int length_individual, float* individual, int graph_raw_length, int* graph_raw, bool* same_block, int length_bad_edges, int* bad_edges, double factor_0, double factor_not_0, double factor_bad, bool build_valid_edges, bool use_ignoring) {
     // Initialize the graph components with the maximum node id + 1
     WeightedUF uf;
 
@@ -638,13 +645,14 @@ private:
     std::vector<Individual*> new_population;
     std::vector<double> genes_performance;
     int population_size;
+    double top_p_percent = 0.1;
     const double crossover_rate = 0.01;
     const double mutation_rate = 0.1;
-    const double fix_percentage = 0.05;
-    const double max_fix_percentage = 0.40;
+    const double fix_percentage = 0.025;
+    const double max_fix_percentage = 0.30;
     const int fix_step = 10; // Fix the best genes every 20 epochs. INFORMATION: the larger the problem length (graph length), the more fix steps are needed. try 20, 50, 100 at least and see how it converges.
     int tournament_size = 5;
-    std::function<double(const Individual&, int*, bool*, int, int*, int, double, double, double, int, int*)> evaluate_function;
+    std::function<double(const Individual&, int*, bool*, int, int*, int, double, double, double, int, int*, bool)> evaluate_function;
     int* graph;
     bool* same_block;
     int length_bad_edges;
@@ -655,6 +663,7 @@ private:
     double factor_bad;
     int legth_initial_component;
     int* initial_component;
+    bool use_ignoring;
     int num_threads;
 
     std::vector<std::default_random_engine> generators;
@@ -663,76 +672,71 @@ private:
     Individual best_individual;
 
     void fix_genes(int nr_fixes) {
+        int num_fixed_genes = nr_fixes * fix_percentage * graph_length;
         if (nr_fixes * fix_percentage > max_fix_percentage) {
-            return;
+            num_fixed_genes = max_fix_percentage * graph_length;
+        }
+        if (!use_ignoring) {
+            num_fixed_genes *= 2;
         }
         std::vector<int> sorted_indices(graph_length);
         std::iota(sorted_indices.begin(), sorted_indices.end(), 0);
         std::sort(sorted_indices.begin(), sorted_indices.end(), 
                 [this](int i1, int i2) { return this->genes_performance[i1] < this->genes_performance[i2]; });
         // Fix all the best genes, genes are ordered from best to worst ascendingly
-        int num_fixed_genes = nr_fixes * fix_percentage * graph_length;
         for (int indv = 0; indv < population_size; ++indv) {
             for (int i = 0; i < num_fixed_genes; ++i) {
                 int index = sorted_indices[i];
                 population[indv]->fixed_genes[index] = true;
+                // population[indv]->genes[index] = genes_performance[index]/ (top_p_percent * population_size); // Set the gene to the average of the top 10% genes
+                population[indv]->genes[index] = best_individual.genes[index]; // Set the gene to the best individual gene
             }
-            // Reset the genes
-            for (int i = num_fixed_genes; i < graph_length - num_fixed_genes; ++i) {
-                if (i >= graph_length) {
-                    break;
-                }
-                int index = sorted_indices[i];
-                population[indv]->genes[index] = (rand() % 100) / 100.0; // random in 0, 1 float
-                population[indv]->mutation_chance[index] = 0.001;  // Default mutation chance, can be adjusted
-                population[indv]->crossover_chance[index] = 0.1;  // Default crossover chance, can be adjusted
-                population[indv]->gene_direction[index] = 0; // Default direction is 1
-                population[indv]->fixed_genes[index] = false;
-            }
-            // Fix worst genes
-            for (int i = graph_length - num_fixed_genes; i < graph_length; ++i) {
-                int index = sorted_indices[i];
-                population[indv]->fixed_genes[index] = true;
-            }
-            // // Reset the last genes
-            // for (int i = graph_length; i < population[indv]->genes_length; ++i) {
-            //     population[indv]->genes[i] = (rand() % 100) / 100.0; // random in 0, 1 float
-            //     population[indv]->mutation_chance[i] = 0.001;  // Default mutation chance, can be adjusted
-            //     population[indv]->crossover_chance[i] = 0.1;  // Default crossover chance, can be adjusted
-            //     population[indv]->gene_direction[i] = 0; // Default direction is 1
-            //     population[indv]->fixed_genes[i] = false;
+            // // Reset the genes
+            // for (int i = num_fixed_genes; i < graph_length - num_fixed_genes; ++i) {
+            //     if (i >= graph_length) {
+            //         break;
+            //     }
+            //     int index = sorted_indices[i];
+            //     population[indv]->genes[index] = (rand() % 100) / 100.0; // random in 0, 1 float
+            //     population[indv]->mutation_chance[index] = 0.001;  // Default mutation chance, can be adjusted
+            //     population[indv]->crossover_chance[index] = 0.1;  // Default crossover chance, can be adjusted
+            //     population[indv]->gene_direction[index] = 0; // Default direction is 1
+            //     population[indv]->fixed_genes[index] = false;
             // }
+            if (use_ignoring) {
+                // Fix worst genes
+                for (int i = graph_length - num_fixed_genes; i < graph_length; ++i) {
+                    int index = sorted_indices[i];
+                    population[indv]->fixed_genes[index] = true;
+                }
+            }
         }
         for (int indv = 0; indv < population_size; ++indv) {
             for (int i = 0; i < num_fixed_genes; ++i) {
                 int index = sorted_indices[i];
                 new_population[indv]->fixed_genes[index] = true;
             }
-            // Reset the genes
-            for (int i = num_fixed_genes; i < graph_length - num_fixed_genes; ++i) {
-                if (i >= graph_length) {
-                    break;
-                }
-                int index = sorted_indices[i];
-                new_population[indv]->genes[index] = (rand() % 100) / 100.0; // random in 0, 1 float
-                new_population[indv]->mutation_chance[index] = 0.001;  // Default mutation chance, can be adjusted
-                new_population[indv]->crossover_chance[index] = 0.1;  // Default crossover chance, can be adjusted
-                new_population[indv]->gene_direction[index] = 0; // Default direction is 1
-                new_population[indv]->fixed_genes[index] = false;
-            }
-            // Fix worst genes
-            for (int i = graph_length - num_fixed_genes; i < graph_length; ++i) {
-                int index = sorted_indices[i];
-                population[indv]->fixed_genes[index] = true;
-            }
-            // // Reset the last genes
-            // for (int i = graph_length; i < population[indv]->genes_length; ++i) {
-            //     population[indv]->genes[i] = (rand() % 100) / 100.0; // random in 0, 1 float
-            //     population[indv]->mutation_chance[i] = 0.001;  // Default mutation chance, can be adjusted
-            //     population[indv]->crossover_chance[i] = 0.1;  // Default crossover chance, can be adjusted
-            //     population[indv]->gene_direction[i] = 0; // Default direction is 1
-            //     population[indv]->fixed_genes[i] = false;
+            // // Reset the genes
+            // for (int i = num_fixed_genes; i < graph_length - num_fixed_genes; ++i) {
+            //     if (i >= graph_length) {
+            //         break;
+            //     }
+            //     int index = sorted_indices[i];
+            //     new_population[indv]->genes[index] = (rand() % 100) / 100.0; // random in 0, 1 float
+            //     new_population[indv]->mutation_chance[index] = 0.001;  // Default mutation chance, can be adjusted
+            //     new_population[indv]->crossover_chance[index] = 0.1;  // Default crossover chance, can be adjusted
+            //     new_population[indv]->gene_direction[index] = 0; // Default direction is 1
+            //     new_population[indv]->fixed_genes[index] = false;
             // }
+            if (use_ignoring) {
+                // Fix worst genes
+                for (int i = graph_length - num_fixed_genes; i < graph_length; ++i) {
+                    int index = sorted_indices[i];
+                    population[indv]->fixed_genes[index] = true;
+                    // population[indv]->genes[index] = genes_performance[index]/ (top_p_percent * population_size); // Set the gene to the average of the top 10% genes
+                    population[indv]->genes[index] = best_individual.genes[index]; // Set the gene to the best individual gene
+                }
+            }
         }
         // Reset the performance of the genes
         for (int i = 0; i < graph_length; ++i) {
@@ -741,13 +745,21 @@ private:
     }
 
     void track_best_performing_genes(int nr_fixes) {
-        if (nr_fixes * fix_percentage >= max_fix_percentage) {
-            return;
-        }
+        // if (nr_fixes * fix_percentage >= max_fix_percentage) {
+        //     return;
+        // }
+        // Find top 10% performing individuals by fitness
+        std::vector<int> sorted_indices(population_size);
+        std::iota(sorted_indices.begin(), sorted_indices.end(), 0);
+        std::sort(sorted_indices.begin(), sorted_indices.end(), 
+                [this](int i1, int i2) { return this->population[i1]->fitness > this->population[i2]->fitness; });
+
+        int top_10_percent = population_size * top_p_percent;
         // Track the ranking of every gene in the population
-        for (int i = 0; i < population_size; ++i) {
+        for (int i = 0; i < top_10_percent; ++i) {
+            int index = sorted_indices[i];
             for (int j = 0; j < graph_length; ++j) {
-                genes_performance[j] += population[i]->genes[j];
+                genes_performance[j] += population[index]->genes[j];
             }
         }
     }
@@ -763,7 +775,7 @@ private:
         // Lambda to process a slice of the population
         auto process_chunk = [this, valid_edges_percentage](int start, int end) {
             for (int i = start; i < end && i < this->population.size(); ++i) {
-                double fitness = this->evaluate_function(*this->population[i], this->graph, this->same_block, this->length_bad_edges, this->bad_edges, this->graph_length, this->factor_0, this->factor_not_0, this->factor_bad, this->legth_initial_component, this->initial_component);
+                double fitness = this->evaluate_function(*this->population[i], this->graph, this->same_block, this->length_bad_edges, this->bad_edges, this->graph_length, this->factor_0, this->factor_not_0, this->factor_bad, this->legth_initial_component, this->initial_component, this->use_ignoring);
                 this->population[i]->fitness = fitness;
             }
         };
@@ -790,7 +802,7 @@ private:
         }
 
         // get cross-generational comparable fitness score with fixed valid edges percentage
-        double fitness = this->evaluate_function(best_individual_generation, this->graph, this->same_block, this->length_bad_edges, this->bad_edges, this->graph_length, this->factor_0, this->factor_not_0, factor_bad, this->legth_initial_component, this->initial_component);
+        double fitness = this->evaluate_function(best_individual_generation, this->graph, this->same_block, this->length_bad_edges, this->bad_edges, this->graph_length, this->factor_0, this->factor_not_0, factor_bad, this->legth_initial_component, this->initial_component, this->use_ignoring);
         best_individual_generation.fitness = fitness;
 
         if (best_individual_generation.fitness > best_individual.fitness) {
@@ -978,11 +990,11 @@ private:
     }
 
 public:
-    EvolutionaryAlgorithm(int pop_size, int genes_length, std::function<double(const Individual&, int*, bool*, int, int*, int, double, double, double, int, int*)> eval_func,
-                            int* graph, bool* same_block, int length_bad_edges, int* bad_edges, double factor_0, double factor_not_0, double factor_bad, int legth_initial_component, int* initial_component,
+    EvolutionaryAlgorithm(int pop_size, int genes_length, std::function<double(const Individual&, int*, bool*, int, int*, int, double, double, double, int, int*, bool)> eval_func,
+                            int* graph, bool* same_block, int length_bad_edges, int* bad_edges, double factor_0, double factor_not_0, double factor_bad, int legth_initial_component, int* initial_component, bool use_ignoring,
                             int num_thrds = std::thread::hardware_concurrency())
                             : population_size(pop_size), evaluate_function(eval_func), graph(graph), same_block(same_block), length_bad_edges(length_bad_edges), bad_edges(bad_edges), graph_length(genes_length),
-                            factor_0(factor_0), factor_not_0(factor_not_0), factor_bad(factor_bad), legth_initial_component(legth_initial_component), initial_component(initial_component),
+                            factor_0(factor_0), factor_not_0(factor_not_0), factor_bad(factor_bad), legth_initial_component(legth_initial_component), initial_component(initial_component), use_ignoring(use_ignoring),
                             num_threads(num_thrds), distribution(0.0, 1.0), best_individual(genes_length+2) {
         pool.reserve(pop_size * 2);  // Preallocate memory for individuals
         for (int i = 0; i < pop_size * 2; ++i) {
@@ -1036,34 +1048,34 @@ public:
     }
 };
 
-double evaluate_k_assignment(const Individual& individual, int* graph, bool* same_block, int length_bad_edges, int* bad_edges, int graph_length,  double factor_0, double factor_not_0, double factor_bad, int legth_initial_component, int* initial_component)
+double evaluate_k_assignment(const Individual& individual, int* graph, bool* same_block, int length_bad_edges, int* bad_edges, int graph_length,  double factor_0, double factor_not_0, double factor_bad, int legth_initial_component, int* initial_component, bool use_ignoring)
 {
-    auto result = build_graph_from_individual(individual.genes_length, individual.genes, graph_length, graph, same_block, length_bad_edges, bad_edges, factor_0, factor_not_0, factor_bad, legth_initial_component, initial_component, false);
+    auto result = build_graph_from_individual(individual.genes_length, individual.genes, graph_length, graph, same_block, length_bad_edges, bad_edges, factor_0, factor_not_0, factor_bad, legth_initial_component, initial_component, false, use_ignoring);
     return result.first;
 }
 
-std::tuple<double, int*, float*> evolution_solve_k_assignment(int population_size, int generations, int graph_length, int* graph, bool* same_block, int length_bad_edges, int* bad_edges, double factor_0, double factor_not_0, double factor_bad, int legth_initial_component, int* initial_component) {
-    EvolutionaryAlgorithm ea(population_size, graph_length, evaluate_k_assignment, graph, same_block, length_bad_edges, bad_edges, factor_0, factor_not_0, factor_bad, legth_initial_component, initial_component);
+std::tuple<double, int*, float*> evolution_solve_k_assignment(int population_size, int generations, int graph_length, int* graph, bool* same_block, int length_bad_edges, int* bad_edges, double factor_0, double factor_not_0, double factor_bad, int legth_initial_component, int* initial_component, bool use_ignoring) {
+    EvolutionaryAlgorithm ea(population_size, graph_length, evaluate_k_assignment, graph, same_block, length_bad_edges, bad_edges, factor_0, factor_not_0, factor_bad, legth_initial_component, initial_component, use_ignoring);
     auto best_individual = ea.run(generations);
 
-    auto res = build_graph_from_individual(best_individual.genes_length, best_individual.genes, graph_length, graph, same_block, length_bad_edges, bad_edges, factor_0, factor_not_0, factor_bad, legth_initial_component, initial_component, true);
+    auto res = build_graph_from_individual(best_individual.genes_length, best_individual.genes, graph_length, graph, same_block, length_bad_edges, bad_edges, factor_0, factor_not_0, factor_bad, legth_initial_component, initial_component, true, use_ignoring);
     std::cout << "Best fitness: " << res.first << std::endl;
     return {res.first, res.second, best_individual.genes};
 }
 
-double evaluate_patches(const Individual& individual, int* graph, bool* same_block, int length_bad_edges, int* bad_edges, int graph_length,  double factor_0, double factor_not_0, double factor_bad, int legth_initial_component, int* initial_component)
+double evaluate_patches(const Individual& individual, int* graph, bool* same_block, int length_bad_edges, int* bad_edges, int graph_length,  double factor_0, double factor_not_0, double factor_bad, int legth_initial_component, int* initial_component, bool use_ignoring)
 {
-    auto result = build_graph_from_individual_patch(individual.genes_length, individual.genes, graph_length, graph, same_block, length_bad_edges, bad_edges, factor_0, factor_not_0, factor_bad, false);
+    auto result = build_graph_from_individual_patch(individual.genes_length, individual.genes, graph_length, graph, same_block, length_bad_edges, bad_edges, factor_0, factor_not_0, factor_bad, false, use_ignoring);
     return result.first;
 }
 
 std::tuple<double, int*, float*> evolution_solve_patches(int population_size, int generations, int graph_length, int* graph, bool* same_block, int length_bad_edges, int* bad_edges, double factor_0, double factor_not_0, double factor_bad) {
     int legth_initial_component = 0;
     int* initial_component = nullptr;
-    EvolutionaryAlgorithm ea(population_size, graph_length, evaluate_patches, graph, same_block, length_bad_edges, bad_edges, factor_0, factor_not_0, factor_bad, legth_initial_component, initial_component);
+    EvolutionaryAlgorithm ea(population_size, graph_length, evaluate_patches, graph, same_block, length_bad_edges, bad_edges, factor_0, factor_not_0, factor_bad, legth_initial_component, initial_component, false);
     auto best_individual = ea.run(generations);
 
-    auto res = build_graph_from_individual_patch(best_individual.genes_length, best_individual.genes, graph_length, graph, same_block, length_bad_edges, bad_edges, factor_0, factor_not_0, factor_bad, true);
+    auto res = build_graph_from_individual_patch(best_individual.genes_length, best_individual.genes, graph_length, graph, same_block, length_bad_edges, bad_edges, factor_0, factor_not_0, factor_bad, true, false);
     return {res.first, res.second, best_individual.genes};
 }
 

@@ -141,8 +141,8 @@ std::string format_filename(int number) {
 
 class PointCloudLoader {
 public:
-    PointCloudLoader(const std::vector<std::tuple<std::vector<int>, int, double>>& node_data, const std::string& base_path)
-        : node_data_(node_data), base_path_(base_path) {}
+    PointCloudLoader(const std::vector<std::tuple<std::vector<int>, int, double>>& node_data, const std::string& base_path, bool verbose)
+        : node_data_(node_data), base_path_(base_path), verbose(verbose) {}
 
     bool extract_ply_from_tar(const std::string& tar_path, const std::string& ply_filename, std::string& out_ply_content) {
         struct archive *a;
@@ -237,6 +237,9 @@ public:
     }
 
     void print_progress() {
+        if (!verbose) {
+            return;
+        }
         progress++;
         // print on one line
         std::cout << "Progress: " << progress << "/" << problem_size << "\r";
@@ -288,7 +291,9 @@ public:
         }
 
         // Reset progress
-        std::cout << std::endl;
+        if (verbose) {
+            std::cout << std::endl;
+        }
         problem_size = -1;
         progress = 0;
 
@@ -306,10 +311,14 @@ public:
     void load_all() {
         size_t total_nodes = node_data_.size();
         offset_per_node = std::make_unique<int[]>(total_nodes); // smart pointer
-        std::cout << "Loading all nodes..." << std::endl;
+        if (verbose) {
+            std::cout << "Loading all nodes..." << std::endl;
+        }
         long int total_points = find_total_points();
         all_points.reserve(total_points);
-        std::cout << "Total points: " << total_points << std::endl;
+        if (verbose) {
+            std::cout << "Total points: " << total_points << std::endl;
+        }
 
         size_t num_threads = std::thread::hardware_concurrency(); // Number of threads
         std::vector<std::thread> threads;
@@ -328,8 +337,10 @@ public:
         for (auto& thread : threads) {
             thread.join();
         }
-        std::cout << std::endl;
-        std::cout << "All nodes have been processed." << std::endl;
+        if (verbose) {
+            std::cout << std::endl;
+            std::cout << "All nodes have been processed." << std::endl;
+        }   
     }
 
     PointCloud get_results() {
@@ -346,11 +357,12 @@ private:
     mutable std::mutex mutex_;
     int progress = 0;
     int problem_size = -1;
+    bool verbose;
 };
 
 class PointCloudProcessor {
 public:
-    explicit PointCloudProcessor(PointCloud& cloud) : cloud_(cloud) {}
+    explicit PointCloudProcessor(PointCloud& cloud, bool verbose) : cloud_(cloud), verbose(verbose) {}
 
     void deleteMarkedPoints() {
         cloud_.pts.erase(std::remove_if(cloud_.pts.begin(), cloud_.pts.end(), [](const Point& p) {
@@ -415,7 +427,9 @@ public:
         for (auto& thread : threads) {
             thread.join();
         }
-        std::cout << std::endl;
+        if (verbose) {
+            std::cout << std::endl;
+        }
         progress = 0;
 
         // Apply deletions
@@ -451,8 +465,9 @@ public:
         for (auto& thread : threads) {
             thread.join();
         }
-
-        std::cout << std::endl;
+        if (verbose) {
+            std::cout << std::endl;
+        }
 
         // Replace old points with filtered
         cloud_.pts = filteredPoints;
@@ -487,7 +502,9 @@ public:
         add_pointcloud_to_hdbscan(start, end, hdbscan);
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            std::cout << "Applying HDBSCAN for winding angle range: " << start << " to " << end << std::endl;
+            if (verbose) {
+                std::cout << "Applying HDBSCAN for winding angle range: " << start << " to " << end << std::endl;
+            }
         }
         hdbscan.execute(min_cluster_size, 1, "Euclidean");
         // Filter subCloud.pts based on HDBSCAN results
@@ -501,9 +518,13 @@ private:
     PointCloud& cloud_;
     int progress = 0;
     int problem_size = -1;
+    bool verbose;
     std::mutex mutex_;
 
     void print_progress() {
+        if (!verbose) {
+            return;
+        }
         progress++;
         // print on one line
         std::cout << "Progress: " << progress << "/" << problem_size << "\r";
@@ -681,19 +702,27 @@ py::array_t<bool> vector_to_array(std::vector<bool> selected_originals) {
     return points_mask;
 }
 
-std::tuple<py::array_t<float>, py::array_t<float>, py::array_t<float>> load_pointclouds(const std::vector<std::tuple<std::vector<int>, int, double>>& nodes, const std::string& path) {
-    PointCloudLoader loader(nodes, path);
+std::tuple<py::array_t<float>, py::array_t<float>, py::array_t<float>> load_pointclouds(const std::vector<std::tuple<std::vector<int>, int, double>>& nodes, const std::string& path, bool verbose = true) {
+    PointCloudLoader loader(nodes, path, verbose);
     loader.load_all();
     PointCloud vector_points = loader.get_results();
-    PointCloudProcessor processor(vector_points);
+    PointCloudProcessor processor(vector_points, verbose);
     processor.sortPointsXYZW();
-    std::cout << "Sorted points by XYZW" << std::endl;
+    if (verbose) {
+        std::cout << "Sorted points by XYZW" << std::endl;
+    }
     processor.processDuplicates();
-    std::cout << "Processed duplicates" << std::endl;
+    if (verbose) {
+        std::cout << "Processed duplicates" << std::endl;
+    }
     processor.deleteMarkedPoints();
-    std::cout << "Deleted marked points" << std::endl;
+    if (verbose) {
+        std::cout << "Deleted marked points" << std::endl;
+    }
     processor.filterPointsUsingKDTree(2.0, 90.0);
-    std::cout << "Filtered points using KDTree" << std::endl;
+    if (verbose) {
+        std::cout << "Filtered points using KDTree" << std::endl;
+    }
     processor.sortPointsWZYX();
     // Following is NOT working (use python version, quite fast-ish)
     // processor.filterPointsClustering(2.0, 8000); 

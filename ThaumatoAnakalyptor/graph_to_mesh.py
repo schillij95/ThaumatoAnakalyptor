@@ -160,6 +160,36 @@ def closest_points_and_distances(points, line_point, line_vector):
     
     return distances, closest_points, t
 
+def closest_points_and_distances_cylindrical(points, line_point, line_vector):
+    """
+    Calculate the shortest distances from multiple points to an infinitely long line in 3D,
+    and find the closest points on that line for each point.
+    
+    Parameters:
+    points (numpy.array): The 3D points as an array of shape (n, 3).
+    line_point (numpy.array): A point on the line (x, y, z).
+    line_vector (numpy.array): The direction vector of the line (dx, dy, dz).
+    
+    Returns:
+    numpy.array: The shortest distances from each point to the line.
+    numpy.array: The closest points on the line for each point.
+    """
+    # Vectors from the point on the line to the points in space
+    points_to_line_point = points - line_point
+    # Project these vectors onto the line vector to find the closest points
+    t_sign = np.sign(np.dot(points_to_line_point, line_vector) / np.dot(line_vector, line_vector))
+    
+    radius_xy = np.sqrt(points_to_line_point[:,2]**2 + points_to_line_point[:,0]**2)
+    # print(f"radius shape: {radius_xy.shape}")
+    line_vector_norm = np.linalg.norm(line_vector)
+    ts = t_sign * radius_xy / line_vector_norm
+    closest_points = line_point + np.outer(ts, line_vector)
+
+    # Distance calculations using the norms of the vectors from points to closest points on the line
+    distances = np.linalg.norm(points - closest_points, axis=1)
+
+    return distances, closest_points, ts
+
 def load_ply(ply_file_path):
     """
     Load point cloud data from a .ply file.
@@ -665,11 +695,12 @@ class WalkToSheet():
         ordered_pointset_dict_normals = {}
         ordered_pointset_dict_ts = {}        
 
+        # valid_mask_count = 0
         for z in z_positions:
             umbilicus_positions = umbilicus_func(z) # shape is 3
             # extract all points at most max_eucledian_distance from the line defined by the umbilicus_positions and the angle vector
             # distances = distances_points_to_line(points[:, :3], umbilicus_positions, angle_vector)
-            distances2, points_on_line, t = closest_points_and_distances(points[:, :3], umbilicus_positions, angle_vector)
+            distances2, points_on_line, t = closest_points_and_distances_cylindrical(points[:, :3], umbilicus_positions, angle_vector)
             umbilicus_distances = np.linalg.norm(points[:, :3] - umbilicus_positions, axis=1)
             # assert np.allclose(distances, distances2), f"Distance calculation is not correct: {distances} != {distances2}"
             mask = distances2 < max_eucledian_distance
@@ -677,17 +708,18 @@ class WalkToSheet():
             mask = np.logical_and(mask, np.logical_not(t_valid_mask))
 
             if np.sum(mask) > 0:
+                # valid_mask_count += 1
                 # cylindrical coordinate system
-                umbilicus_distances = umbilicus_distances[mask] # radiuses from points to umbilicus
-                mean_umbilicus_distance = np.mean(umbilicus_distances)
-                # calculate mean t value for angle vector and mean umbilicus distance
-                mean_t = mean_umbilicus_distance / np.linalg.norm(angle_vector)
-                mean_angle_vector_point = umbilicus_positions - mean_t * angle_vector
-                ordered_pointset_dict[z] = mean_angle_vector_point
+                # umbilicus_distances = umbilicus_distances[mask] # radiuses from points to umbilicus
+                # mean_umbilicus_distance = np.mean(umbilicus_distances)
+                # # calculate mean t value for angle vector and mean umbilicus distance
+                # mean_t = mean_umbilicus_distance / np.linalg.norm(angle_vector)
+                # mean_angle_vector_point = umbilicus_positions - mean_t * angle_vector
+                # ordered_pointset_dict[z] = mean_angle_vector_point
 
                 # going a little more archaic at the problem then with cylindrical coordinate system
-                # close_points = points_on_line[mask][:, :3]
-                # ordered_pointset_dict[z] = np.mean(close_points, axis=0)
+                close_points = points_on_line[mask][:, :3]
+                ordered_pointset_dict[z] = np.mean(close_points, axis=0)
 
                 close_normals = normals[mask]
                 mean_normal = np.mean(close_normals, axis=0)
@@ -698,6 +730,89 @@ class WalkToSheet():
                 ordered_pointset_dict[z] = None
                 ordered_pointset_dict_normals[z] = None
                 ordered_pointset_dict_ts[z] = None
+        # print(f"Valid mask count: {valid_mask_count} out of {len(z_positions)}")
+
+        # linear interpolation setup
+        interpolation_positions = [z for z in z_positions if ordered_pointset_dict[z] is not None]
+        if len(interpolation_positions) == 0: # bad state
+            return None, None, None, angle_vector
+        elif len(interpolation_positions) == 1: # almost as bad of a state
+            interpolated_points, interpolated_normals, interpolated_t = np.array([ordered_pointset_dict[interpolation_positions[0]]]*len(z_positions)), np.array([ordered_pointset_dict_normals[interpolation_positions[0]]]*len(z_positions)), np.array([ordered_pointset_dict_ts[interpolation_positions[0]]]*len(z_positions))
+            interpolated_points[:, 1] = z_positions
+            return interpolated_points, interpolated_normals, interpolated_t, angle_vector
+        interpolation_positions = np.array(interpolation_positions)
+        interpolation_points = np.array([ordered_pointset_dict[z] for z in z_positions if ordered_pointset_dict[z] is not None])
+        interpolation_normals = np.array([ordered_pointset_dict_normals[z] for z in z_positions if ordered_pointset_dict[z] is not None])
+        interpolation_ts = np.array([ordered_pointset_dict_ts[z] for z in z_positions if ordered_pointset_dict[z] is not None])
+        interpolation_function_y = interp1d(interpolation_positions, interpolation_points[:, 0], kind='linear', fill_value=(interpolation_points[0, 0], interpolation_points[-1, 0]), bounds_error=False)
+        interpolation_function_x = interp1d(interpolation_positions, interpolation_points[:, 2], kind='linear', fill_value=(interpolation_points[0, 2], interpolation_points[-1, 2]), bounds_error=False)
+        interpolation_function_normals_y = interp1d(interpolation_positions, interpolation_normals[:, 0], kind='linear', fill_value=(interpolation_normals[0, 0], interpolation_normals[-1, 0]), bounds_error=False)
+        interpolation_function_normals_z = interp1d(interpolation_positions, interpolation_normals[:, 1], kind='linear', fill_value=(interpolation_normals[0, 1], interpolation_normals[-1, 1]), bounds_error=False)
+        interpolation_function_normals_x = interp1d(interpolation_positions, interpolation_normals[:, 2], kind='linear', fill_value=(interpolation_normals[0, 2], interpolation_normals[-1, 2]), bounds_error=False)
+        interpolation_function_t = interp1d(interpolation_positions, interpolation_ts, kind='linear', fill_value=(interpolation_ts[0], interpolation_ts[-1]), bounds_error=False)
+        
+        # generate interpolated points for all z_positions
+        interpolated_points_y = interpolation_function_y(z_positions)
+        interpolated_points_x = interpolation_function_x(z_positions)
+        interpolated_points = np.array([np.array([y, z, x]) for y, z, x in zip(interpolated_points_y, z_positions, interpolated_points_x)])
+        interpolated_normals_x = interpolation_function_normals_x(z_positions)
+        interpolated_normals_y = interpolation_function_normals_y(z_positions)
+        interpolated_normals_z = interpolation_function_normals_z(z_positions)
+        interpolated_normals = np.array([np.array([x, y, z]) for x, y, z in zip(interpolated_normals_x, interpolated_normals_y, interpolated_normals_z)])
+        interpolated_normals = np.array([normal / np.linalg.norm(normal) for normal in interpolated_normals])
+        interpolated_t = interpolation_function_t(z_positions)
+
+        return interpolated_points, interpolated_normals, interpolated_t, angle_vector
+    
+    def ts_at_angle(self, points, normals, z_positions, angle, max_eucledian_distance=20):
+        angle_360 = (angle + int(1 + angle//360) * 360) % 360
+        angle_vector = np.array([np.cos(np.radians(angle_360)), 0.0, -np.sin(np.radians(angle_360))])
+        # angle_between_control = angle_between(angle_vector[[0,2]])
+        # assert np.isclose((angle + int(1 + angle//360) * 360) % 360, (angle_between_control + int(1 + angle_between_control//360) * 360) % 360), f"Angle {angle} ({(angle + int(1 + angle//360) * 360) % 360}) and angle_between_control {angle_between_control} ({(angle_between_control + int(1 + angle_between_control//360) * 360)}) are not close enough."
+
+        # umbilicus position
+        umbilicus_func = lambda z: umbilicus_xz_at_y(self.graph.umbilicus_data, z)
+
+        ordered_pointset_dict = {}
+        ordered_pointset_dict_normals = {}
+        ordered_pointset_dict_ts = {}        
+
+        # valid_mask_count = 0
+        for z in z_positions:
+            umbilicus_positions = umbilicus_func(z) # shape is 3
+            # extract all points at most max_eucledian_distance from the line defined by the umbilicus_positions and the angle vector
+            # distances = distances_points_to_line(points[:, :3], umbilicus_positions, angle_vector)
+            distances2, points_on_line, t = closest_points_and_distances_cylindrical(points[:, :3], umbilicus_positions, angle_vector)
+            umbilicus_distances = np.linalg.norm(points[:, :3] - umbilicus_positions, axis=1)
+            # assert np.allclose(distances, distances2), f"Distance calculation is not correct: {distances} != {distances2}"
+            mask = distances2 < max_eucledian_distance
+            t_valid_mask = t > 0
+            mask = np.logical_and(mask, np.logical_not(t_valid_mask))
+
+            if np.sum(mask) > 0:
+                # valid_mask_count += 1
+                # cylindrical coordinate system
+                # umbilicus_distances = umbilicus_distances[mask] # radiuses from points to umbilicus
+                # mean_umbilicus_distance = np.mean(umbilicus_distances)
+                # # calculate mean t value for angle vector and mean umbilicus distance
+                # mean_t = mean_umbilicus_distance / np.linalg.norm(angle_vector)
+                # mean_angle_vector_point = umbilicus_positions - mean_t * angle_vector
+                # ordered_pointset_dict[z] = mean_angle_vector_point
+
+                # going a little more archaic at the problem then with cylindrical coordinate system
+                close_points = points_on_line[mask][:, :3]
+                ordered_pointset_dict[z] = np.mean(close_points, axis=0)
+
+                close_normals = normals[mask]
+                mean_normal = np.mean(close_normals, axis=0)
+                ordered_pointset_dict_normals[z] = mean_normal / np.linalg.norm(mean_normal)
+                close_t = t[mask]
+                ordered_pointset_dict_ts[z] = np.mean(close_t)
+            else:
+                ordered_pointset_dict[z] = None
+                ordered_pointset_dict_normals[z] = None
+                ordered_pointset_dict_ts[z] = None
+        # print(f"Valid mask count: {valid_mask_count} out of {len(z_positions)}")
 
         # linear interpolation setup
         interpolation_positions = [z for z in z_positions if ordered_pointset_dict[z] is not None]
@@ -834,10 +949,13 @@ class WalkToSheet():
                 ordered_pointsets_final.append((ordered_pointsets[o][0], ordered_pointsets[o][1]))
                 continue
             ordered_pointset = []
-            # interpolate eich height level
+            # interpolate each height level
             angle_vector = ordered_pointsets[o][3]
             for i, z in enumerate(z_positions):
-                t_vals = [ordered_pointsets[u][2][i] for u in range(len(ordered_pointsets)) if ordered_pointsets[u][0] is not None]
+                t_vals = [ordered_pointsets[u][2][i] for u in range(len(ordered_pointsets)) if ordered_pointsets[u] is not None and ordered_pointsets[u][0] is not None]
+                if len(t_vals) == 0:
+                    # no good neighbours
+                    continue
                 # interpolate
                 t_vals_interpolation = interp1d(indices, t_vals, kind='linear', fill_value=(t_vals[0], t_vals[-1]), bounds_error=False)
                 t = t_vals_interpolation(o)

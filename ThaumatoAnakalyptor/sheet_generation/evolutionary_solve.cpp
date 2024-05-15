@@ -50,9 +50,16 @@ std::tuple<double, py::array_t<int>, py::array_t<float>> evolution_solve_k_assig
     double factor_not_0,
     double factor_bad,
     int legth_initial_component,
-    py::array_t<int> initial_component
+    py::array_t<int> initial_component,
+    bool use_ignoring = true
     )
 {
+    if (use_ignoring) {
+        std::cout << "Using edge-ignoring to evolve a solution." << std::endl;
+    }
+    else {
+        std::cout << "Not using edge-ignoring to evolve a solution." << std::endl;
+    }
     // Directly use the pointer to the data in the edges array
     int* edges_cpp = static_cast<int*>(edges.request().ptr);
     bool* same_block_cpp = static_cast<bool*>(same_block.request().ptr);
@@ -61,7 +68,7 @@ std::tuple<double, py::array_t<int>, py::array_t<float>> evolution_solve_k_assig
     // Directly use the pointer to the data in the initial_component array
     int* initial_component_cpp = static_cast<int*>(initial_component.request().ptr);
 
-    auto res = evolution_solve_k_assignment(population_size, generations, length_edges, edges_cpp, same_block_cpp, length_bad_edges, bad_edges_cpp, factor_0, factor_not_0, factor_bad, legth_initial_component, initial_component_cpp);
+    auto res = evolution_solve_k_assignment(population_size, generations, length_edges, edges_cpp, same_block_cpp, length_bad_edges, bad_edges_cpp, factor_0, factor_not_0, factor_bad, legth_initial_component, initial_component_cpp, use_ignoring);
 
     double valid_edges_count = std::get<0>(res);
     int* valid_edges = std::get<1>(res);
