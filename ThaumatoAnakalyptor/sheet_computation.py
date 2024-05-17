@@ -1585,7 +1585,7 @@ class EvolutionaryGraphEdgesSelection():
             population_size = 500
             generations = 600
         else:
-            population_size = 300 # 500
+            population_size = 250 # 500
             generations = 300 # 200
         population_size *= iteration + 1
         generations *= iteration + 1
@@ -3333,7 +3333,7 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
 
     continue_segmentation_path = path.replace("blocks", "scroll_graph_progress") + ".pkl"
 
-    update_graph = True
+    update_graph = False
     if update_graph:
         # Build graph
         if recompute:
