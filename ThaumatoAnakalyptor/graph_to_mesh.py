@@ -439,9 +439,8 @@ class WalkToSheet():
             block, patch_id = node[:3], node[3]
             patch_sheet_patch_info = (block, int(patch_id), winding_angle)
             sheet_infos.append(patch_sheet_patch_info)
-
         time_start = time.time()
-        points, normals, colors = pointcloud_processing.load_pointclouds(sheet_infos, self.path)
+        points, normals, colors = pointcloud_processing.load_pointclouds(sheet_infos, self.path, False)
         print(f"Time to load pointclouds: {time.time() - time_start}")
         print(f"Shape of patch_points: {np.array(points).shape}")
 
@@ -1269,7 +1268,6 @@ class WalkToSheet():
 
         # Subsample points:
         points_subsampled, normals_subsampled, colors_subsampled, _ = select_points(points, normals, colors, colors, original_ratio=0.1)
-
         # random points
         # points = np.random.rand(1000, 4)
         # normals = np.random.rand(1000, 3)

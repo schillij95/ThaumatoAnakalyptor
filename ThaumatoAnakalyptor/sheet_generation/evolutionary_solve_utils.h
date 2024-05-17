@@ -650,7 +650,7 @@ private:
     const double mutation_rate = 0.1;
     const double fix_percentage = 0.025;
     const double max_fix_percentage = 0.30;
-    const int fix_step = 10; // Fix the best genes every 20 epochs. INFORMATION: the larger the problem length (graph length), the more fix steps are needed. try 20, 50, 100 at least and see how it converges.
+    const int fix_step = 20; // Fix the best genes every 20 epochs. INFORMATION: the larger the problem length (graph length), the more fix steps are needed. try 20, 50, 100 at least and see how it converges.
     int tournament_size = 5;
     std::function<double(const Individual&, int*, bool*, int, int*, int, double, double, double, int, int*, bool)> evaluate_function;
     int* graph;
@@ -691,18 +691,18 @@ private:
                 // population[indv]->genes[index] = genes_performance[index]/ (top_p_percent * population_size); // Set the gene to the average of the top 10% genes
                 population[indv]->genes[index] = best_individual.genes[index]; // Set the gene to the best individual gene
             }
-            // // Reset the genes
-            // for (int i = num_fixed_genes; i < graph_length - num_fixed_genes; ++i) {
-            //     if (i >= graph_length) {
-            //         break;
-            //     }
-            //     int index = sorted_indices[i];
-            //     population[indv]->genes[index] = (rand() % 100) / 100.0; // random in 0, 1 float
-            //     population[indv]->mutation_chance[index] = 0.001;  // Default mutation chance, can be adjusted
-            //     population[indv]->crossover_chance[index] = 0.1;  // Default crossover chance, can be adjusted
-            //     population[indv]->gene_direction[index] = 0; // Default direction is 1
-            //     population[indv]->fixed_genes[index] = false;
-            // }
+            // Reset the genes
+            for (int i = num_fixed_genes; i < graph_length - num_fixed_genes; ++i) {
+                if (i >= graph_length) {
+                    break;
+                }
+                int index = sorted_indices[i];
+                // population[indv]->genes[index] = (rand() % 100) / 100.0; // random in 0, 1 float
+                // population[indv]->mutation_chance[index] = 0.001;  // Default mutation chance, can be adjusted
+                // population[indv]->crossover_chance[index] = 0.1;  // Default crossover chance, can be adjusted
+                // population[indv]->gene_direction[index] = 0; // Default direction is 1
+                population[indv]->fixed_genes[index] = false;
+            }
             if (use_ignoring) {
                 // Fix worst genes
                 for (int i = graph_length - num_fixed_genes; i < graph_length; ++i) {
@@ -716,18 +716,18 @@ private:
                 int index = sorted_indices[i];
                 new_population[indv]->fixed_genes[index] = true;
             }
-            // // Reset the genes
-            // for (int i = num_fixed_genes; i < graph_length - num_fixed_genes; ++i) {
-            //     if (i >= graph_length) {
-            //         break;
-            //     }
-            //     int index = sorted_indices[i];
-            //     new_population[indv]->genes[index] = (rand() % 100) / 100.0; // random in 0, 1 float
-            //     new_population[indv]->mutation_chance[index] = 0.001;  // Default mutation chance, can be adjusted
-            //     new_population[indv]->crossover_chance[index] = 0.1;  // Default crossover chance, can be adjusted
-            //     new_population[indv]->gene_direction[index] = 0; // Default direction is 1
-            //     new_population[indv]->fixed_genes[index] = false;
-            // }
+            // Reset the genes
+            for (int i = num_fixed_genes; i < graph_length - num_fixed_genes; ++i) {
+                if (i >= graph_length) {
+                    break;
+                }
+                int index = sorted_indices[i];
+                // new_population[indv]->genes[index] = (rand() % 100) / 100.0; // random in 0, 1 float
+                // new_population[indv]->mutation_chance[index] = 0.001;  // Default mutation chance, can be adjusted
+                // new_population[indv]->crossover_chance[index] = 0.1;  // Default crossover chance, can be adjusted
+                // new_population[indv]->gene_direction[index] = 0; // Default direction is 1
+                new_population[indv]->fixed_genes[index] = false;
+            }
             if (use_ignoring) {
                 // Fix worst genes
                 for (int i = graph_length - num_fixed_genes; i < graph_length; ++i) {
@@ -996,6 +996,9 @@ public:
                             : population_size(pop_size), evaluate_function(eval_func), graph(graph), same_block(same_block), length_bad_edges(length_bad_edges), bad_edges(bad_edges), graph_length(genes_length),
                             factor_0(factor_0), factor_not_0(factor_not_0), factor_bad(factor_bad), legth_initial_component(legth_initial_component), initial_component(initial_component), use_ignoring(use_ignoring),
                             num_threads(num_thrds), distribution(0.0, 1.0), best_individual(genes_length+2) {
+        // set best individuals fitness as very low
+        best_individual.fitness = -1e9;
+
         pool.reserve(pop_size * 2);  // Preallocate memory for individuals
         for (int i = 0; i < pop_size * 2; ++i) {
             pool.emplace_back(genes_length+2);

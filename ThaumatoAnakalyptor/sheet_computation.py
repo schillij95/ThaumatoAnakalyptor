@@ -316,6 +316,7 @@ class Graph:
         if node2 < node1:
             node1, node2 = node2, node1
             sheet_offset_k = sheet_offset_k * (-1.0)
+        sheet_offset_k = (float)(sheet_offset_k)
         if not (node1, node2) in self.edges:
             self.edges[(node1, node2)] = {}
         self.edges[(node1, node2)][sheet_offset_k] = {'certainty': certainty, 'sheet_offset_k': sheet_offset_k, 'same_block': same_block, 'bad_edge': bad_edge}
@@ -330,6 +331,7 @@ class Graph:
         if node2 < node1:
             node1, node2 = node2, node1
             sheet_offset_k = sheet_offset_k * (-1.0)
+        sheet_offset_k = (float)(sheet_offset_k)
         if not (node1, node2) in self.edges:
             self.edges[(node1, node2)] = {}
         if not sheet_offset_k in self.edges[(node1, node2)]:
@@ -354,6 +356,11 @@ class Graph:
             if edge is not None:
                 return edge['certainty']
         return None
+    
+    def get_edge(self, node1, node2):
+        if node2 < node1:
+            node1, node2 = node2, node1
+        return (node1, node2)
         
     def get_edge_ks(self, node1, node2):            
         k_factor = 1.0
@@ -784,6 +791,23 @@ class ScrollGraph(Graph):
                             if not self.edge_exists(node1, node2):
                                 self.add_edge(node1, node2, k_factor_bad*((iteration+1)**2), 0.0, same_block=True, bad_edge=True)
                                 count_added_bad_edges += 1
+                            else:
+                                edge = self.get_edge(node1, node2)
+                                for k in self.get_edge_ks(edge[0], edge[1]):
+                                    if k == 0:
+                                        continue
+                                    same_block = self.edges[edge][k]['same_block']
+                                    bad_edge = self.edges[edge][k]['bad_edge']
+                                    if not bad_edge and same_block:
+                                        if not k in self.edges[edge]:
+                                            self.add_increment_edge(node1, node2, k_factor_bad*((iteration+1)**2), k, same_block=True, bad_edge=True)
+                                            count_added_bad_edges += 1
+
+            nodes = node_cubes[tuple(node_cube)]
+            for i in range(len(nodes)):
+                for j in range(i+1, len(nodes)):
+                    self.add_edge(nodes[i], nodes[j], k_factor_bad*((iteration+1)**2), 0.0, same_block=True, bad_edge=True)
+
         print(f"Added {count_added_bad_edges} bad edges.")
 
     def adjust_edge_certainties(self):
@@ -801,9 +825,12 @@ class ScrollGraph(Graph):
                     certainty_other_block += self.edges[edge][k]['certainty']
 
         factor_0 = 1.0
-        factor_not_0 = certainty_same_block / certainty_other_block
+        factor_not_0 = 1.0*certainty_same_block / certainty_other_block
         factor_bad = certainty_same_block / certainty_bad_block
-        factor_bad = factor_bad
+        # factor_bad = factor_bad**(2.0/3.0)
+        # factor_bad = 2*factor_bad
+        # factor_bad = 1.0
+        print(f"Adjusted certainties: factor_0: {factor_0}, factor_not_0: {factor_not_0}, factor_bad: {factor_bad}")
 
         # adjust graph edge certainties
         for edge in tqdm(self.edges, desc="Adjusting edge certainties"):
@@ -815,6 +842,7 @@ class ScrollGraph(Graph):
                 else:
                     self.edges[edge][k]['certainty'] = factor_not_0 * self.edges[edge][k]['certainty']
 
+        self.compute_node_edges()
         return (factor_0, factor_not_0, factor_bad)
 
     def build_graph(self, path_instances, start_point, num_processes=4, prune_unconnected=False):
@@ -1514,7 +1542,7 @@ class EvolutionaryGraphEdgesSelection():
     #     valid_mask = valid_mask > 0
     #     return valid_mask, valid_edges_count
     
-    def solve_call(self, input, initial_component=None, problem='k_assignment', k_factors=None, iteration=0):
+    def solve_call(self, input, initial_component=None, problem='k_assignment', k_factors=None, iteration=0, last_iteration=False):
         input_graph = input[0].astype(np.int32)
         input_k_bool = input[1].astype(bool)
         input_bad = input[2].astype(np.int32)
@@ -1552,7 +1580,7 @@ class EvolutionaryGraphEdgesSelection():
         nr_active_nodes = find_nr_nodes(input_graph)
         # print(f"There are {nr_active_nodes} unique active nodes in the graph. Max possible fittnes is {2*nr_active_nodes + nr_active_nodes*np.log(nr_active_nodes)}")
         # easily switch between dummy and real computation
-        debug=False
+        debug=True
         if not debug:
             population_size = 500
             generations = 600
@@ -1565,7 +1593,8 @@ class EvolutionaryGraphEdgesSelection():
 
         if problem == 'k_assignment':
             use_edge_ignoring = iteration==0
-            # use_edge_ignoring = True
+            use_edge_ignoring = True
+            use_edge_ignoring = use_edge_ignoring and (not last_iteration)
             valid_edges_count, valid_mask, solution_weights = evolve_graph.evolution_solve_k_assignment(population_size, generations, input_graph.shape[0], input_graph, input_k_bool, input_bad.shape[0], input_bad, factor_0, factor_not_0, factor_bad, initial_component.shape[0], initial_component, use_edge_ignoring)
         elif problem == 'patch_selection':
             valid_edges_count, valid_mask, solution_weights = evolve_graph.evolution_solve_patches(population_size, generations, input_graph.shape[0], input_graph, input_k_bool, input_bad.shape[0], input_bad, factor_0, factor_not_0, factor_bad)
@@ -1643,7 +1672,7 @@ class EvolutionaryGraphEdgesSelection():
 
         return graph_blocks
     
-    def solve_graph_blocks(self, graph_blocks, k_factors=None, iteration=0):
+    def solve_graph_blocks(self, graph_blocks, k_factors=None, iteration=0, last_iteration=False):
         results = []
         k_factor_0 = 0.0
         k_factor_not_0 = 0.0
@@ -1651,7 +1680,7 @@ class EvolutionaryGraphEdgesSelection():
         for block_nr, (edges_by_indices, edges_by_subvolume_indices, initial_component, index_nodes_dict, _) in enumerate(graph_blocks):
             print(f"Solving block {block_nr + 1}/{len(graph_blocks)}")
             # print(f"Number of edges: {len(edges_by_indices)}")
-            valid_mask, valid_edges_count, k_factors_ = self.solve_call(edges_by_indices, initial_component=initial_component, problem='k_assignment', k_factors=k_factors, iteration=iteration)
+            valid_mask, valid_edges_count, k_factors_ = self.solve_call(edges_by_indices, initial_component=initial_component, problem='k_assignment', k_factors=k_factors, iteration=iteration, last_iteration=last_iteration)
             k_factor_0 += k_factors_[0]
             k_factor_not_0 += k_factors_[1]
             k_factor_bad += k_factors_[2]
@@ -1663,7 +1692,7 @@ class EvolutionaryGraphEdgesSelection():
 
         return results, k_factors_mean
 
-    def contract_graph_blocks(self, original_graph, solution_graph, graph_blocks, solutions, last_iteration=False):
+    def contract_graph_blocks(self, original_graph, solution_graph, graph_blocks, solutions, last_iteration=False, side_length=200):
         edges_indices_list = []
         edges_mask_list = []
         index_nodes_dict_list = []
@@ -1685,7 +1714,7 @@ class EvolutionaryGraphEdgesSelection():
         solution_graph.compute_node_edges()
 
         # contracted_graph = self.contracted_graph_from_edge_selection(edges_indices_list, original_graph, edges_mask_list, index_nodes_dict_list, graph_blocks)
-        contracted_graph = self.contracted_graph_from_solution_graph(solution_graph, original_graph)
+        contracted_graph = self.contracted_graph_from_solution_graph(solution_graph, original_graph, side_length=side_length)
         if not last_iteration:
             self.check_contracted_and_solution_graph(contracted_graph, solution_graph)
 
@@ -1710,7 +1739,7 @@ class EvolutionaryGraphEdgesSelection():
 
         graph_size_max = np.max([graph_z_size, graph_x_size, graph_y_size])
         print(f"Graph size max: {graph_size_max}")
-        blocking_factor = 4
+        blocking_factor = 2
         iteration_resume = iteration is not None
         if iteration is None:
             print("starting iterations from the beginning")
@@ -1719,7 +1748,8 @@ class EvolutionaryGraphEdgesSelection():
         padding = 50 * (blocking_factor ** iteration)
         k_factors = (1.0, 1.0, 1.0)
         # k_factors = None
-
+        k_f_org = k_factors
+        
         # Divide and conquer block size. start small and work way up.
         while True:
             break_criteria = side_length > graph_size_max
@@ -1727,6 +1757,11 @@ class EvolutionaryGraphEdgesSelection():
                 iteration_resume = False
                 # load iteration
                 graph, solution_graph, graph_blocks, results, k_factors = self.load_iteration(iteration)
+                if iteration==0:
+                    graph = self.graph
+                    k_factors = k_f_org
+                print(f"[Loading]: K factors: {k_factors}")
+                # k_factors = None
             else:
                 # break_criteria = True
                 print(colored(f"Side length: {side_length} maximum graph size: {graph_size_max}", 'yellow'))
@@ -1737,14 +1772,12 @@ class EvolutionaryGraphEdgesSelection():
                 graph_blocks = graph_blocks_ # to avoid downstream 0 length graph_blocks
                 break_criteria = break_criteria or (len(graph_blocks) <= 1)
 
-                results, k_factors = self.solve_graph_blocks(graph_blocks, k_factors=k_factors, iteration=iteration)
+                results, _ = self.solve_graph_blocks(graph_blocks, k_factors=k_factors, iteration=iteration, last_iteration=break_criteria)
                 # save iteration
                 self.save_iteration(graph, solution_graph, graph_blocks, results, k_factors, iteration)
-            # load iteration
-            graph, solution_graph, graph_blocks, results, k_factors = self.load_iteration(iteration)
 
             print(f"Iteration {iteration} with {len(graph_blocks)} blocks.")
-            graph, solution_graph = self.contract_graph_blocks(graph, solution_graph, graph_blocks, results, last_iteration=break_criteria)
+            graph, solution_graph = self.contract_graph_blocks(graph, solution_graph, graph_blocks, results, last_iteration=break_criteria, side_length=side_length)
             self.build_points(solution_graph, iteration)
 
             # Debug
@@ -1814,11 +1847,15 @@ class EvolutionaryGraphEdgesSelection():
 
         # find nodes and ks
         nodes, ks = self.bfs_ks(graph)
-        unique_ks = np.unique(ks)
+        unique_ks, ks_counts = np.unique(ks, return_counts=True)
+
+        # sort by highest counts to lowest
+        argsort_count = np.argsort(ks_counts)[::-1]
+        unique_ks = unique_ks[argsort_count]
 
         # Building the pointcloud 4D (position) + 3D (Normal) + 3D (Color, randomness) representation of the graph
 
-        for k in tqdm(unique_ks, desc="Building debugging pointclouds..."):
+        for k_index, k in enumerate(tqdm(unique_ks, desc="Building debugging pointclouds...")):
             sheet_infos = []
             for i, node in enumerate(nodes):
                 if ks[i] != k:
@@ -1832,7 +1869,7 @@ class EvolutionaryGraphEdgesSelection():
             # save as ply
             ordered_pointsets_debug = [(points[:,:3], normals)]
             colors_debug = points[:,3]
-            debug_pointset_ply_path = os.path.join(debug_folder, f"ordered_pointset_debug_{k}.ply")
+            debug_pointset_ply_path = os.path.join(debug_folder, f"ordered_pointset_debug_{k_index}.ply")
             self.pointcloud_from_ordered_pointset(ordered_pointsets_debug, debug_pointset_ply_path, color=colors_debug)
     
     def save_iteration(self, graph, solution_graph, graph_blocks, results, k_factors, iteration):
@@ -2738,7 +2775,30 @@ class EvolutionaryGraphEdgesSelection():
         print(f"Filtered graph created with {len(graph.nodes)} nodes and {len(graph.edges)} edges.")
         return graph
     
-    def contracted_graph_from_solution_graph(self, solution_graph, original_graph):
+    def contracted_graph_from_solution_graph(self, solution_graph, original_graph, side_length):
+        original_graph.compute_node_edges()
+        print(f"[Info]: Side length is {side_length}")
+        graph_z = np.array([original_graph.nodes[node]['centroid'][1] for node in original_graph.nodes])
+        graph_z_min = int(np.floor(np.min(graph_z)))
+        graph_x = np.array([original_graph.nodes[node]['centroid'][2] for node in original_graph.nodes])
+        graph_x_min = int(np.floor(np.min(graph_x)))
+        graph_y = np.array([original_graph.nodes[node]['centroid'][0] for node in original_graph.nodes])
+        graph_y_min = int(np.floor(np.min(graph_y)))
+
+        def subblock_from_centroid(node):
+            centroid = original_graph.nodes[node]['centroid']
+            x = int((centroid[2] - graph_x_min) // side_length)
+            y = int((centroid[0] - graph_y_min) // side_length)
+            z = int((centroid[1] - graph_z_min) // side_length)
+
+            return (x, y, z)
+
+        def same_cores(node1, node2): # finds node in contracted graph
+            subblock1 = subblock_from_centroid(node1)
+            subblock2 = subblock_from_centroid(node2)
+            
+            return subblock1 == subblock2
+        
         graph = ScrollGraph(solution_graph.overlapp_threshold, solution_graph.umbilicus_path)
         graph.start_block = solution_graph.start_block
         graph.patch_id = solution_graph.patch_id
@@ -2775,38 +2835,48 @@ class EvolutionaryGraphEdgesSelection():
 
             if node1_root == node2_root:
                 continue
+
+            same_cores_bool = same_cores(node1_root, node2_root)
             ks = original_graph.get_edge_ks(node1, node2)
+
             for k in ks:
-                if original_graph.edges[edge][k]['bad_edge']:
-                    continue
                 same_block = original_graph.edges[edge][k]['same_block']
                 bad_edge = original_graph.edges[edge][k]['bad_edge']
                 
                 certainty = original_graph.edges[edge][k]['certainty']
 
                 k_ = - k1 + k + k2
+
+                if node1_root < node2_root:
+                    n1r, n2r = node2_root, node1_root
+                    k_ = -k_
+                else:
+                    n1r, n2r = node1_root, node2_root
+
                 if bad_edge:
-                    if not (node1_root, node2_root) in contracted_bad_edges:
-                        contracted_bad_edges[(node1_root, node2_root)] = {}
-                    if not k_ in contracted_bad_edges[(node1_root, node2_root)]:
-                        contracted_bad_edges[(node1_root, node2_root)][k_] = 0.0
-                    contracted_bad_edges[(node1_root, node2_root)][k_] += certainty
+                    if not (n1r, n2r) in contracted_bad_edges:
+                        contracted_bad_edges[(n1r, n2r)] = {}
+                    if not k_ in contracted_bad_edges[(n1r, n2r)]:
+                        contracted_bad_edges[(n1r, n2r)][k_] = 0.0
+                    contracted_bad_edges[(n1r, n2r)][k_] += certainty
                 else:
                     if same_block:
-                        if not (node1_root, node2_root) in contracted_same_block_edges:
-                            contracted_same_block_edges[(node1_root, node2_root)] = {}
-                        if not k_ in contracted_same_block_edges[(node1_root, node2_root)]:
-                            contracted_same_block_edges[(node1_root, node2_root)][k_] = 0.0
-                        contracted_same_block_edges[(node1_root, node2_root)][k_] += certainty
+                        if not (n1r, n2r) in contracted_same_block_edges:
+                            contracted_same_block_edges[(n1r, n2r)] = {}
+                        if not k_ in contracted_same_block_edges[(n1r, n2r)]:
+                            contracted_same_block_edges[(n1r, n2r)][k_] = 0.0
+                        contracted_same_block_edges[(n1r, n2r)][k_] += certainty
                     else:
-                        if not (node1_root, node2_root) in contracted_other_block_edges:
-                            contracted_other_block_edges[(node1_root, node2_root)] = {}
-                        if not k_ in contracted_other_block_edges[(node1_root, node2_root)]:
-                            contracted_other_block_edges[(node1_root, node2_root)][k_] = 0.0
-                        contracted_other_block_edges[(node1_root, node2_root)][k_] += certainty
+                        if same_cores_bool:
+                            continue # Dont add other block edges in the same block (they were unselected by the evolutionary algorithm)
+                        if not (n1r, n2r) in contracted_other_block_edges:
+                            contracted_other_block_edges[(n1r, n2r)] = {}
+                        if not k_ in contracted_other_block_edges[(n1r, n2r)]:
+                            contracted_other_block_edges[(n1r, n2r)][k_] = 0.0
+                        contracted_other_block_edges[(n1r, n2r)][k_] += certainty
 
-                graph.add_node(node1_root, original_graph.nodes[node1_root]['centroid'], winding_angle=original_graph.nodes[node1_root]['winding_angle'])
-                graph.add_node(node2_root, original_graph.nodes[node2_root]['centroid'], winding_angle=original_graph.nodes[node2_root]['winding_angle'])
+                graph.add_node(n1r, original_graph.nodes[n1r]['centroid'], winding_angle=original_graph.nodes[n1r]['winding_angle'])
+                graph.add_node(n2r, original_graph.nodes[n2r]['centroid'], winding_angle=original_graph.nodes[n2r]['winding_angle'])
 
         edges = set()
         for edge in contracted_same_block_edges:
@@ -2886,7 +2956,7 @@ class EvolutionaryGraphEdgesSelection():
         added_edges_count = 0
         # print(f"Number of winding angles: {nr_winding_angles} of {len(nodes)} nodes.")
 
-        for i in tqdm(range(len(edges_mask))):
+        for i in tqdm(range(len(edges_mask)), desc="Adding same edges to graph"):
             if edges_mask[i]:
                 edge = edges_indices[i]
                 node0_index, node1_index = edge[:2]
@@ -2911,7 +2981,11 @@ class EvolutionaryGraphEdgesSelection():
                 # assert k == k_, f"Invalid k: {k} != {k_}"
                 certainty = input_graph.edges[(node1, node2)][k]['certainty']
                 same_block = input_graph.edges[(node1, node2)][k]['same_block']
+                bad_edge = input_graph.edges[(node1, node2)][k]['bad_edge']
+                assert bad_edge == False, f"Invalid bad edge: {bad_edge} for edge: {edge}"
                 if not same_block: # only add same block edges
+                    continue
+                if bad_edge: # do not add bad edges
                     continue
 
                 assert certainty > 0.0, f"Invalid certainty: {certainty} for edge: {edge}"
@@ -2941,7 +3015,7 @@ class EvolutionaryGraphEdgesSelection():
         added_edges_count = 0
         # print(f"Number of winding angles: {nr_winding_angles} of {len(nodes)} nodes.")
 
-        for i in tqdm(range(len(edges_mask))):
+        for i in tqdm(range(len(edges_mask)), desc="Adding transitioning edges to graph"):
             if edges_mask[i]:
                 edge = edges_indices[i]
                 node0_index, node1_index = edge[:2]
@@ -2966,7 +3040,11 @@ class EvolutionaryGraphEdgesSelection():
                 # assert k == k_, f"Invalid k in graph construction: {k} != {k_}"
                 certainty = input_graph.edges[(node1, node2)][k]['certainty']
                 same_block = input_graph.edges[(node1, node2)][k]['same_block']
+                bad_edge = input_graph.edges[(node1, node2)][k]['bad_edge']
+                assert bad_edge == False, f"Invalid bad edge: {bad_edge} for edge: {edge}"
                 if same_block: # only add transitioning edges
+                    continue
+                if bad_edge: # do not add bad edges
                     continue
 
                 # if k != 0:
@@ -3277,7 +3355,8 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
         # scroll_graph.compute_node_edges()
         # scroll_graph.save_graph(recompute_path)
 
-        min_x, max_x, min_y, max_y = None, None, None, None
+        # min_x, max_x, min_y, max_y = None, None, None, None
+        # min_z, max_z, umbilicus_max_distance = None, None, None
         # min_z, max_z, umbilicus_max_distance = 600, 1000, 200
         # min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = 700, 800, 650, 850, 800, 900, None # 2 blocks without middle
         # min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = 650, 850, 550, 950, 750, 950, None # 2 blocks without middle # start block length 200
@@ -3288,15 +3367,15 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
         # min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = 575, 775, 625, 825, 700, 900, None # 2x2x2 blocks with middle
         # min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = 575, 775, 725, 825, 800, 900, None # 2 blocks with middle
         # min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = 600, 1000, 550, 950, 600, 1000, None
-        min_z, max_z, umbilicus_max_distance = None, None, None
+        min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = None, None, None, None, 800, 1000, None # scroll 1 whole slab
         # min_z, max_z, umbilicus_max_distance = None, None, 160
         subgraph = scroll_graph.extract_subgraph(min_z=min_z, max_z=max_z, umbilicus_max_distance=umbilicus_max_distance, add_same_block_edges=True, min_x=min_x, max_x=max_x, min_y=min_y, max_y=max_y)
         subgraph.save_graph(save_path.replace("blocks", "subgraph") + ".pkl")
     subgraph = load_graph(save_path.replace("blocks", "subgraph") + ".pkl")
 
     # TODO: remove after building the graph correctly with winding direction -1.0 (scroll 3)
-    # subgraph.flip_winding_direction() # only because working on scroll 3 and i built the graph with winding direction 1.0
     # subgraph = scroll_graph
+    # subgraph.flip_winding_direction() # only because working on scroll 3 and i built the graph with winding direction 1.0
     subgraph.compute_bad_edges(iteration=0)
     k_factors = subgraph.adjust_edge_certainties()
 
