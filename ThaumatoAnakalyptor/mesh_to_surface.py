@@ -796,6 +796,8 @@ def custom_collate_fn(batch):
             continue
         if len(grid_cell) == 0:
             continue
+        if grid_cell.size()[0] == 0:
+            continue
         grid_cells.append(grid_cell)
         vertices.append(vertice)
         normals.append(normal)
