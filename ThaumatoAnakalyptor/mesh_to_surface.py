@@ -702,7 +702,13 @@ class PPMAndTextureModel(pl.LightningModule):
 
             # vertices: T x 3 x 3, normals: T x 3 x 3, baryicentric_coords: T x W*H x 3
             coords = torch.einsum('ijk,isj->isk', vertices_, baryicentric_coords).squeeze()
-            norms = normalize(torch.einsum('ijk,isj->isk', normals_, baryicentric_coords).squeeze(),dim=2)
+            norms = torch.einsum('ijk,isj->isk', normals_, baryicentric_coords).squeeze()
+            # Handle case where T == 1 by ensuring dimensions are not squeezed away
+            if coords.dim() == 2:
+                coords = coords.unsqueeze(0)
+            if norms.dim() == 2:
+                norms = norms.unsqueeze(0)
+            norms = normalize(norms,dim=2)
             del vertices_, normals_, uv_coords_triangles_
 
             # broadcast grid index to T x W*H -> S
