@@ -794,7 +794,7 @@ def custom_collate_fn(batch):
         grid_coord, grid_cell, vertice, normal, uv_coords_triangle = items
         if grid_cell is None:
             continue
-        if len(grid_cell) == 0;
+        if len(grid_cell) == 0:
             continue
         grid_cells.append(grid_cell)
         vertices.append(vertice)
