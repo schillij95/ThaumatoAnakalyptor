@@ -535,7 +535,6 @@ def process_block(args):
             return np.linalg.norm(patch_centroid_vec)
         return d_(centroid1) - d_(centroid2)
 
-
     file_name = ".".join(file_path.split(".")[:-1])
     main_block_patches_list = subvolume_surface_patches_folder(file_name, sample_ratio=overlapp_threshold["sample_ratio_score"])
 
@@ -3364,10 +3363,10 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
         # min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = 450, 750, 625, 925, 800, 900, None # 3x3x1 blocks with middle
         # min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = 350, 850, 525, 1025, 800, 900, None # 5x5x1 blocks with middle
         # min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = None, None, None, None, 800, 900, None # all x all x 1 blocks with middle
-        # min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = 575, 775, 625, 825, 700, 900, None # 2x2x2 blocks with middle
+        min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = 575, 775, 625, 825, 700, 900, None # 2x2x2 blocks with middle
         # min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = 575, 775, 725, 825, 800, 900, None # 2 blocks with middle
         # min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = 600, 1000, 550, 950, 600, 1000, None
-        min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = None, None, None, None, 800, 1000, None # scroll 1 whole slab
+        # min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = None, None, None, None, 800, 1000, None # scroll 1 whole slab
         # min_z, max_z, umbilicus_max_distance = None, None, 160
         subgraph = scroll_graph.extract_subgraph(min_z=min_z, max_z=max_z, umbilicus_max_distance=umbilicus_max_distance, add_same_block_edges=True, min_x=min_x, max_x=max_x, min_y=min_y, max_y=max_y)
         subgraph.save_graph(save_path.replace("blocks", "subgraph") + ".pkl")
@@ -3375,7 +3374,7 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
 
     # TODO: remove after building the graph correctly with winding direction -1.0 (scroll 3)
     # subgraph = scroll_graph
-    # subgraph.flip_winding_direction() # only because working on scroll 3 and i built the graph with winding direction 1.0
+    subgraph.flip_winding_direction() # only because working on scroll 3 and i built the graph with winding direction 1.0
     subgraph.compute_bad_edges(iteration=0)
     k_factors = subgraph.adjust_edge_certainties()
 
