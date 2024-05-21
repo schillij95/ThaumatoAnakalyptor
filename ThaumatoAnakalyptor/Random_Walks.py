@@ -345,13 +345,24 @@ class Graph:
             return ks
         else:
             raise KeyError(f"No edge found from {node1} to {node2}")
+    
+    def remove_unused_nodes(self, used_nodes):
+        used_nodes = [tuple(node) for node in used_nodes]
+        unused_nodes = []
+        # Remove unused nodes
+        for node in list(self.nodes.keys()):
+            if tuple(node) not in used_nodes:
+                unused_nodes.append(node)
+        self.remove_nodes_edges(unused_nodes)
+        self.compute_node_edges()
         
     def update_winding_angles(self, nodes, ks, update_winding_angles=False):
         # Update winding angles
         for i, node in enumerate(nodes):
-            self.graph.nodes[node]['assigned_k'] = ks[i]
+            node = tuple(node)
+            self.nodes[node]['assigned_k'] = ks[i]
             if update_winding_angles:
-                self.graph.nodes[node]['winding_angle'] = - ks[i]*360 + self.graph.nodes[node]['winding_angle']
+                self.nodes[node]['winding_angle'] = - ks[i]*360 + self.nodes[node]['winding_angle']
 
     def save_graph(self, path):
         print(f"Saving graph to {path} ...")
@@ -1865,6 +1876,7 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
         solver = RandomWalkSolver(scroll_graph, umbilicus_path)
         solver.save_overlapp_threshold()
         nodes, ks = solver.solve_(path=save_path, starting_node=starting_node, max_nr_walks=overlapp_threshold["max_nr_walks"], max_unchanged_walks=overlapp_threshold["max_unchanged_walks"], max_steps=overlapp_threshold["max_steps"], max_tries=overlapp_threshold["max_tries"], min_steps=overlapp_threshold["min_steps"], min_end_steps=overlapp_threshold["min_end_steps"], continue_walks=overlapp_threshold["continue_walks"], nodes=nodes, ks=ks, stop_event=stop_event)
+        
         scroll_graph.update_winding_angles(nodes, ks, update_winding_angles=True)
         # save graph ks and nodes
         np.save(save_path.replace("blocks", "graph_RW") + "_ks.npy", ks)

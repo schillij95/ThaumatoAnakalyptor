@@ -3313,6 +3313,7 @@ class EvolutionaryGraphEdgesSelection():
     def update_winding_angles(self, graph, nodes, ks, update_winding_angles=False):
         # Update winding angles
         for i, node in enumerate(nodes):
+            node = tuple(node)
             graph.nodes[node]['assigned_k'] = ks[i]
             if update_winding_angles:
                 graph.nodes[node]['winding_angle'] = - ks[i]*360 + graph.nodes[node]['winding_angle']
