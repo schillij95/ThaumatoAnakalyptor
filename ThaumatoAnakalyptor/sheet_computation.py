@@ -3418,8 +3418,8 @@ def random_walks():
                           "walk_aggregation_threshold": 100, "walk_aggregation_max_current": -1,
                           "bad_edge_threshold": 3
                           }
-    # Scroll 1: "winding_direction": 1.0
-    # Scroll 3: "winding_direction": -1.0
+    # Scroll 1: "winding_direction": -1.0
+    # Scroll 3: "winding_direction": 1.0
 
     max_nr_walks = 10000
     max_steps = 101

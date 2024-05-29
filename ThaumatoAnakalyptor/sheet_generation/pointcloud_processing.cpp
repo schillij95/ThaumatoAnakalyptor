@@ -13,6 +13,8 @@ Author: Julian Schilliger - ThaumatoAnakalyptor - 2024
 #include <sstream>
 #include <fstream>
 #include <vector>
+#include <algorithm>
+#include <iterator>
 #include <string>
 #include <mutex>
 #include <execution>
@@ -23,7 +25,6 @@ Author: Julian Schilliger - ThaumatoAnakalyptor - 2024
 #include <filesystem>
 #include "happly.h"
 #include "nanoflann.h"
-#include "hdbscan/Hdbscan/hdbscan.hpp"
 
 namespace fs = std::filesystem;
 namespace py = pybind11;
@@ -436,80 +437,6 @@ public:
         deleteMarkedPoints();
     }
 
-    void filterPointsClustering(double max_single_dist, int min_cluster_size) {
-        sortPointsWZYX();
-
-        double min_wind = cloud_.pts.front().w;
-        double max_wind = cloud_.pts.back().w;
-
-        int nr_windings = 0;
-        for (double angle = min_wind; angle <= max_wind; angle += 180) {
-            ++nr_windings;
-        }
-
-        progress = 0;
-        problem_size = nr_windings;
-
-        size_t num_threads = std::thread::hardware_concurrency() / 4; // Number of concurrent threads supported
-        // num_threads = 1;
-        std::vector<std::thread> threads(num_threads);
-        int windings_per_thread = nr_windings / num_threads;
-
-        std::vector<Point> filteredPoints;
-        for (int i = 0; i < num_threads; ++i) {
-            int start = min_wind + i * windings_per_thread * 180;
-            int end = (i == num_threads - 1) ? max_wind : start + windings_per_thread * 180;
-            threads[i] = std::thread(&PointCloudProcessor::applyHDBSCANthreaded, this, start, end, max_single_dist, min_cluster_size);
-        }
-
-        for (auto& thread : threads) {
-            thread.join();
-        }
-        if (verbose) {
-            std::cout << std::endl;
-        }
-
-        // Replace old points with filtered
-        cloud_.pts = filteredPoints;
-    }
-
-    void add_pointcloud_to_hdbscan(int start, int end, Hdbscan& hdbscan) {
-        std::vector<std::vector<double>> points;
-        for (size_t i = 0; i < cloud_.size(); ++i) {
-            if (cloud_.pts[i].w < start) {
-                continue;
-            }
-            else if (cloud_.pts[i].w >= end) {
-                break; // sorted by winding angle
-            }
-            points.push_back({ cloud_.pts[i].x, cloud_.pts[i].y, cloud_.pts[i].z });
-        }
-        hdbscan.dataset = points;
-    }
-
-    void applyHDBSCANthreaded(int start, int end, double max_single_dist, int min_cluster_size) {
-        for (int winding_angle = start; winding_angle < end; winding_angle += 180) {
-            applyHDBSCAN(winding_angle, winding_angle + 180, max_single_dist, min_cluster_size);
-            {
-                std::lock_guard<std::mutex> lock(mutex_);
-                print_progress();
-            }
-        }
-    }
-
-    void applyHDBSCAN(int start, int end, double max_single_dist, int min_cluster_size) {
-        Hdbscan hdbscan("dummy value");  // Assuming an appropriate constructor or method to set points
-        add_pointcloud_to_hdbscan(start, end, hdbscan);
-        {
-            std::lock_guard<std::mutex> lock(mutex_);
-            if (verbose) {
-                std::cout << "Applying HDBSCAN for winding angle range: " << start << " to " << end << std::endl;
-            }
-        }
-        hdbscan.execute(min_cluster_size, 1, "Euclidean");
-        // Filter subCloud.pts based on HDBSCAN results
-    }
-
     PointCloud get_results() {
         return PointCloud(std::move(cloud_));  // Move the points instead of copying
     }
@@ -724,9 +651,9 @@ std::tuple<py::array_t<float>, py::array_t<float>, py::array_t<float>> load_poin
         std::cout << "Filtered points using KDTree" << std::endl;
     }
     processor.sortPointsWZYX();
-    // Following is NOT working (use python version, quite fast-ish)
-    // processor.filterPointsClustering(2.0, 8000); 
-    // std::cout << "Filtered points using HDBSCAN" << std::endl;
+    if (verbose) {
+        std::cout << "Sorted points by WZYX" << std::endl;
+    }
     PointCloud processed_points = processor.get_results();
     return to_array(std::move(processed_points));
 }
@@ -788,10 +715,401 @@ py::array_t<bool> upsample_pointclouds(py::array_t<float> original_points, py::a
     return vector_to_array(selected_originals);
 }
 
+std::vector<float> vector_subtract(const std::vector<float>& a, const std::vector<float>& b) {
+    std::vector<float> result(3);
+    std::transform(a.begin(), a.end(), b.begin(), result.begin(), std::minus<float>());
+    return result;
+}
+
+std::vector<float> vector_scalar_multiply(const std::vector<float>& v, float scalar) {
+    std::vector<float> result(3);
+    std::transform(v.begin(), v.end(), result.begin(), [scalar](float x) { return x * scalar; });
+    return result;
+}
+
+float vector_dot(const std::vector<float>& a, const std::vector<float>& b) {
+    return std::inner_product(a.begin(), a.end(), b.begin(), 0.0);
+}
+
+std::vector<float> vector_add(const std::vector<float>& a, const std::vector<float>& b) {
+    std::vector<float> result(3);
+    std::transform(a.begin(), a.end(), b.begin(), result.begin(), std::plus<float>());
+    return result;
+}
+
+float vector_norm(const std::vector<float>& v) {
+    return std::sqrt(vector_dot(v, v));
+}
+
+// Calculates closest points and vector scalar t to a line in cylindrical coordinates
+std::tuple<std::vector<float>, std::vector<float>, std::vector<std::vector<float>>> closestPointsAndDistancesCylindrical(const std::vector<std::vector<float>>& points,
+                                      const std::vector<std::vector<float>>& normals,
+                                      const std::vector<float>& linePoint, 
+                                      const std::vector<float>& lineVector,
+                                      float max_eucledian_distance = 20) {
+    std::vector<float> distances;
+    std::vector<float> ts;
+    std::vector<std::vector<float>> closestnormals;
+
+    float lineVectorNorm = vector_norm(lineVector);
+    
+    for (size_t i = 0; i < points.size(); ++i) {
+        std::vector<float> point = points[i];
+        std::vector<float> normal = normals[i];
+        // skip computation of points that are too far away
+        if (std::abs(point[1]-linePoint[1]) > max_eucledian_distance) {
+            continue;
+        }
+        std::vector<float> pointsToLinePoint = vector_subtract(point, linePoint);
+        float radiusXY = std::sqrt(std::pow(pointsToLinePoint[2], 2) + std::pow(pointsToLinePoint[0], 2));
+
+        float t = vector_dot(pointsToLinePoint, lineVector) / vector_dot(lineVector, lineVector);
+        float signT = (t >= 0) ? 1 : -1; // Equivalent to np.sign in Python when handling t
+        float tsValue = signT * radiusXY / lineVectorNorm;
+        
+        std::vector<float> closestPoint = vector_add(linePoint, vector_scalar_multiply(lineVector, tsValue));
+        std::vector<float> displacement = vector_subtract(point, closestPoint);
+        distances.push_back(vector_norm(displacement));
+        ts.push_back(tsValue); // no idea why -1
+        closestnormals.push_back(normal);
+    }
+
+    return std::make_tuple(distances, ts, closestnormals);
+}
+
+bool comp_lower_bound(const std::vector<float>& pt, float value) {
+    return pt[3] < value;
+}
+
+// std::pair<int, int> pointsAtWindingAngle(const std::vector<std::vector<float>>& points, float windingAngle, float maxAngleDiff = 30) {
+//     // Find the start and end indices of points within the maxAngleDiff range
+//     auto startIter = std::lower_bound(points.begin(), points.end(), windingAngle - maxAngleDiff, comp_lower_bound);
+//     auto endIter = std::lower_bound(points.begin(), points.end(), windingAngle + maxAngleDiff, comp_lower_bound);
+
+//     // Calculate the indices from iterators
+//     int startIndex = std::distance(points.begin(), startIter);
+//     int endIndex = std::distance(points.begin(), endIter);
+
+//     return {startIndex, endIndex};
+// }
+
+std::pair<int, int> pointsAtWindingAngle(const std::vector<std::vector<float>>& points, float windingAngle, int last_start_index, int last_end_index, float maxAngleDiff = 30) {
+    // Find the start and end indices of points within the maxAngleDiff range
+    int startIndex = last_start_index;
+    int endIndex = last_end_index;
+    for (size_t i = startIndex; i < points.size(); ++i) {
+        if (points[i][3] >= windingAngle - maxAngleDiff) {
+            startIndex = i;
+            break;
+        }
+    }
+    if (startIndex == -1) {
+        startIndex = points.size();
+    }
+    for (size_t i = startIndex; i < points.size(); ++i) {
+        if (points[i][3] > windingAngle + maxAngleDiff) {
+            endIndex = i;
+            break;
+        }
+    }
+    if (endIndex == -1) {
+        endIndex = points.size();
+    }
+    return {startIndex, endIndex};
+}
+
+std::vector<float> umbilicus_xz_at_y(const std::vector<std::vector<float>>& points_array, float y_new) {
+    // Resultant vector of interpolated points
+    std::vector<float> interpolated_point = points_array[points_array.size() - 1];
+
+    // Check if points_array is not empty
+    if (points_array.empty()) {
+        throw std::invalid_argument("The points array cannot be empty.");
+    }
+
+    // Linear interpolation function
+    auto linear_interp = [](float x0, float x1, float y0, float y1, float y) {
+        if (y0 == y1) {
+            return x0;
+        }
+        return x0 + (x1 - x0) * (y - y0) / (y1 - y0);
+    };
+
+    // Iterate over each segment in the points array
+    for (size_t i = 0; i < points_array.size() - 1; ++i) {
+        if ((points_array[i][1] <= y_new && points_array[i + 1][1] >= y_new) ||
+            (points_array[i][1] >= y_new && points_array[i + 1][1] <= y_new)) {
+            // Perform interpolation
+            float x_new = linear_interp(points_array[i][0], points_array[i + 1][0], points_array[i][1], points_array[i + 1][1], y_new);
+            float z_new = linear_interp(points_array[i][2], points_array[i + 1][2], points_array[i][1], points_array[i + 1][1], y_new);
+
+            // Add the new point to the list of interpolated points
+            interpolated_point = {x_new, y_new, z_new};
+            break;
+        }
+    }
+
+    return interpolated_point;
+}
+
+std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<std::vector<float>>>, std::vector<std::vector<float>>, std::vector<float>> calculatePointsAtAngle(
+    const std::vector<std::vector<float>>& umbilicus_points, 
+    const std::vector<std::vector<float>>& points, 
+    const std::vector<std::vector<float>>& normals, 
+    const std::vector<float>& z_positions, 
+    float angle, 
+    float max_eucledian_distance = 20) 
+{
+    float angle_radians = static_cast<float>(static_cast<int>(angle + static_cast<int>(2 - static_cast<int>(angle) / 360) * 360) % 360) * M_PI / 180.0;
+    std::vector<float> angle_vector = { std::cos(angle_radians), 0.0, -std::sin(angle_radians) };
+    
+    int z_positions_length = z_positions.size();
+    std::vector<std::vector<float>> ordered_pointset(z_positions_length);
+    std::vector<std::vector<std::vector<float>>> ordered_normals(z_positions_length);
+    std::vector<std::vector<float>> ordered_umbilicus_points(z_positions_length);
+
+
+    for (int i = 0; i < z_positions_length; ++i) {
+        std::vector<float> umbilicus_position = umbilicus_xz_at_y(umbilicus_points, z_positions[i]);
+        ordered_umbilicus_points[i] = umbilicus_position;
+        auto [distances, ts, normals_closest] = closestPointsAndDistancesCylindrical(points, normals, umbilicus_position, angle_vector, max_eucledian_distance);
+
+        // sort distances and ts from smalles to largest distance
+        std::vector<size_t> indices(distances.size());
+        std::iota(indices.begin(), indices.end(), 0);
+        std::sort(indices.begin(), indices.end(), [&distances](size_t i1, size_t i2) { return distances[i1] < distances[i2]; });
+
+        // reorder distances and ts
+        std::vector<float> sorted_distances(distances.size());
+        std::vector<float> sorted_ts(distances.size());
+        std::vector<std::vector<float>> sorted_normals(distances.size());
+        for (size_t j = 0; j < distances.size(); ++j) {
+            sorted_distances[j] = distances[indices[j]];
+            sorted_ts[j] = ts[indices[j]];
+            sorted_normals[j] = normals_closest[indices[j]];
+        }
+
+        std::vector<float> valid_ts;
+        std::vector<std::vector<float>> valid_normals;
+        int max_number_closest_points = 10;
+        int current_number_closest_points = 0;
+
+        for (size_t j = 0; j < distances.size(); ++j) {
+            if (sorted_distances[j] < max_eucledian_distance && sorted_ts[j] < 0) {
+                valid_ts.push_back(sorted_ts[j]);
+                valid_normals.push_back(sorted_normals[j]);
+                current_number_closest_points++;
+            }
+            else {
+                if (sorted_distances[j] < max_eucledian_distance) {
+                    std::cout << "Distance: " << sorted_distances[j] << " ts: " << sorted_ts[j] << std::endl;
+                }
+            }
+            if (current_number_closest_points >= max_number_closest_points) {
+                break;
+            }
+        }
+
+        ordered_pointset[i] = valid_ts;
+        ordered_normals[i] = valid_normals;
+    }
+
+    return std::make_tuple(ordered_pointset, ordered_normals, ordered_umbilicus_points, angle_vector);
+}
+
+std::tuple<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<std::vector<float>>>, std::vector<std::vector<float>>, std::vector<float>>, int, int> processWindingAngle(
+    const std::vector<std::vector<float>>& umbilicus_points,
+    const std::vector<std::vector<float>>& points, 
+    const std::vector<std::vector<float>>& normals,
+    const std::vector<float>& z_positions,
+    float windingAngle,
+    int last_start_index,
+    int last_end_index,
+    float maxEucledianDistance = 10) 
+{
+    std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<std::vector<float>>>, std::vector<std::vector<float>>, std::vector<float>> result;
+
+    // Find the start and end indices of points within the specified winding angle range
+    auto [startIndex, endIndex] = pointsAtWindingAngle(points, windingAngle, last_start_index, last_end_index);
+    // if (startIndex == endIndex) {
+    //     auto result_all = std::make_tuple(result, startIndex, endIndex);
+    //     return result_all;
+    // }
+
+    // Extract the points and normals within the specified index range
+    std::vector<std::vector<float>> extractedPoints(endIndex - startIndex);
+    std::vector<std::vector<float>> extractedNormals(endIndex - startIndex);
+    for (size_t i = startIndex; i < endIndex; ++i) {
+        extractedPoints[i - startIndex] = points[i];
+        extractedNormals[i - startIndex] = normals[i];
+    }
+
+    // Process the points at the specified angle
+    result = calculatePointsAtAngle(umbilicus_points, extractedPoints, extractedNormals, z_positions, windingAngle, maxEucledianDistance);
+    auto result_all = std::make_tuple(result, startIndex, endIndex);
+
+    return result_all;
+}
+
+// Helper to determine min and max from vector of points
+std::pair<float, float> findMinMaxWindingAngles(const std::vector<std::vector<float>>& points) {
+    float minAngle = std::numeric_limits<float>::max();
+    float maxAngle = std::numeric_limits<float>::lowest();
+    for (const auto& point : points) {
+        if (point[3] < minAngle) minAngle = point[3];
+        if (point[3] > maxAngle) maxAngle = point[3];
+    }
+    return {minAngle, maxAngle};
+}
+
+// Helper to determine min and max from vector of points
+std::pair<float, float> findMinMaxZ(const std::vector<std::vector<float>>& points) {
+    float minZ = std::numeric_limits<float>::max();
+    float maxZ = std::numeric_limits<float>::lowest();
+    for (const auto& point : points) {
+        if (point[1] < minZ) minZ = point[1];
+        if (point[1] > maxZ) maxZ = point[1];
+    }
+    return {minZ, maxZ};
+}
+
+void workerFunction(const std::vector<std::vector<float>>& points,
+                    const std::vector<std::vector<float>>& normals,
+                    const std::vector<std::vector<float>>& umbilicus_points,
+                    const std::vector<float>& z_positions,
+                    float angleStart,
+                    float angleEnd,
+                    float angleStep,
+                    float maxEucledianDistance,
+                    std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<std::vector<float>>>, std::vector<std::vector<float>>, std::vector<float>>>& results,
+                    int startIndex) {
+    // Find the start and end indices of points within the specified winding angle range
+    auto [startAngleIndex, endAngleIndex] = pointsAtWindingAngle(points, angleStart + ((angleEnd - angleStart) / 2.0), 0, 0, (angleEnd - angleStart) / 2.0);
+
+    int index = startIndex;
+    int totalAngles = std::ceil((angleEnd - angleStart) / angleStep);
+    for (float angle = angleStart; angle < angleEnd; angle += angleStep) {
+        auto [result, last_angle_start_index_, last_angle_end_index_] = processWindingAngle(umbilicus_points, points, normals, z_positions, angle, startAngleIndex, endAngleIndex, maxEucledianDistance);
+        startAngleIndex = last_angle_start_index_;
+        endAngleIndex = last_angle_end_index_;
+        std::cout << index - startIndex + 1 << " / " << totalAngles << std::endl;
+        results[index++] = result;
+    }
+}
+
+std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<std::vector<float>>>, std::vector<std::vector<float>>, std::vector<float>>> rolledOrderedPointset(std::vector<std::vector<float>> umbilicus_points, std::vector<std::vector<float>> points, std::vector<std::vector<float>> normals, int numThreads, bool debug = false, int z_spacing = 10, float max_eucledian_distance = 10) {
+    auto [minWind, maxWind] = findMinMaxWindingAngles(points);
+    auto [minZ, maxZ] = findMinMaxZ(points);
+    std::cout << "Min and max winding angles: " << minWind << ", " << maxWind << std::endl;
+    std::cout << "First point: " << points[0][0] << ", " << points[0][1] << ", " << points[0][2] << ", " << points[0][3] << " last point: " << points[points.size() - 1][0] << ", " << points[points.size() - 1][1] << ", " << points[points.size() - 1][2] << ", " << points[points.size() - 1][3] << std::endl;
+
+    // Calculate z positions based on spacing
+    std::vector<float> zPositions;
+    for (float z = minZ; z <= maxZ; z += z_spacing) {
+        zPositions.push_back(z);
+    }
+
+    float angleStep = 6;
+    // Calculate total number of angles to process
+    int totalAngles = std::ceil((maxWind - minWind) / angleStep);
+    std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<std::vector<float>>>, std::vector<std::vector<float>>, std::vector<float>>> results(totalAngles);
+
+    std::vector<std::thread> threads;
+    int anglesPerThread = totalAngles / numThreads;
+    int anglesLeft = totalAngles % numThreads;
+    int resultIndex = 0;
+    float angleStart = minWind;
+    // Launch threads
+    for (int i = 0; i < numThreads; ++i) {
+        int angles_this_thread = anglesPerThread + (i < anglesLeft ? 1 : 0);
+        float angleEnd = angleStart + angles_this_thread * angleStep;
+        if (i == numThreads - 1) {
+            angleEnd = maxWind;
+        }
+        int startIndex = resultIndex;  // Assign the starting index for results for each thread
+        threads.push_back(std::thread(workerFunction, std::cref(points), std::cref(normals), std::cref(umbilicus_points), std::cref(zPositions), angleStart, angleEnd, angleStep, max_eucledian_distance, std::ref(results), startIndex));
+        angleStart = angleEnd;
+        resultIndex += angles_this_thread;  // Increment the start index for the next thread
+    }
+
+    // Join threads
+    for (auto& thread : threads) {
+        thread.join();
+    }
+
+    // Results are now populated in order in the 'results' vector
+    if (debug) {
+        std::cout << "Processed results count: " << results.size() << std::endl;
+    }
+    return results;
+}
+
+std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<std::vector<float>>>, std::vector<std::vector<float>>, std::vector<float>>> create_ordered_pointset(py::array_t<float> original_points, py::array_t<float> original_normals, py::array_t<float> umbilicus_points) {
+    // Check the input dimensions and types are as expected
+    if (original_points.ndim() != 2 || original_normals.ndim() != 2) {
+        throw std::runtime_error("Expected two-dimensional array for points and normals.");
+    }
+
+    if (original_points.shape(1) != 4 || original_normals.shape(1) != 3) {
+        throw std::runtime_error("Expected each point to have four and each normal to have three components.");
+    }
+
+    // Access the data
+    auto points_buf = original_points.unchecked<2>(); // Accessing the data without bounds checking for performance
+    auto normals_buf = original_normals.unchecked<2>();
+    auto umbilicus_points_buf = umbilicus_points.unchecked<2>();
+
+    // create a vector of vectors to hold the processed points
+    std::vector<std::vector<float>> processed_points;
+    processed_points.reserve(original_points.shape(0)); // reserve space for all points to improve performance
+
+    // create a vector of vectors to hold the processed normals
+    std::vector<std::vector<float>> processed_normals;
+    processed_normals.reserve(original_normals.shape(0)); // reserve space for all normals to improve performance
+
+    // create a vector of vectors to hold the umbilicus points
+    std::vector<std::vector<float>> umbilicus_points_vector;
+    umbilicus_points_vector.reserve(umbilicus_points.shape(0)); // reserve space for all umbilicus points to improve performance
+
+    // Process points: just a placeholder for actual operations
+    for (ssize_t i = 0; i < original_points.shape(0); ++i) {
+        std::vector<float> point = {
+            points_buf(i, 0), // x coordinate
+            points_buf(i, 1), // y coordinate
+            points_buf(i, 2),  // z coordinate
+            points_buf(i, 3),  // winding angle
+        };
+        processed_points.push_back(point);
+
+        std::vector<float> normal = {
+            normals_buf(i, 0), // x component
+            normals_buf(i, 1), // y component
+            normals_buf(i, 2), // z component
+        };
+        processed_normals.push_back(normal);
+    }
+
+    // Process umbilicus points
+    for (ssize_t i = 0; i < umbilicus_points.shape(0); ++i) {
+        std::vector<float> umbilicus_point = {
+            umbilicus_points_buf(i, 0), // x coordinate
+            umbilicus_points_buf(i, 1), // y coordinate
+            umbilicus_points_buf(i, 2),  // z coordinate
+        };
+        umbilicus_points_vector.push_back(umbilicus_point);
+    }
+
+    auto result = rolledOrderedPointset(umbilicus_points_vector, processed_points, processed_normals, 32, true, 10, 10);
+
+    return result;
+}
+
 PYBIND11_MODULE(pointcloud_processing, m) {
     m.doc() = "pybind11 module for parallel point cloud processing";
 
     m.def("load_pointclouds", &load_pointclouds, "Function to load point clouds and return points, normals, and colors.");
 
     m.def("upsample_pointclouds", &upsample_pointclouds, "Function to load point clouds and return points, normals, and colors.");
+
+    m.def("create_ordered_pointset", &create_ordered_pointset, "Function to create an ordered point set from a point cloud.");
 }
