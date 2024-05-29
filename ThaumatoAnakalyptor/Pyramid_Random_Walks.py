@@ -1965,8 +1965,8 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
     
     # Build graph
     if recompute:
-        scroll_graph = ScrollGraph(7, overlapp_threshold, limit_stickiness=0.6)
-        start_block, patch_id = scroll_graph.build_graph(path, num_processes=30, start_point=start_point, distance=-1)
+        scroll_graph = ScrollGraph(overlapp_threshold, umbilicus_path)
+        start_block, patch_id = scroll_graph.build_graph(path, num_processes=30, start_point=start_point, prune_unconnected=False)
         print("Saving built graph...")
         scroll_graph.save_graph(recompute_path)
 
