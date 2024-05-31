@@ -230,10 +230,15 @@ class WalkToSheet():
             last_t = None
             for i in range(len(t_means)):
                 if t_means[i][u] is not None:
-                    if last_t is not None and t_means[i][u] >= last_t:
-                        print(f"Something is wrong with t values: {t_means[i][u]} < {last_t}")
-                        t_means[i][u] = None
-                        continue
+                    if last_t is not None:
+                        if winding_direction and t_means[i][u] >= last_t:
+                            print(f"Something is wrong with t values: {t_means[i][u]} < {last_t}")
+                            t_means[i][u] = None
+                            continue
+                        elif not winding_direction and t_means[i][u] <= last_t:
+                            print(f"Something is wrong with t values: {t_means[i][u]} > {last_t}")
+                            t_means[i][u] = None
+                            continue
                     last_t = t_means[i][u]
 
         return t_means, normals_means     
