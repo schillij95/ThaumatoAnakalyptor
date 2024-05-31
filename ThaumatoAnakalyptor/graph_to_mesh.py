@@ -373,20 +373,14 @@ class WalkToSheet():
             for j in range(len(interpolated_ts[i])):
                 if interpolated_ts[i][j] is None:
                     print(f"Interpolated ts is None at {i}, {j}")
-                if winding_direction:
-                    if i_pos_in_same_vector > 0 and interpolated_ts[i][j] >= interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]:
-                        print(f"low side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not >= {interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]}")
-                    if i_pos_in_same_vector < len(same_vector_indices) - 1 and interpolated_ts[i][j] <= interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]:
-                        print(f"high side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not <= {interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]}")
-                else:
-                    if i_pos_in_same_vector > 0 and interpolated_ts[i][j] <= interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]:
-                        print(f"low side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not <= {interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]}")
-                    if i_pos_in_same_vector < len(same_vector_indices) - 1 and interpolated_ts[i][j] >= interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]:
-                        print(f"high side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not >= {interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]}")
+                if i_pos_in_same_vector > 0 and interpolated_ts[i][j] >= interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]:
+                    print(f"low side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not >= {interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]}")
+                if i_pos_in_same_vector < len(same_vector_indices) - 1 and interpolated_ts[i][j] <= interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]:
+                    print(f"high side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not <= {interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]}")
 
-        return interpolated_ts, interpolated_normals, fixed_points
+        return interpolated_ts, interpolated_normals, fixed_points, winding_direction
     
-    def deduct_ordered_pointset_neighbours(self, ordered_pointset, angle_vector):
+    def deduct_ordered_pointset_neighbours(self, ordered_pointset, angle_vector, winding_direction):
         # create a dictionary with the indices of the points in the ordered pointset as keys and a list of the indices of the neighbouring points as values
         neighbours_dict = {}
         angle_set = set()
@@ -418,6 +412,9 @@ class WalkToSheet():
                                 neighbours_dict[dict_key]["left"] = (same_vector_indices[e+l], k)
                             else:
                                 neighbours_dict[dict_key]["right"] = (same_vector_indices[e+l], k)
+                            # swap left and right if winding direction is reversed
+                            if not winding_direction:
+                                neighbours_dict[dict_key]["left"], neighbours_dict[dict_key]["right"] = neighbours_dict[dict_key]["right"], neighbours_dict[dict_key]["left"]
                     # append front and back neighbours
                     for l in range(-1, 2):
                         if l == 0:
@@ -696,10 +693,10 @@ class WalkToSheet():
                 (result_ts, result_normals) = pickle.load(f)
 
         # interpolate initial full pointset. After this step there exists an "ordered pointset" prototype without any None values
-        interpolated_ts, interpolated_normals, fixed_points = self.initial_full_pointset(result_ts, result_normals, angle_vector)
+        interpolated_ts, interpolated_normals, fixed_points, winding_direction = self.initial_full_pointset(result_ts, result_normals, angle_vector)
 
         # Calculate for each point in the ordered pointset its neighbouring indices (3d in a 2d list). on same sheet, top bottom, front back, adjacent sheets neighbours: left right
-        neighbours_dict = self.deduct_ordered_pointset_neighbours(interpolated_ts, angle_vector)
+        neighbours_dict = self.deduct_ordered_pointset_neighbours(interpolated_ts, angle_vector, winding_direction)
 
         # Optimize the full pointset for smooth surface with best guesses for interpolated t values
         error_val_d = 1.0
