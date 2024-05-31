@@ -322,10 +322,14 @@ class WalkToSheet():
             # Filter based on previous mean
             elif prev_mean is None:
                 prev_mean = next_mean + mean_dist
+                if prev_mean > 0.0:
+                    prev_mean = 0.0
                 prev_ind = length_ts - 1 if winding_direction else 0
             # Filter based on next mean
             elif next_mean is None:
                 next_mean = prev_mean - mean_dist
+                if next_mean > 0.0:
+                    next_mean = 0.0
                 next_ind = 0 if winding_direction else length_ts - 1
             
             return prev_mean, prev_ind, next_mean, next_ind
