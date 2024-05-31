@@ -847,7 +847,8 @@ std::vector<float> umbilicus_xz_at_y(const std::vector<std::vector<float>>& poin
     else {
         // Iterate over each segment in the points array
         for (int i = 0; i < points_array.size() - 1; ++i) {
-            if (points_array[i][1] <= y_new && points_array[i + 1][1] >= y_new) {
+            if ((points_array[i][1] <= y_new && points_array[i + 1][1] >= y_new) ||
+                (points_array[i][1] >= y_new && points_array[i + 1][1] <= y_new)) {
                 // Perform interpolation
                 float x_new = linear_interp(points_array[i][0], points_array[i + 1][0], points_array[i][1], points_array[i + 1][1], y_new);
                 float z_new = linear_interp(points_array[i][2], points_array[i + 1][2], points_array[i][1], points_array[i + 1][1], y_new);
