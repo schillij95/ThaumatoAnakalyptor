@@ -521,6 +521,9 @@ class WalkToSheet():
             count_total += 1.0
         t_total /= count_total
 
+        if t_total > 0.0:
+            t_total = 0.0
+
         return t_total
     
     def respect_non_overlapping(self, i, j, neighbours_dict, interpolated_ts, new_ts_d):
