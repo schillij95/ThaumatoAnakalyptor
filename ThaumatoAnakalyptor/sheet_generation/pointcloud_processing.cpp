@@ -815,6 +815,10 @@ std::pair<int, int> pointsAtWindingAngle(const std::vector<std::vector<float>>& 
     if (endIndex == -1) {
         endIndex = points.size();
     }
+    if (startIndex > endIndex) {
+        startIndex = endIndex;
+        std::cout << "Start index is greater than end index " << startIndex << " " << endIndex << std::endl;
+    }
     return {startIndex, endIndex};
 }
 
