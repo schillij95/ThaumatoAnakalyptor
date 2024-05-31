@@ -836,11 +836,11 @@ std::vector<float> umbilicus_xz_at_y(const std::vector<std::vector<float>>& poin
         return x0 + (x1 - x0) * (y - y0) / (y1 - y0);
     };
 
-    if (points_array[0][1] <= y_new && points_array[0][1] <= y_new) {
+    if (points_array[0][1] >= y_new && points_array[0][1] >= y_new) {
         interpolated_point = points_array[0];
         interpolated_point[1] = y_new;
     }
-    else if (points_array[points_array.size() - 1][1] >= y_new && points_array[points_array.size() - 1][1] >= y_new) {
+    else if (points_array[points_array.size() - 1][1] <= y_new && points_array[points_array.size() - 1][1] <= y_new) {
         interpolated_point = points_array[points_array.size() - 1];
         interpolated_point[1] = y_new;
     }
