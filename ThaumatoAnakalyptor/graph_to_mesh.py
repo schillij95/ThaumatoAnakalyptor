@@ -718,7 +718,7 @@ class WalkToSheet():
         # Optimize the full pointset for smooth surface with best guesses for interpolated t values
         error_val_d = 1.0
         last_error_val = None
-        for i in tqdm(range(10000), desc="Optimizing full pointset"):
+        for i in tqdm(range(10), desc="Optimizing full pointset"):
             interpolated_ts, error_val = self.compute_interpolated_adjacent(neighbours_dict, interpolated_ts, fixed_points)
             print(f"Error value: {error_val}")
             if last_error_val is not None and abs(last_error_val - error_val) < error_val_d:
