@@ -997,7 +997,7 @@ void workerFunction(const std::vector<std::vector<float>>& points,
     }
 }
 
-std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<std::vector<float>>>, std::vector<std::vector<float>>, std::vector<float>>> rolledOrderedPointset(std::vector<std::vector<float>> umbilicus_points, std::vector<std::vector<float>> points, std::vector<std::vector<float>> normals, int numThreads, bool debug = false, int z_spacing = 10, float max_eucledian_distance = 10) {
+std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<std::vector<float>>>, std::vector<std::vector<float>>, std::vector<float>>> rolledOrderedPointset(std::vector<std::vector<float>> umbilicus_points, std::vector<std::vector<float>> points, std::vector<std::vector<float>> normals, int numThreads, bool debug = false, float angleStep = 6, int z_spacing = 10, float max_eucledian_distance = 10) {
     auto [minWind, maxWind] = findMinMaxWindingAngles(points);
     auto [minZ, maxZ] = findMinMaxZ(points);
     std::cout << "Min and max winding angles: " << minWind << ", " << maxWind << std::endl;
@@ -1009,7 +1009,6 @@ std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<
         zPositions.push_back(z);
     }
 
-    float angleStep = 6;
     // Calculate total number of angles to process
     int totalAngles = std::ceil((maxWind - minWind) / angleStep);
     std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<std::vector<float>>>, std::vector<std::vector<float>>, std::vector<float>>> results(totalAngles);
@@ -1026,7 +1025,7 @@ std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<
             continue;
         }
         float angleEnd = angleStart + angles_this_thread * angleStep;
-        if (i == numThreads - 1) {
+        if (i == numThreads - 1 || angleEnd > maxWind) {
             angleEnd = maxWind;
         }
         int startIndex = resultIndex;  // Assign the starting index for results for each thread
@@ -1102,7 +1101,7 @@ std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<
         umbilicus_points_vector.push_back(umbilicus_point);
     }
 
-    auto result = rolledOrderedPointset(umbilicus_points_vector, processed_points, processed_normals, std::thread::hardware_concurrency(), true, 10, 10);
+    auto result = rolledOrderedPointset(umbilicus_points_vector, processed_points, processed_normals, std::thread::hardware_concurrency(), true, 6, 10, 10);
 
     return result;
 }
