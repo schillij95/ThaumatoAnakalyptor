@@ -624,7 +624,7 @@ class WalkToSheet():
         print(f"Min and max winding angles: {min_wind}, {max_wind}")
 
         # some debugging visualization of seperate pointcloud windings
-        produce_test_pointclouds_windings = True
+        produce_test_pointclouds_windings = False
         if produce_test_pointclouds_windings:
             # remove test folder
             test_folder = os.path.join(self.save_path, "test_winding_angles")
