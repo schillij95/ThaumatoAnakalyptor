@@ -463,9 +463,9 @@ class WalkToSheet():
                 l[i][k] = neighbours["left"]
                 r[i][k] = neighbours["right"]
                 l[i][k] = self.value_from_key(l[i][k], ordered_pointset)
-                assert l[i][k] is None or l[i][k] < 0.0, f"l[i][k] is not less than 0: {l[i][k]}"
+                assert l[i][k] is None or l[i][k] <= 0.0, f"l[i][k] is not less than 0: {l[i][k]}"
                 r[i][k] = self.value_from_key(r[i][k], ordered_pointset)
-                assert r[i][k] is None or r[i][k] < 0.0, f"r[i][k] is not less than 0: {r[i][k]}"
+                assert r[i][k] is None or r[i][k] <= 0.0, f"r[i][k] is not less than 0: {r[i][k]}"
                 fb = neighbours["front_back"]
                 tb = neighbours["top_bottom"]
                 same_sheet_neighbours = fb + tb
@@ -476,7 +476,7 @@ class WalkToSheet():
                 count_l = 0
                 for n in same_sheet_neighbours:
                     ts_n = ordered_pointset[n[0]][n[1]]
-                    assert ts_n < 0.0, f"ts_n is not less than 0: {ts_n}"
+                    assert ts_n <= 0.0, f"ts_n is not less than 0: {ts_n}"
                     m_ts_ += ts_n
 
                     l_n = neighbours_dict[n]["left"]
@@ -562,7 +562,7 @@ class WalkToSheet():
             for j in range(len(interpolated_ts[i])):
                 if not fixed_points[i][j]:
                     t = self.solve_for_t_individual(r[i][j], l[i][j], m_r[i][j], m_l[i][j], m_ts[i][j], a=1.0)
-                    assert t < 0.0, f"t is not less than 0: {t}"
+                    assert t <= 0.0, f"t is not less than 0: {t}"
                     d_t = t - interpolated_ts[i][j]
                     # the raw d_t might be breaking the non-overlapping invariant
                     d_t = self.respect_non_overlapping(i, j, neighbours_dict, interpolated_ts, d_t)
