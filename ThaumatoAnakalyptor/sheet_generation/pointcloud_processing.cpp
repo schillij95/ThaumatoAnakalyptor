@@ -820,8 +820,7 @@ std::pair<int, int> pointsAtWindingAngle(const std::vector<std::vector<float>>& 
 
 std::vector<float> umbilicus_xz_at_y(const std::vector<std::vector<float>>& points_array, float y_new) {
     // Resultant vector of interpolated points
-    std::vector<float> interpolated_point = points_array[points_array.size() - 1];
-    interpolated_point[1] = y_new;
+    std::vector<float> interpolated_point;
 
     // Check if points_array is not empty
     if (points_array.empty()) {
@@ -836,17 +835,26 @@ std::vector<float> umbilicus_xz_at_y(const std::vector<std::vector<float>>& poin
         return x0 + (x1 - x0) * (y - y0) / (y1 - y0);
     };
 
-    // Iterate over each segment in the points array
-    for (int i = 0; i < points_array.size() - 1; ++i) {
-        if ((points_array[i][1] <= y_new && points_array[i + 1][1] >= y_new) ||
-            (points_array[i][1] >= y_new && points_array[i + 1][1] <= y_new)) {
-            // Perform interpolation
-            float x_new = linear_interp(points_array[i][0], points_array[i + 1][0], points_array[i][1], points_array[i + 1][1], y_new);
-            float z_new = linear_interp(points_array[i][2], points_array[i + 1][2], points_array[i][1], points_array[i + 1][1], y_new);
+    if (points_array[0][1] <= y_new && points_array[0][1] <= y_new) {
+        interpolated_point = points_array[0];
+        interpolated_point[1] = y_new;
+    }
+    else if (points_array[points_array.size() - 1][1] >= y_new && points_array[points_array.size() - 1][1] >= y_new) {
+        interpolated_point = points_array[points_array.size() - 1];
+        interpolated_point[1] = y_new;
+    }
+    else {
+        // Iterate over each segment in the points array
+        for (int i = 0; i < points_array.size() - 1; ++i) {
+            if (points_array[i][1] <= y_new && points_array[i + 1][1] >= y_new) {
+                // Perform interpolation
+                float x_new = linear_interp(points_array[i][0], points_array[i + 1][0], points_array[i][1], points_array[i + 1][1], y_new);
+                float z_new = linear_interp(points_array[i][2], points_array[i + 1][2], points_array[i][1], points_array[i + 1][1], y_new);
 
-            // Add the new point to the list of interpolated points
-            interpolated_point = {x_new, y_new, z_new};
-            break;
+                // Add the new point to the list of interpolated points
+                interpolated_point = {x_new, y_new, z_new};
+                break;
+            }
         }
     }
 
