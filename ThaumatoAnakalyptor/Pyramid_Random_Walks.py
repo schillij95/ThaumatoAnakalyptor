@@ -15,6 +15,7 @@ import argparse
 import yaml
 import ezdxf
 from ezdxf.math import Vec3
+import random
 
 from .instances_to_sheets import select_points, get_vector_mean, alpha_angles, adjust_angles_zero, adjust_angles_offset, add_overlapp_entries_to_patches_list, assign_points_to_tiles, compute_overlap_for_pair, overlapp_score, fit_sheet, winding_switch_sheet_score_raw_precomputed_surface, find_starting_patch, save_main_sheet, update_main_sheet
 from .sheet_to_mesh import load_xyz_from_file, scale_points, umbilicus_xz_at_y
@@ -1518,6 +1519,340 @@ class RandomWalkSolver:
 
         return nodes, ks
     
+    def sample_landmark_nodes(self, graph, percentage=0.1):
+        # randomly sample 1% of nodes in the graph as landmark nodes without duplicates
+        nodes = list(graph.nodes.keys())
+        nr_samples = int(np.ceil(len(nodes) * percentage))
+        landmark_nodes = set()
+        while len(landmark_nodes) < nr_samples:
+            node = random.choice(nodes)
+            if node not in landmark_nodes:
+                landmark_nodes.add(node)
+
+        return list(landmark_nodes)
+    
+    def contract_graph(self, graph, aggregated_connections):
+        # contract the graph with the aggregated connections
+        contracted_graph = ScrollGraph(graph.overlapp_threshold, graph.umbilicus_path)
+
+        # count all certainties fro each start node - end node pair
+        certainties_total = {}
+        for start_node in aggregated_connections:
+            if start_node not in certainties_total:
+                certainties_total[start_node] = {}
+            for end_node in aggregated_connections[start_node]:
+                if end_node not in certainties_total[start_node]:
+                    certainties_total[start_node][end_node] = 0
+                for k in aggregated_connections[start_node][end_node]:
+                    certainties_total[start_node][end_node] += aggregated_connections[start_node][end_node][k]
+
+        # add all landmark connection edges
+        added_nodes = set()
+        for start_node in aggregated_connections:
+            for end_node in aggregated_connections[start_node]:
+                # find k value with the highest certainty
+                max_k = None
+                max_certainty = 0
+                for k in aggregated_connections[start_node][end_node]:
+                    if aggregated_connections[start_node][end_node][k] > max_certainty:
+                        max_k = k
+                        max_certainty = aggregated_connections[start_node][end_node][k]
+                certainty = max_certainty / certainties_total[start_node][end_node]
+                # if certainty < 0.25:
+                #     continue
+                if max_k is not None:
+                    contracted_graph.add_edge(start_node, end_node, certainty, max_k, same_block=False)
+                    added_nodes.add(start_node)
+                    added_nodes.add(end_node)
+
+        # add all nodes
+        for node in added_nodes:
+            contracted_graph.add_node(node, graph.nodes[node]['centroid'], winding_angle=graph.nodes[node]['winding_angle'])
+        
+        contracted_graph.compute_node_edges()
+        return contracted_graph
+
+    def solve_pyramid(self, path, pyramid_up_nr_average=1000, max_nr_walks=100, max_unchanged_walks=10000, max_steps=100, max_tries=6, min_steps=10, min_end_steps=4, stop_event=None):
+        # pyramid solution utilizing random walks to deduct the nodes connections
+        # samples landmarks and computing their connection certainties iteratively while contracting the graph with the help of the landmarks
+        # when reaching the pyramid top, the graph is expanded again with the help of the landmarks. the top pyramid node is the starting node.
+        # expanding the pyramid iteratively and setting the landmark nodes as fixed k values which were calculated in the last pyramid down iteration
+
+        graph = self.graph
+        graphs = [graph]
+
+        pyramid_index = 0
+        # pyramid up
+        while True:
+            # sample landmark nodes
+            landmark_nodes = self.sample_landmark_nodes(graph)
+            assert len(landmark_nodes) > 0, "No landmark nodes sampled."
+            if len(landmark_nodes) == 1:
+                break
+            print(f"Pyramid Index is {pyramid_index}. Remaining Landmark Nodes: {len(landmark_nodes)}")
+            # compute landmark nodes connections
+            aggregated_connections = self.solve_pyramid_up(graph, landmark_nodes, max_nr_walks=pyramid_up_nr_average, max_steps=max_steps, max_tries=max_tries, min_steps=min_steps, stop_event=stop_event)
+            # contract the graph
+            graph = self.contract_graph(graph, aggregated_connections)
+            graphs.append(graph)
+            assert len(graph.nodes) > 1, "Graph has no nodes."
+
+        assert len(landmark_nodes) == 1, "More than one landmark node left."
+        fixed_nodes = landmark_nodes
+        fixed_ks = [0.0]
+        # pyramid down
+        for i in tqdm(range(len(graphs)-1, -1, -1), desc="Pyramid Down"):
+            print(f"Pyramid Down Index: {i}")
+            graph = graphs[i]
+            # compute pyramid down
+            fixed_nodes, fixed_ks = self.solve_pyramid_down(graph, fixed_nodes, fixed_ks, path, max_nr_walks=max_nr_walks, max_unchanged_walks=max_unchanged_walks, max_steps=max_steps, max_tries=max_tries, min_steps=min_steps, min_end_steps=min_end_steps, stop_event=stop_event)
+
+        return np.array(fixed_nodes), np.array(fixed_ks)
+    
+    def pick_start_node_landmark(self, landmark_nodes):
+        # randomly pick a landmark node
+        node = random.choice(landmark_nodes)
+        return node, 0.0
+    
+    def walk_aggregate_connections(self, walk, k, aggregated_connections, landmark_nodes_set):
+        start_node = walk[0]
+        assert start_node in landmark_nodes_set, "Start node is not a landmark node."
+        for i in range(1, len(walk)):
+            end_node = walk[i]
+            k_i = k[i]
+            if not end_node in landmark_nodes_set: # only aggregate connections between landmark nodes
+                continue
+            
+            # aggregate connections
+            if start_node not in aggregated_connections:
+                aggregated_connections[start_node] = {}
+            if end_node not in aggregated_connections[start_node]:
+                aggregated_connections[start_node][end_node] = {}
+
+            if end_node not in aggregated_connections:
+                aggregated_connections[end_node] = {}
+            if start_node not in aggregated_connections[end_node]:
+                aggregated_connections[end_node][start_node] = {}
+
+            if k_i not in aggregated_connections[start_node][end_node]:
+                aggregated_connections[start_node][end_node][k_i] = 0
+            if -k_i not in aggregated_connections[end_node][start_node]:
+                aggregated_connections[end_node][start_node][-k_i] = 0
+
+            aggregated_connections[start_node][end_node][k_i] += 1
+            aggregated_connections[end_node][start_node][-k_i] += 1
+        
+        return aggregated_connections
+    
+    def solve_pyramid_up(self, graph, landmark_nodes, max_nr_walks=100, max_steps=100, max_tries=6, min_steps=10, stop_event=None):
+        # selected_graph = ScrollGraph(self.graph.overlapp_threshold, self.graph.umbilicus_path)
+        landmark_nodes_set = set(landmark_nodes)
+        walk_aggregation_threshold = self.graph.overlapp_threshold["walk_aggregation_threshold"]
+        aggregated_connections = {}
+        min_steps_start = min_steps
+        volume_dict = {}
+        nodes = np.array([], dtype=int)
+        ks = np.array([0])
+
+        nr_walks = 0
+        nr_walks_total = 0
+        nr_unupdated_walks = 0
+        failed_dict = {}
+        time_pick = 0.0
+        time_walk = 0.0
+        time_postprocess = 0.0
+        nr_unchanged_walks = 0
+        raw_sucessful_walks = 0
+        # while nr_walks < max_nr_walks or max_nr_walks < 0:
+        while (nr_walks_total < len(landmark_nodes) * max_nr_walks) and (stop_event is None or not stop_event.is_set()):
+            time_start = time.time()
+            sn, sk = self.pick_start_node_landmark(landmark_nodes)
+            # sn, sk = self.pick_start_node_bfs(nodes, ks, picked_nrs, neighbours_count_bfs)
+            time_pick += time.time() - time_start
+            time_start = time.time()
+            # performe one random walk, check if it looped back on itself
+            walk, k = self.random_walk(graph, sn, sk, volume_dict, nodes, ks, max_steps=max_steps, max_tries=max_tries, min_steps=min_steps)
+            time_walk += time.time() - time_start
+            time_start = time.time()
+            if walk is None:
+                nr_unchanged_walks += 1
+                if not k in failed_dict:
+                    failed_dict[k] = 0
+                failed_dict[k] += 1
+
+            if walk is not None:
+                raw_sucessful_walks += 1
+                aggregated_connections = self.walk_aggregate_connections(walk, k, aggregated_connections, landmark_nodes_set)
+
+                if len(walk) != 0:
+                    nr_walks += 1
+                    nr_unchanged_walks = 0
+                
+            nr_walks_total += 1
+            if nr_walks_total % (len(landmark_nodes) * max_nr_walks // 10) == 0:
+                print(f"Current Nodes: {nodes.shape[0]}, Walks: {nr_walks_total}, unupdated walks: {nr_unupdated_walks}, sucessful: {nr_walks}, raw_sucessful_walks: {raw_sucessful_walks}, failed because: \n{failed_dict}")
+                print(f"Time pick: {time_pick}, time walk: {time_walk}, time postprocess: {time_postprocess}, step size: {min_steps}, walk_aggregation_threshold: {self.graph.overlapp_threshold['walk_aggregation_threshold']}, k_range: {self.graph.overlapp_threshold['sheet_k_range']}")
+                time_pick, time_walk, time_postprocess = 0.0, 0.0, 0.0
+            time_postprocess += time.time() - time_start
+
+        print(f"Walks: {nr_walks_total}, sucessful: {nr_walks}, raw_sucessful_walks: {raw_sucessful_walks}, failed because: \n{failed_dict}")
+
+        return aggregated_connections
+    
+    def pick_start_node_landmark_ks(self, landmark_nodes, landmark_ks):
+        # randomly pick a landmark node
+        index = random.choice(range(len(landmark_nodes)))
+        node = landmark_nodes[index]
+        k = landmark_ks[index]
+        return node, k
+    
+    def solve_pyramid_down(self, graph, landmark_nodes, landmark_ks, path, max_nr_walks=100, max_unchanged_walks=10000, max_steps=100, max_tries=6, min_steps=10, min_end_steps=4, stop_event=None):
+        # selected_graph = ScrollGraph(self.graph.overlapp_threshold, self.graph.umbilicus_path)
+
+        walk_aggregation_threshold = self.graph.overlapp_threshold["walk_aggregation_threshold"]
+        min_steps_start = min_steps
+        volume_dict = {landmark_nodes[i][:3]: {landmark_nodes[i][3]: landmark_ks[i]} for i in range(len(landmark_nodes))}
+        nodes = np.array(landmark_nodes, dtype=int)
+        nodes_neighbours_count = np.array([0]*len(landmark_nodes), dtype=int)
+        picked_nrs = np.array([0]*len(landmark_nodes), dtype=float)
+        pick_prob = np.array([0.0]*len(landmark_nodes), dtype=float)
+        ks = np.array(landmark_ks)
+        old_nodes = None
+        old_ks = None
+        nr_previous_nodes = 0
+        
+        nr_walks = 0
+        nr_walks_total = 0
+        nr_unupdated_walks = 0
+        failed_dict = {}
+        time_pick = 0.0
+        time_walk = 0.0
+        time_postprocess = 0.0
+        nr_unchanged_walks = 0
+        raw_sucessful_walks = 0
+        # while nr_walks < max_nr_walks or max_nr_walks < 0:
+        while max_nr_walks > 0 and (stop_event is None or not stop_event.is_set()):
+            time_start = time.time()
+            sn, sk = self.pick_start_node_landmark_ks(landmark_nodes, landmark_ks)
+            # sn, sk = self.pick_start_node_bfs(nodes, ks, picked_nrs, neighbours_count_bfs)
+            time_pick += time.time() - time_start
+            time_start = time.time()
+            walk, k = self.random_walk(graph, sn, sk, volume_dict, nodes, ks, max_steps=max_steps, max_tries=max_tries, min_steps=min_steps)
+            time_walk += time.time() - time_start
+            time_start = time.time()
+            if walk is None:
+                nr_unchanged_walks += 1
+                if not k in failed_dict:
+                    failed_dict[k] = 0
+                failed_dict[k] += 1
+            else:
+                new_nodes = []
+                new_ks = []
+                existing_nodes = []
+                new_walk = False
+                for i in range(len(walk)):
+                    walk_node = walk[i]
+                    if (walk_node[:3] not in volume_dict) or (walk_node[3] not in volume_dict[walk_node[:3]]):
+                        new_nodes.append(walk[i])
+                        new_ks.append(k[i])
+                        new_walk = True
+                    else:
+                        existing_nodes.append(walk[i])
+                if new_walk:
+                    if not self.check_overlapp_walk(graph, walk, k, volume_dict, ks):
+                        walk, k = None, "wrong patch overlapp"
+                        if not k in failed_dict:
+                            failed_dict[k] = 0
+                        failed_dict[k] += 1
+
+            if walk is not None:
+                raw_sucessful_walks += 1
+                new_nodes, new_ks = self.walk_aggregation_func(new_nodes, new_ks, volume_dict, ks)
+
+                if len(new_nodes) != 0:
+                    nr_walks += 1
+                    nr_unchanged_walks = 0
+                if not new_walk:
+                    nr_unupdated_walks += 1
+                    nr_unchanged_walks += 1
+                    # add to picked_nrs since in this region, the patches picking is saturated
+                    for node in walk:
+                        index_ = volume_dict[node[:3]][node[3]]
+                        picked_nrs[index_] += 5
+                else:
+                    # update picking probability for existing nodes
+                    for node in existing_nodes:
+                        index_ = volume_dict[node[:3]][node[3]]
+                        picked_nrs[index_] = max(picked_nrs[index_]-5, 0)
+
+                if (nr_unchanged_walks > max_unchanged_walks) and (self.walk_aggregation["current_found_nodes"] != 0 or nr_unchanged_walks > 2*max_unchanged_walks):
+                    print(f"Walks: {nr_walks_total}, unupdated walks: {nr_unupdated_walks}, sucessful: {nr_walks}, raw_sucessful_walks: {raw_sucessful_walks}, failed because: \n{failed_dict}")
+                    print(f"Time pick: {time_pick}, time walk: {time_walk}, time postprocess: {time_postprocess}")
+                    picked_nrs = np.zeros_like(picked_nrs)
+                    nr_unchanged_walks = 0
+                    if min_steps > 1 and min_steps//2 >= min_end_steps:
+                        min_steps = min_steps // 2
+                        print(f"\033[94m[ThaumatoAnakalyptor]: Max unchanged walks reached. Adjusting min_steps to {min_steps}.\033[0m")
+                    elif self.graph.overlapp_threshold["walk_aggregation_threshold"] > 1:
+                        min_steps = min_steps_start
+                        self.graph.overlapp_threshold["walk_aggregation_threshold"] = self.graph.overlapp_threshold["walk_aggregation_threshold"] // 2
+                        print(f"\033[94m[ThaumatoAnakalyptor]: Max unchanged walks reached. Adjusting walk_aggregation_threshold to {self.graph.overlapp_threshold['walk_aggregation_threshold']}.\033[0m")
+                    else:
+                        self.graph.overlapp_threshold["walk_aggregation_threshold"] = walk_aggregation_threshold
+                        print(f"\033[94m[ThaumatoAnakalyptor]: Max unchanged walks reached. Finishing the random walks.\033[0m")
+                        break
+
+                length_nodes = len(nodes)
+                # Add new nodes to nodes
+                if len(new_nodes) != 0:
+                    nodes = np.concatenate((nodes, np.array(new_nodes)))
+                    ks = np.concatenate((ks, np.array(new_ks)))
+                    picked_nrs = np.concatenate((picked_nrs, np.zeros(len(new_nodes))))
+                    pick_prob = np.concatenate((pick_prob, np.zeros(len(new_nodes))))
+                    nodes_neighbours_count = np.concatenate((nodes_neighbours_count, np.zeros(len(new_nodes))))
+
+                for new_index in range(len(new_nodes)):
+                    if not new_nodes[new_index][:3] in volume_dict:
+                        volume_dict[new_nodes[new_index][:3]] = {}
+                    volume_dict[new_nodes[new_index][:3]][new_nodes[new_index][3]] = length_nodes + new_index
+                
+                # update neighbours count for new nodes
+                for index_new_node in range(len(new_nodes)):
+                    node = new_nodes[index_new_node]
+                    for edge in graph.nodes[node]['edges']:
+                        neighbour_node = edge[0] if edge[0] != node else edge[1]
+                        if neighbour_node[:3] in volume_dict and neighbour_node[3] in volume_dict[neighbour_node[:3]]:
+                            index_node = volume_dict[neighbour_node[:3]][neighbour_node[3]]
+                            nodes_neighbours_count[index_node] += 1
+                            nodes_neighbours_count[length_nodes + index_new_node] += 1
+                
+            nr_walks_total += 1
+            if nr_walks_total % (max_nr_walks * 2) == 0:
+                if nr_walks_total % (max_nr_walks * 2 * 100) == 0:
+                    nodes_save = nodes
+                    ks_save = ks
+                    if old_nodes is not None:
+                        nodes_save = np.concatenate((old_nodes, nodes))
+                        ks_save = np.concatenate((old_ks, ks))
+                    self.save_solution(path, nodes_save, ks_save)
+                print(f"Previous nodes: {nr_previous_nodes}, Current Nodes: {nodes.shape[0] + (old_nodes.shape[0] if old_nodes is not None else 0) - nr_previous_nodes}, Walks: {nr_walks_total}, unupdated walks: {nr_unupdated_walks}, sucessful: {nr_walks}, raw_sucessful_walks: {raw_sucessful_walks}, failed because: \n{failed_dict}")
+                print(f"Time pick: {time_pick}, time walk: {time_walk}, time postprocess: {time_postprocess}, step size: {min_steps}, walk_aggregation_threshold: {self.graph.overlapp_threshold['walk_aggregation_threshold']}, k_range: {self.graph.overlapp_threshold['sheet_k_range']}")
+                time_pick, time_walk, time_postprocess = 0.0, 0.0, 0.0
+            time_postprocess += time.time() - time_start
+
+        print(f"Walks: {nr_walks_total}, sucessful: {nr_walks}, raw_sucessful_walks: {raw_sucessful_walks}, failed because: \n{failed_dict}")
+        # mean and std and median of picked_nrs
+        mean = np.mean(picked_nrs)
+        std = np.std(picked_nrs)
+        median = np.median(picked_nrs)
+        print(f"Mean: {mean}, std: {std}, median: {median} of picked_nrs")
+
+        if old_nodes is not None:
+            nodes = np.concatenate((nodes, old_nodes))
+            ks = np.concatenate((ks, old_ks))
+
+        return nodes, ks
+    
     def sheet_switching_nodes(self, node, k, volume_dict, ks):
         """
         Get the nodes that are connected to the given node with a sheet switching edge. (edge to same volume, but different sheet)
@@ -1565,32 +1900,6 @@ class RandomWalkSolver:
                     new_ks.append(k)
         # found aggregated nodes
         if found_aggregated_nodes:
-            if overlapp_threshold["enable_winding_switch_postprocessing"]:
-                nodes_switched = []
-                ks_switched = []
-                # Switch winding for nodes with same volume and different winding
-                for ni, node in enumerate(new_nodes):
-                    k = new_ks[ni]
-                    nodes_node, ks_node = self.sheet_switching_nodes(node, k, volume_dict, ks_original)
-                    for i, node_ in enumerate(nodes_node):
-                        k_ = ks_node[i]
-                        if node_ in new_nodes or node_ in nodes_switched:
-                            continue
-                        continue_flag = False
-                        for j, new_node in enumerate(new_nodes):
-                            if tuple(node_[:3]) == tuple(new_node[:3]):
-                                if k_ == new_ks[j]:
-                                    continue_flag = True
-                                    break
-                        if continue_flag:
-                            continue
-                        
-                        nodes_switched.append(node_)
-                        ks_switched.append(k_)
-
-                new_nodes += nodes_switched
-                new_ks += ks_switched
-
             self.walk_aggregation["current_found_nodes"] += len(new_nodes)
             if self.walk_aggregation["current_found_nodes"] >= overlapp_threshold["walk_aggregation_max_current"] and overlapp_threshold["walk_aggregation_max_current"] > 0:
                 self.walk_aggregation = {"current_found_nodes": 0}
@@ -1604,29 +1913,29 @@ class RandomWalkSolver:
         return new_nodes, new_ks
 
 
-    def get_next_valid_volumes(self, node, volume_min_certainty_total_percentage=0.15):
-        if "volume_precomputation" in self.graph.nodes[node]:
-            if "valid_volumes" in self.graph.nodes[node]["volume_precomputation"]:
-                return self.graph.nodes[node]["volume_precomputation"]["valid_volumes"]
+    def get_next_valid_volumes(self, graph, node, volume_min_certainty_total_percentage=0.15):
+        if "volume_precomputation" in graph.nodes[node]:
+            if "valid_volumes" in graph.nodes[node]["volume_precomputation"]:
+                return graph.nodes[node]["volume_precomputation"]["valid_volumes"]
         else:
-            self.graph.nodes[node]["volume_precomputation"] = {}
+            graph.nodes[node]["volume_precomputation"] = {}
         
-        edges = self.graph.nodes[node]['edges']
+        edges = graph.nodes[node]['edges']
         volumes = {}
         same_block_dict = {}
         for edge in edges:
-            ks = self.graph.get_edge_ks(edge[0], edge[1])
+            ks = graph.get_edge_ks(edge[0], edge[1])
             max_certainty = 0.0
             max_certainty_k = 0.0
             same_block_max = False
             for k in ks:
-                bad_edge = self.graph.edges[edge][k]['bad_edge']
+                bad_edge = graph.edges[edge][k]['bad_edge']
                 if bad_edge:
                     continue
-                same_block = self.graph.edges[edge][k]['same_block']
+                same_block = graph.edges[edge][k]['same_block']
                 if same_block and (not self.graph.overlapp_threshold["enable_winding_switch"]): # same_volume, winding switch disregarded for random walks if enable_winding_switch is False
                     continue
-                certainty = self.graph.edges[edge][k]['certainty']
+                certainty = graph.edges[edge][k]['certainty']
                 if certainty > max_certainty:
                     max_certainty = certainty
                     max_certainty_k = k
@@ -1660,11 +1969,11 @@ class RandomWalkSolver:
         valid_volumes_same_block = [volume for volume in volumes if same_block_dict[volume]]
         valid_volumes_same_block = list(set(valid_volumes_same_block))
 
-        self.graph.nodes[node]["volume_precomputation"]["valid_volumes"] = [valid_volumes_other_block, valid_volumes_same_block]
+        graph.nodes[node]["volume_precomputation"]["valid_volumes"] = [valid_volumes_other_block, valid_volumes_same_block]
         return valid_volumes_other_block, valid_volumes_same_block
     
-    def pick_next_volume(self, node, start_k_diff):
-        valid_volumes_other_block, valid_volumes_same_block = self.get_next_valid_volumes(node, volume_min_certainty_total_percentage=self.graph.overlapp_threshold["volume_min_certainty_total_percentage"])
+    def pick_next_volume(self, graph, node, start_k_diff):
+        valid_volumes_other_block, valid_volumes_same_block = self.get_next_valid_volumes(graph, node, volume_min_certainty_total_percentage=self.graph.overlapp_threshold["volume_min_certainty_total_percentage"])
         volumes = valid_volumes_other_block + valid_volumes_same_block
         if len(volumes) == 0:
             return None
@@ -1686,7 +1995,7 @@ class RandomWalkSolver:
             p_minus = 0.5 + 0.5 * p_dir
             p_minus = min(1.0, max(0.0, p_minus))
             p_plus = 1.0 - p_minus
-            assert abs(start_k_diff) <= self.graph.overlapp_threshold["max_same_block_jump_range"], f"start_k_diff {start_k_diff} is out of range for max same block jump range {self.graph.overlapp_threshold['max_same_block_jump_range']}" # there are legit reasons this can fail, only usefull for testing to see if the implementation is bug free
+            # assert abs(start_k_diff) <= self.graph.overlapp_threshold["max_same_block_jump_range"], f"start_k_diff {start_k_diff} is out of range for max same block jump range {self.graph.overlapp_threshold['max_same_block_jump_range']}" # there are legit reasons this can fail, only usefull for testing to see if the implementation is bug free
             # pick direction with probs
             direction = np.random.choice([-1, 1], p=[p_minus, p_plus])
             # find the volume that has right k sign
@@ -1696,18 +2005,18 @@ class RandomWalkSolver:
 
             return None
     
-    def pick_best_node(self, node, next_volume):
-        if "volume_precomputation" in self.graph.nodes[node]:
-            if "next_volume" in self.graph.nodes[node]["volume_precomputation"]:
-                if next_volume in self.graph.nodes[node]["volume_precomputation"]["next_volume"]:
-                    return self.graph.nodes[node]["volume_precomputation"]["next_volume"][next_volume]
+    def pick_best_node(self, graph, node, next_volume):
+        if "volume_precomputation" in graph.nodes[node]:
+            if "next_volume" in graph.nodes[node]["volume_precomputation"]:
+                if next_volume in graph.nodes[node]["volume_precomputation"]["next_volume"]:
+                    return graph.nodes[node]["volume_precomputation"]["next_volume"][next_volume]
         else:
-            self.graph.nodes[node]["volume_precomputation"] = {"next_volume": {}}
+            graph.nodes[node]["volume_precomputation"] = {"next_volume": {}}
 
         next_node = None
         next_certainty = 0.0
         next_node_k = 0.0
-        edges = self.graph.nodes[node]['edges']
+        edges = graph.nodes[node]['edges']
         for edge in edges:
             # check if edge goes into next volume
             if edge[0] == node:
@@ -1721,21 +2030,21 @@ class RandomWalkSolver:
             if not next_volume[3] is None:
                 max_certainty_k = next_volume[3]
                 k = k_factor*max_certainty_k
-                if not k in self.graph.edges[edge]:
+                if not k in graph.edges[edge]:
                     continue
-                certainty = self.graph.edges[edge][k]['certainty']
-                bad_edge = self.graph.edges[edge][k]['bad_edge']
+                certainty = graph.edges[edge][k]['certainty']
+                bad_edge = graph.edges[edge][k]['bad_edge']
                 if bad_edge:
                     continue
             else:
-                ks = self.graph.get_edge_ks(edge[0], edge[1])
+                ks = graph.get_edge_ks(edge[0], edge[1])
                 max_certainty = 0.0
                 max_certainty_k = 0.0
                 for k in ks:
-                    bad_edge = self.graph.edges[edge][k]['bad_edge']
+                    bad_edge = graph.edges[edge][k]['bad_edge']
                     if bad_edge:
                         continue
-                    certainty = self.graph.edges[edge][k]['certainty']
+                    certainty = graph.edges[edge][k]['certainty']
                     if certainty > max_certainty:
                         max_certainty = certainty
                         max_certainty_k = k
@@ -1749,17 +2058,17 @@ class RandomWalkSolver:
             next_certainty = certainty
             next_node_k = max_certainty_k
         
-        if not ("next_volume" in self.graph.nodes[node]["volume_precomputation"]):
-            self.graph.nodes[node]["volume_precomputation"]["next_volume"] = {}
-        self.graph.nodes[node]["volume_precomputation"]["next_volume"][next_volume] = [next_node, next_node_k]
+        if not ("next_volume" in graph.nodes[node]["volume_precomputation"]):
+            graph.nodes[node]["volume_precomputation"]["next_volume"] = {}
+        graph.nodes[node]["volume_precomputation"]["next_volume"][next_volume] = [next_node, next_node_k]
         return next_node, next_node_k
     
-    def pick_next_node(self, node, start_k_diff):
-        next_volume = self.pick_next_volume(node, start_k_diff)
+    def pick_next_node(self, graph, node, start_k_diff):
+        next_volume = self.pick_next_volume(graph, node, start_k_diff)
         if next_volume is None:
             return None, None
         
-        return self.pick_best_node(node, next_volume)
+        return self.pick_best_node(graph, node, next_volume)
     
     def umbilicus_distance(self, node):
         if "umbilicus_distance" in self.graph.nodes[node]:
@@ -1771,10 +2080,10 @@ class RandomWalkSolver:
             self.graph.nodes[node]["umbilicus_distance"] = np.linalg.norm(patch_centroid_vec)
             return self.graph.nodes[node]["umbilicus_distance"]
     
-    def check_overlapp_walk(self, walk, ks, volume_dict, ks_nodes, step_size=20, away_dist_check=500):
+    def check_overlapp_walk(self, graph, walk, ks, volume_dict, ks_nodes, step_size=20, away_dist_check=500):
         for i, node in enumerate(walk):
             k = ks[i]
-            patch_centroid = self.graph.nodes[node]["centroid"]
+            patch_centroid = graph.nodes[node]["centroid"]
 
             umbilicus_point = self.umbilicus_func(patch_centroid[1])
             dist = self.umbilicus_distance(node)
@@ -1806,7 +2115,7 @@ class RandomWalkSolver:
             node["centroid_vector"] = patch_centroid - umbilicus_point
             return node["centroid_vector"]
         
-    def random_walk(self, start_node, start_k, volume_dict, nodes, ks_nodes, max_steps=20, max_tries=6, min_steps=5):
+    def random_walk(self, graph, start_node, start_k, volume_dict, nodes, ks_nodes, max_steps=20, max_tries=6, min_steps=5):
         start_node = tuple(start_node)
         node = start_node
         steps = 0
@@ -1821,7 +2130,7 @@ class RandomWalkSolver:
                 if tries >= max_tries:
                     return None, "exeeded max_tries"
                 tries += 1
-                node_, k = self.pick_next_node(node, current_k - start_k)
+                node_, k = self.pick_next_node(graph, node, current_k - start_k)
                 # not found node
                 if not node_:
                     continue
@@ -1860,7 +2169,7 @@ class RandomWalkSolver:
                     if steps < min_steps:
                         return None, "too few steps"
                     else:
-                        if self.check_walk(walk, ks): # check if walk is valid over inverse loop closure
+                        if self.check_walk(graph, walk, ks): # check if walk is valid over inverse loop closure
                             return walk, ks
                         else:
                             return None, "inverse loop closure failed"
@@ -1871,7 +2180,7 @@ class RandomWalkSolver:
                     if ks_nodes[index_] == current_k: # same winding
                         if node[3] == key_volume: # same patch
                             if steps >= min_steps: # has enough steps
-                                if self.check_walk(walk, ks): # check if walk is valid over inverse loop closure
+                                if self.check_walk(graph, walk, ks): # check if walk is valid over inverse loop closure
                                     return walk, ks
                                 else:
                                     return None, "inverse loop closure failed"
@@ -1883,7 +2192,7 @@ class RandomWalkSolver:
             
         return None, "loop not closed in max_steps"
     
-    def check_walk(self, walk, ks):
+    def check_walk(self, graph, walk, ks):
         for i in range(len(walk) - 1, 0, -1):
             node = walk[i]
             node_next = walk[i-1]
@@ -1891,7 +2200,7 @@ class RandomWalkSolver:
             kn_next = ks[i-1]
             k = kn_next - kn
             next_volume = (node_next[0], node_next[1], node_next[2], k)
-            bn, _ = self.pick_best_node(node, next_volume)
+            bn, _ = self.pick_best_node(graph, node, next_volume)
             if (not bn) or (not all([walk[i-1][u] == bn[u] for u in range(len(bn))])):
                 return False
         return True
@@ -1985,22 +2294,25 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
         
     solve_graph = True
     if solve_graph:
-        scroll_graph = load_graph(recompute_path)
-        if overlapp_threshold["continue_walks"]:
-            nodes = np.load(save_path.replace("blocks", "graph_RW") + "_nodes.npy")
-            ks = np.load(save_path.replace("blocks", "graph_RW") + "_ks.npy")
-            # scroll_graph = load_graph(save_path.replace("blocks", "graph_RW_solved") + ".pkl")
+        update_graph = False
+        if update_graph:
+            scroll_graph = load_graph(recompute_path)
+            scroll_graph.set_overlapp_threshold(overlapp_threshold)
+            scroll_graph.start_block, scroll_graph.patch_id = start_block, patch_id
+            # min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = 575, 775, 625, 825, 700, 900, None # 2x2x2 blocks with middle
+            min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = None, None, None, None, 700, 900, None # all x all x 1 blocks with middle
+            subgraph = scroll_graph.extract_subgraph(min_z=min_z, max_z=max_z, umbilicus_max_distance=umbilicus_max_distance, add_same_block_edges=True, min_x=min_x, max_x=max_x, min_y=min_y, max_y=max_y)
+            subgraph.save_graph(save_path.replace("blocks", "subgraph") + ".pkl")
+            scroll_graph = subgraph
         else:
-            nodes = None
-            ks = None
+            scroll_graph = load_graph(save_path.replace("blocks", "subgraph") + ".pkl")
         scroll_graph.set_overlapp_threshold(overlapp_threshold)
         scroll_graph.start_block, scroll_graph.patch_id = start_block, patch_id
-        # start_block, patch_id = scroll_graph.start_block, scroll_graph.patch_id
-        starting_node = tuple((*start_block, patch_id))
 
         solver = RandomWalkSolver(scroll_graph, umbilicus_path)
         solver.save_overlapp_threshold()
-        nodes, ks = solver.solve_(path=save_path, starting_node=starting_node, max_nr_walks=overlapp_threshold["max_nr_walks"], max_unchanged_walks=overlapp_threshold["max_unchanged_walks"], max_steps=overlapp_threshold["max_steps"], max_tries=overlapp_threshold["max_tries"], min_steps=overlapp_threshold["min_steps"], min_end_steps=overlapp_threshold["min_end_steps"], continue_walks=overlapp_threshold["continue_walks"], nodes=nodes, ks=ks, stop_event=stop_event)
+        nodes, ks = solver.solve_pyramid(path=save_path, pyramid_up_nr_average=overlapp_threshold["pyramid_up_nr_average"], max_nr_walks=overlapp_threshold["max_nr_walks"], max_unchanged_walks=overlapp_threshold["max_unchanged_walks"], max_steps=overlapp_threshold["max_steps"], max_tries=overlapp_threshold["max_tries"], min_steps=overlapp_threshold["min_steps"], min_end_steps=overlapp_threshold["min_end_steps"], stop_event=stop_event)
+        # nodes, ks = solver.solve_(path=save_path, starting_node=starting_node, max_nr_walks=overlapp_threshold["max_nr_walks"], max_unchanged_walks=overlapp_threshold["max_unchanged_walks"], max_steps=overlapp_threshold["max_steps"], max_tries=overlapp_threshold["max_tries"], min_steps=overlapp_threshold["min_steps"], min_end_steps=overlapp_threshold["min_end_steps"], continue_walks=overlapp_threshold["continue_walks"], nodes=nodes, ks=ks, stop_event=stop_event)
         
         # Update the solved scroll graph with the nodes and ks. Remove unused nodes and update winding angles
         scroll_graph.remove_unused_nodes(used_nodes=nodes)
@@ -2030,6 +2342,7 @@ def random_walks():
                           "epsilon": 1e-5, "angle_tolerance": 85, "max_threads": 30,
                           "min_points_winding_switch": 1000, "min_winding_switch_sheet_distance": 3, "max_winding_switch_sheet_distance": 10, "winding_switch_sheet_score_factor": 1.5, "winding_direction": 1.0,
                           "enable_winding_switch": False, "max_same_block_jump_range": 3,
+                          "pyramid_up_nr_average": 100,
                           "enable_winding_switch_postprocessing": False,
                           "surrounding_patches_size": 3, "max_sheet_clip_distance": 60, "sheet_z_range": (-5000, 400000), "sheet_k_range": (-1, 2), "volume_min_certainty_total_percentage": 0.0, "max_umbilicus_difference": 30,
                           "walk_aggregation_threshold": 100, "walk_aggregation_max_current": -1,
@@ -2040,7 +2353,7 @@ def random_walks():
 
     max_nr_walks = 10000
     max_steps = 101
-    min_steps = 16
+    min_steps = 4
     max_tries = 6
     min_end_steps = 4
     max_unchanged_walks = 30 * max_nr_walks
@@ -2074,6 +2387,7 @@ def random_walks():
     parser.add_argument('--max_umbilicus_dif', type=float,help=f'Maximum difference in umbilicus distance between two patches to be considered valid. Default is {overlapp_threshold["max_umbilicus_difference"]}.', default=overlapp_threshold["max_umbilicus_difference"])
     parser.add_argument('--walk_aggregation_threshold', type=int,help=f'Number of random walks to aggregate before updating the graph. Default is {overlapp_threshold["walk_aggregation_threshold"]}.', default=int(overlapp_threshold["walk_aggregation_threshold"]))
     parser.add_argument('--walk_aggregation_max_current', type=int,help=f'Maximum number of random walks to aggregate before updating the graph. Default is {overlapp_threshold["walk_aggregation_max_current"]}.', default=int(overlapp_threshold["walk_aggregation_max_current"]))
+    parser.add_argument('--pyramid_up_nr_average', type=int,help=f'Number of random walks to aggregate per landmark before walking up the graph. Default is {overlapp_threshold["pyramid_up_nr_average"]}.', default=int(overlapp_threshold["pyramid_up_nr_average"]))
 
     # Take arguments back over
     args = parser.parse_args()
@@ -2114,6 +2428,7 @@ def random_walks():
     overlapp_threshold["max_tries"] = max_tries
     overlapp_threshold["min_steps"] = min_steps
     overlapp_threshold["min_end_steps"] = min_end_steps
+    overlapp_threshold["pyramid_up_nr_average"] = args.pyramid_up_nr_average
 
 
     # Compute

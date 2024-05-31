@@ -1099,7 +1099,7 @@ std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<
         umbilicus_points_vector.push_back(umbilicus_point);
     }
 
-    auto result = rolledOrderedPointset(umbilicus_points_vector, processed_points, processed_normals, 32, true, 10, 10);
+    auto result = rolledOrderedPointset(umbilicus_points_vector, processed_points, processed_normals, std::thread::hardware_concurrency();, true, 10, 10);
 
     return result;
 }

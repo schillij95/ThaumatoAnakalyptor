@@ -1686,7 +1686,7 @@ class RandomWalkSolver:
             p_minus = 0.5 + 0.5 * p_dir
             p_minus = min(1.0, max(0.0, p_minus))
             p_plus = 1.0 - p_minus
-            assert abs(start_k_diff) <= self.graph.overlapp_threshold["max_same_block_jump_range"], f"start_k_diff {start_k_diff} is out of range for max same block jump range {self.graph.overlapp_threshold['max_same_block_jump_range']}" # there are legit reasons this can fail, only usefull for testing to see if the implementation is bug free
+            # assert abs(start_k_diff) <= self.graph.overlapp_threshold["max_same_block_jump_range"], f"start_k_diff {start_k_diff} is out of range for max same block jump range {self.graph.overlapp_threshold['max_same_block_jump_range']}" # there are legit reasons this can fail, only usefull for testing to see if the implementation is bug free
             # pick direction with probs
             direction = np.random.choice([-1, 1], p=[p_minus, p_plus])
             # find the volume that has right k sign
