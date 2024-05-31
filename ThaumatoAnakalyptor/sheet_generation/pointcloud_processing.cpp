@@ -764,7 +764,7 @@ std::tuple<std::vector<float>, std::vector<float>, std::vector<std::vector<float
         float radiusXY = std::sqrt(std::pow(pointsToLinePoint[2], 2) + std::pow(pointsToLinePoint[0], 2));
 
         float t = vector_dot(pointsToLinePoint, lineVector) / vector_dot(lineVector, lineVector);
-        float signT = (t >= 0) ? 1 : -1; // Equivalent to np.sign in Python when handling t
+        float signT = (t > 0) ? 1 : -1; // Equivalent to np.sign in Python when handling t
         float tsValue = signT * radiusXY / lineVectorNorm;
         
         std::vector<float> closestPoint = vector_add(linePoint, vector_scalar_multiply(lineVector, tsValue));
@@ -820,7 +820,8 @@ std::pair<int, int> pointsAtWindingAngle(const std::vector<std::vector<float>>& 
 
 std::vector<float> umbilicus_xz_at_y(const std::vector<std::vector<float>>& points_array, float y_new) {
     // Resultant vector of interpolated points
-    std::vector<float> interpolated_point;
+    std::vector<float> interpolated_point = points_array[0];
+    interpolated_point[1] = y_new;
 
     // Check if points_array is not empty
     if (points_array.empty()) {
