@@ -515,12 +515,12 @@ def select_points(points, normals, colors, angles, original_ratio):
     if len(indices[0]) == 0:
         indices = np.array([0])
     
-    points = points[indices]
-    normals = normals[indices]
-    colors = colors[indices]
-    angles = angles[indices]
+    points_ = points[indices]
+    normals_ = normals[indices]
+    colors_ = colors[indices]
+    angles_ = angles[indices]
     
-    return points, normals, colors, angles
+    return points_, normals_, colors_, angles_
 
 def add_overlapp_entries_to_patches_list(patches_list):
     for i in range(len(patches_list)):
@@ -1015,7 +1015,6 @@ def build_main_sheet_from_patches_list(main_sheet_patches_list, subvolume_size, 
     
     return main_sheet, main_patches
 
-
 def build_main_sheet_patches_list(main_sheet_volume_ids, main_sheet):
     main_sheet_volume_patches = []
     for volume_id in main_sheet_volume_ids:
@@ -1033,9 +1032,9 @@ def winding_switch_sheet_score_raw_precomputed_surface(patch_start, patch, overl
     normal_vector = normals_start
     R = rotation_matrix_to_align_z_with_v(normal_vector)
 
-    # Fit other patch and main sheet together
-    min_ = - overlapp_threshold["max_sheet_clip_distance"]
-    max_ = overlapp_threshold["max_sheet_clip_distance"]
+    # Fit other patch and main sheet together, 10 to have reasonable range around max clip distance
+    min_ = - 10*overlapp_threshold["max_sheet_clip_distance"]
+    max_ = 10*overlapp_threshold["max_sheet_clip_distance"]
     points = patch["points"]
     distances_to_start_patch, patch_patch_start_direction_vector = distance_from_surface_clipped(points, R, n, coeff_start, min_, max_, return_direction=True)
 

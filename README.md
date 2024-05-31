@@ -55,9 +55,6 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
 - **Scroll Data:**
     Download ```PHerc0332.volpkg``` into the directory ```<scroll-path>``` and make sure to have the canonical volume ID ```20231027191953``` in the ```<scroll-path>/PHerc0332.volpkg/volumes``` directory. Place the ```umbilici/scroll_<nr>/umbilicus.txt``` and ```umbilici/scroll_<nr>/umbilicus_old.txt``` files into all the ```<scroll-path>/PHerc0332.volpkg/volumes/<ID>``` directories.
 
-    *Note*:
-        To generate an ```umbilicus.txt``` for a scroll, make sure to transform the umbilicus coordinates from scroll coordinates ```x, y, z``` - where ```x,y``` is the tif 2D coordinates and ```z``` the tif layer number - into umbilicus coordinates ```uc``` with this formula: ```uc = y + 500, z + 500, x + 500```.
-
 - **Checkpoint and Training Data:**
     Checkpoint and training data can be downloaded from the private Vesuvius Challenge SFTP server under ```GrandPrizeSubmission-31-12-2023/Codebase/automatic segmentation/ThaumatoAnakalyptor```. The checkpoint ```last-epoch.ckpt``` can also be downloaded from [Google Drive](https://drive.google.com/file/d/1gO8Nf4sCaA7r4dO6ePtt0SE0E5ePXSid/view?usp=sharing). The ink detection model can be downloaded from [Google Drive](https://drive.google.com/drive/folders/1rn3GMOvtJRMBHOxVhWFVSY6IVI6xUnYp).
 
@@ -106,6 +103,15 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
     thaumato_image
     ```
 
+    *Note*: If you run ThaumatoAnakalyptor without the docker, or you update the repository without rebuilding the docker image you need to compile the C++ code by hand.
+    ```bash
+    cd ThaumatoAnakalyptor/sheet_generation
+    mkdir build
+    cd build
+    cmake ..
+    cmake --build .
+    ```
+
 - **GUI**
     ThaumatoAnakalyptor can be used either from command line or as a GUI.
     The GUI explains its usage in the help tab.
@@ -121,6 +127,12 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
 
 
 #### Command Line Segmentation
+
+- **Umblicius Generation**
+    It is highly recommended to use the GUI ("Volume Preprocessing"/"Generate Grid Cells") for this step. If you would like to do it by hand, great care is required.
+
+    *Note*:
+        To generate an ```umbilicus.txt``` for a scroll, make sure to transform the umbilicus coordinates from scroll coordinates ```x, y, z``` - where ```x,y``` is the tif 2D coordinates and ```z``` the tif layer number - into umbilicus coordinates ```uc``` with this formula: ```uc = y + 500, z + 500, x + 500```.
 
 - **Precomputation Steps:**
     These are the instructions to use ThaumatoAnakalyptor from the command line.
@@ -152,18 +164,12 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
 - **Meshing Steps:** 
     When you are happy with the segmentation, the next step is to generate the mesh. This can be done with the following commands:
     ```bash
-    python3 -m ThaumatoAnakalyptor.sheet_to_mesh --path_base <scroll-path>/scroll3_surface_points/3113_5163_10920/ --path_ta point_cloud_colorized_verso_subvolume_main_sheet_RW.ta --umbilicus_path "<scroll-path>/PHerc0332.volpkg/volumes/umbilicus.txt"
+    python3 -m ThaumatoAnakalyptor.graph_to_mesh --path  <scroll-path>/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks --graph 3113_5163_10920/point_cloud_colorized_verso_subvolume_graph_RW_solved.pkl --start_point 3113 5163 10920 --scale_factor 2.0
     ```
-    ```bash
-    python3 -m ThaumatoAnakalyptor.mesh_to_uv --path <scroll-path>/scroll3_surface_points/3113_5163_10920/point_cloud_colorized_verso_subvolume_blocks.obj --umbilicus_path "<scroll-path>/PHerc0332.volpkg/volumes/umbilicus.txt"
-    ```
-    The ```scale_factor``` depends on the resolution of the scroll scan. For 8um resolution, the scale factor is 1.0. For 4um resolution, the scale factor is 2.0.
-    ```bash
-    python3 -m ThaumatoAnakalyptor.finalize_mesh --input_mesh <scroll-path>/scroll3_surface_points/3113_5163_10920/point_cloud_colorized_verso_subvolume_blocks_uv.obj --cut_size 40000 --scale_factor 2.0 
-    ```
+    The ```scale_factor``` depends on the resolution of the scroll scan. For 8um resolution, the ```scale_factor``` is 1.0. For 4um resolution, the ```scale_factor``` is 2.0.
 
-- **Texturing Steps:** 
-    VC rendering is used to generate the textured sheet. Place the folder ```working_<starting_point>``` into the ```PHerc0332.volpkg``` directory. Enter ```working_<starting_point>```. Then run the following commands:
+- **Texturing Steps:**
+    Rendering is GPU accelerated. First run the following commands:
     ```bash
     export MAX_TILE_SIZE=200000000000
     ```
@@ -173,18 +179,12 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
     ```bash
     export CV_IO_MAX_IMAGE_PIXELS=4294967295
     ```
+    To display the rendering process, use the flag ```--display```.
     ```bash
-    vc_render --volpkg <scroll-path>/PHerc0332.volpkg/ --volume 20231027191953 --input-mesh point_cloud_colorized_verso_subvolume_blocks_uv.obj --output-file thaumato.obj --output-ppm thaumato.ppm --uv-plot thaumato_uvs.png --uv-reuse --cache-memory-limit 150G
-    ```
-    ```bash
-    vc_layers_from_ppm -v ../ -p thaumato.ppm --output-dir layers/ -f tif -r 32 --cache-memory-limit 150G
-    ```
-    Alternatively, rendering from ppm can be done with GPU acceleration:
-    ```bash
-    python3 -m ThaumatoAnakalyptor.ppm_to_layers <path_to_ppm> <path_to_volume_grids>
+    python3 -m ThaumatoAnakalyptor.large_mesh_to_surface --input_mesh <scroll-path>/scroll3_surface_points/3113_5163_10920/point_cloud_colorized_verso_subvolume_blocks/mesh_flatboi.obj --output_folder <scroll-path>/PHerc0332.volpkg/working_3113_5163_10920 --grid_cell <scroll-path>/PHerc0332.volpkg/volume_grids/20231027191953 --nr_workers 16 --gpus 1 --display 
     ```
 
-- **Resource Requirements:** RTX4090 or equivalent CUDA-enabled GPU with at least 24GB VRAM, 196GB RAM + 250GB swap and a multithreaded CPU with >32 threads is required. NVME SSD is recommended for faster processing. Approximately twice the storage space of the initial scroll scan is required for the intermediate data.
+- **Resource Requirements:** RTX4090 or equivalent CUDA-enabled GPU with at least 24GB VRAM, 196GB RAM + 250GB swap and a multithreaded CPU with >= 32 threads is required. NVME SSD is recommended for faster processing. Approximately twice the storage space of the initial scroll scan is required for the intermediate data.
 
 ### Training 3D instance segmentation (advanced)
 If you would like to train the 3D instance segmentation model refer to [Mask3D](ThaumatoAnakalyptor/mask3d/README.md) and [these additional instructions](ThaumatoAnakalyptor/mask3d/install_commands.txt).
@@ -198,11 +198,10 @@ Make sure to download the provided training data ```3d_instance_segmentation_tra
 
 ## Known Bugs
 - Recto and verso namings are switched.
-- Starting points should be at the very bottom side of the sheet in a z slice trough the scroll.
 
 ## TODO
-- Multi GPU Rendering
 - Find and implement better sheet stitching algorithm
+- Remove unused/old files
 
 ## Contribution and Support
 - As this software is in active development, users are encouraged to report any encountered issues. I'm happy to help and answer questions.
