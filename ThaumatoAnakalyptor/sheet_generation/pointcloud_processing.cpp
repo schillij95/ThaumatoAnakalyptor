@@ -1022,6 +1022,9 @@ std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<
     // Launch threads
     for (int i = 0; i < numThreads; ++i) {
         int angles_this_thread = anglesPerThread + (i < anglesLeft ? 1 : 0);
+        if (angles_this_thread == 0) {
+            continue;
+        }
         float angleEnd = angleStart + angles_this_thread * angleStep;
         if (i == numThreads - 1) {
             angleEnd = maxWind;
