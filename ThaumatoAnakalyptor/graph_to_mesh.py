@@ -286,8 +286,7 @@ class WalkToSheet():
         print(f"Mean innermost: {mean_innermost_ts}, mean outermost: {mean_outermost_ts}")
         return mean_innermost_ts, mean_outermost_ts, winding_direction
 
-    def initial_full_pointset(self, t_means, normals_means, angle_vector):
-        mean_innermost_ts, mean_outermost_ts, winding_direction = self.find_inner_outermost_winding_direction(t_means, angle_vector)
+    def initial_full_pointset(self, t_means, normals_means, angle_vector, mean_innermost_ts, mean_outermost_ts, winding_direction):
         mean_dist = mean_innermost_ts - mean_outermost_ts
         
         def adjacent_means(position, t_mean):
@@ -682,15 +681,15 @@ class WalkToSheet():
 
         print("length of result: ", len(result))
         ordered_pointset, ordered_normals, ordered_umbilicus_points, angle_vector = zip(*result)
-
         print("length of ordered_pointset: ", len(ordered_pointset))
+
+        # determine winding direction
+        t_means = self.calculate_means(ordered_pointset)
+        mean_innermost_ts, mean_outermost_ts, winding_direction = self.find_inner_outermost_winding_direction(t_means, angle_vector)
 
         # Set to false to load precomputed partial results during development
         fresh_start2 = True
         if fresh_start2:
-            # determine winding direction
-            t_means = self.calculate_means(ordered_pointset)
-            _, _, winding_direction = self.find_inner_outermost_winding_direction(t_means, angle_vector)
 
             result_ts, result_normals = self.interpolate_ordered_pointset(ordered_pointset, ordered_normals, ordered_umbilicus_points, angle_vector, winding_direction)
             interpolated_ts, interpolated_normals = result_ts, result_normals
@@ -704,7 +703,7 @@ class WalkToSheet():
                 (result_ts, result_normals) = pickle.load(f)
 
         # interpolate initial full pointset. After this step there exists an "ordered pointset" prototype without any None values
-        interpolated_ts, interpolated_normals, fixed_points, winding_direction = self.initial_full_pointset(result_ts, result_normals, angle_vector)
+        interpolated_ts, interpolated_normals, fixed_points = self.initial_full_pointset(result_ts, result_normals, angle_vector, mean_innermost_ts, mean_outermost_ts, winding_direction)
 
         # Calculate for each point in the ordered pointset its neighbouring indices (3d in a 2d list). on same sheet, top bottom, front back, adjacent sheets neighbours: left right
         neighbours_dict = self.deduct_ordered_pointset_neighbours(interpolated_ts, angle_vector, winding_direction)
