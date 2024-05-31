@@ -821,6 +821,7 @@ std::pair<int, int> pointsAtWindingAngle(const std::vector<std::vector<float>>& 
 std::vector<float> umbilicus_xz_at_y(const std::vector<std::vector<float>>& points_array, float y_new) {
     // Resultant vector of interpolated points
     std::vector<float> interpolated_point = points_array[points_array.size() - 1];
+    interpolated_point[1] = y_new;
 
     // Check if points_array is not empty
     if (points_array.empty()) {
