@@ -66,10 +66,10 @@ public:
         auto normals_r = normals.unchecked<2>();
         auto colors_r = colors.unchecked<2>();
 
-        size_t total_points = points_r.shape(0);
+        int total_points = points_r.shape(0);
         pts.reserve(total_points);
 
-        for (size_t i = 0; i < total_points; ++i) {
+        for (int i = 0; i < total_points; ++i) {
             pts.emplace_back(
                 points_r(i, 0), points_r(i, 1), points_r(i, 2), points_r(i, 3), // coordinates and winding angle
                 normals_r(i, 0), normals_r(i, 1), normals_r(i, 2),  // normal vector components
@@ -83,10 +83,10 @@ public:
     explicit PointCloud(py::array_t<float> points) {
         auto points_r = points.unchecked<2>();
 
-        size_t total_points = points_r.shape(0);
+        int total_points = points_r.shape(0);
         pts.reserve(total_points);
 
-        for (size_t i = 0; i < total_points; ++i) {
+        for (int i = 0; i < total_points; ++i) {
             pts.emplace_back(
                 points_r(i, 0), points_r(i, 1), points_r(i, 2), points_r(i, 3), // coordinates and winding angle
                 0.0f, 0.0f, 0.0f,  // normal vector components (defaults)
@@ -102,7 +102,7 @@ public:
     }
 
     // Get number of points in the cloud
-    size_t size() const {
+    int size() const {
         return pts.size();
     }
 
@@ -112,10 +112,10 @@ public:
     }
 
     // Must return the number of data points
-    inline size_t kdtree_get_point_count() const { return pts.size(); }
+    inline int kdtree_get_point_count() const { return pts.size(); }
 
     // Returns the dim'th component of the idx'th point in the class:
-    inline double kdtree_get_pt(const size_t idx, const size_t dim) const {
+    inline double kdtree_get_pt(const int idx, const int dim) const {
         if (dim == 0) return pts[idx].x;
         else if (dim == 1) return pts[idx].y;
         else if (dim == 2) return pts[idx].z;
@@ -131,7 +131,7 @@ typedef nf::KDTreeSingleIndexAdaptor<
     nf::L2_Simple_Adaptor<double, PointCloud>,
     PointCloud,
     3, // dimensionality
-    size_t // using size_t for indexing
+    int // using int for indexing
 > MyKDTree;
 
 std::string format_filename(int number) {
@@ -179,8 +179,8 @@ public:
         return false;
     }
 
-    void process_node(size_t start, size_t end) {
-        for (size_t index = start; index < end; ++index) {
+    void process_node(int start, int end) {
+        for (int index = start; index < end; ++index) {
             int numpy_offset = offset_per_node[index];
             auto& node = node_data_[index];
             const auto& xyz = std::get<0>(node);
@@ -219,7 +219,7 @@ public:
 
                 std::vector<Point> points;
                 points.reserve(x.size());
-                for (size_t i = 0; i < x.size(); ++i) {
+                for (int i = 0; i < x.size(); ++i) {
                     points.emplace_back(
                         static_cast<float>(x[i]), static_cast<float>(y[i]), static_cast<float>(z[i]), static_cast<float>(winding_angle), // coordinates and winding angle
                         static_cast<float>(nx[i]), static_cast<float>(ny[i]), static_cast<float>(nz[i]),  // normal vector components
@@ -247,8 +247,8 @@ public:
         std::cout.flush();
     }
 
-    void find_vertex_counts(size_t start, size_t end) {
-        for (size_t index = start; index < end; ++index) {
+    void find_vertex_counts(int start, int end) {
+        for (int index = start; index < end; ++index) {
             const auto& xyz = std::get<0>(node_data_[index]);
             int patch_nr = std::get<1>(node_data_[index]);
 
@@ -271,19 +271,19 @@ public:
         }
     }
 
-    size_t find_total_points() {
-        size_t num_threads = std::thread::hardware_concurrency();
+    int find_total_points() {
+        int num_threads = std::thread::hardware_concurrency();
         std::vector<std::thread> threads;
-        size_t total_nodes = node_data_.size();
-        size_t chunk_size = std::ceil(total_nodes / static_cast<double>(num_threads));
+        int total_nodes = node_data_.size();
+        int chunk_size = std::ceil(total_nodes / static_cast<double>(num_threads));
         
         // Set up progress tracking
         problem_size = total_nodes;
         progress = 0;
 
-        for (size_t i = 0; i < num_threads; ++i) {
-            size_t start = i * chunk_size;
-            size_t end = std::min(start + chunk_size, total_nodes);
+        for (int i = 0; i < num_threads; ++i) {
+            int start = i * chunk_size;
+            int end = std::min(start + chunk_size, total_nodes);
             threads.emplace_back(&PointCloudLoader::find_vertex_counts, this, start, end);
         }
 
@@ -299,9 +299,9 @@ public:
         progress = 0;
 
         // Calculate offsets and total points
-        size_t total_points = 0;
-        size_t total_points_temp = 0;
-        for (size_t i = 0; i < total_nodes; ++i) {
+        int total_points = 0;
+        int total_points_temp = 0;
+        for (int i = 0; i < total_nodes; ++i) {
             total_points_temp = total_points;
             total_points += offset_per_node[i];
             offset_per_node[i] = total_points_temp;
@@ -310,7 +310,7 @@ public:
     }
 
     void load_all() {
-        size_t total_nodes = node_data_.size();
+        int total_nodes = node_data_.size();
         offset_per_node = std::make_unique<int[]>(total_nodes); // smart pointer
         if (verbose) {
             std::cout << "Loading all nodes..." << std::endl;
@@ -321,17 +321,17 @@ public:
             std::cout << "Total points: " << total_points << std::endl;
         }
 
-        size_t num_threads = std::thread::hardware_concurrency(); // Number of threads
+        int num_threads = std::thread::hardware_concurrency(); // Number of threads
         std::vector<std::thread> threads;
-        size_t chunk_size = std::ceil(total_nodes / static_cast<double>(num_threads));
+        int chunk_size = std::ceil(total_nodes / static_cast<double>(num_threads));
 
         // Set up progress tracking
         problem_size = total_nodes;
         progress = 0;
 
-        for (size_t i = 0; i < num_threads; ++i) {
-            size_t start = i * chunk_size;
-            size_t end = std::min(start + chunk_size, total_nodes);
+        for (int i = 0; i < num_threads; ++i) {
+            int start = i * chunk_size;
+            int end = std::min(start + chunk_size, total_nodes);
             threads.emplace_back(&PointCloudLoader::process_node, this, start, end);
         }
 
@@ -391,14 +391,14 @@ public:
     }
 
     void processDuplicates() {
-        size_t num_threads = std::thread::hardware_concurrency();
+        int num_threads = std::thread::hardware_concurrency();
         std::vector<std::thread> threads;
-        size_t total_points = cloud_.size();
-        size_t chunk_size = total_points / num_threads;
+        int total_points = cloud_.size();
+        int chunk_size = total_points / num_threads;
 
-        std::vector<size_t> chunk_starts = getChunkStarts(num_threads, total_points, chunk_size);
+        std::vector<int> chunk_starts = getChunkStarts(num_threads, total_points, chunk_size);
 
-        for (size_t i = 0; i < num_threads; ++i) {
+        for (int i = 0; i < num_threads; ++i) {
             threads.emplace_back(&PointCloudProcessor::processDuplicatesThreaded, this, chunk_starts[i], (i + 1 < num_threads) ? chunk_starts[i + 1] : total_points);
         }
 
@@ -412,15 +412,15 @@ public:
         MyKDTree index(3 /*dim*/, cloud_, nf::KDTreeSingleIndexAdaptorParams(10 /* max leaf */));
         index.buildIndex();
 
-        const size_t num_threads = std::thread::hardware_concurrency(); // Number of concurrent threads supported
+        const int num_threads = std::thread::hardware_concurrency(); // Number of concurrent threads supported
         std::vector<std::thread> threads(num_threads);
-        size_t part_length = cloud_.pts.size() / num_threads;
+        int part_length = cloud_.pts.size() / num_threads;
         progress = 0;
         problem_size = cloud_.pts.size() / 1000;
 
-        for (size_t i = 0; i < num_threads; ++i) {
-            size_t start = i * part_length;
-            size_t end = (i == num_threads - 1) ? cloud_.pts.size() : start + part_length;
+        for (int i = 0; i < num_threads; ++i) {
+            int start = i * part_length;
+            int end = (i == num_threads - 1) ? cloud_.pts.size() : start + part_length;
             threads[i] = std::thread(&PointCloudProcessor::processSubset, this, std::ref(index), start, end, spatial_threshold, angle_threshold);
         }
 
@@ -458,12 +458,12 @@ private:
         std::cout.flush();
     }
 
-    std::vector<size_t> getChunkStarts(size_t num_threads, size_t total_points, size_t chunk_size) {
-        std::vector<size_t> chunk_starts(num_threads);
-        size_t start = 0;
-        for (size_t i = 0; i < num_threads; ++i) {
+    std::vector<int> getChunkStarts(int num_threads, int total_points, int chunk_size) {
+        std::vector<int> chunk_starts(num_threads);
+        int start = 0;
+        for (int i = 0; i < num_threads; ++i) {
             chunk_starts[i] = start;
-            size_t end = std::min(start + chunk_size, total_points);
+            int end = std::min(start + chunk_size, total_points);
             if (end < total_points) {
                 // Advance end to the next change in xyz values
                 while (end < total_points && cloud_.pts[end - 1].x == cloud_.pts[end].x && cloud_.pts[end - 1].y == cloud_.pts[end].y && cloud_.pts[end - 1].z == cloud_.pts[end].z) {
@@ -475,7 +475,7 @@ private:
         return chunk_starts;
     }
 
-    void processDuplicatesThreaded(size_t start, size_t end) {
+    void processDuplicatesThreaded(int start, int end) {
         auto it = cloud_.pts.begin() + start;
         auto finish = cloud_.pts.begin() + end;
 
@@ -550,9 +550,9 @@ private:
         begin->w = best_w;  // Update the w value to the best_w
     }
 
-    void processSubset(MyKDTree& index, size_t start, size_t end, double spatial_threshold, double angle_threshold) {
-        for (size_t i = start; i < end; ++i) {
-            std::vector<nf::ResultItem<size_t, double>> ret_matches;
+    void processSubset(MyKDTree& index, int start, int end, double spatial_threshold, double angle_threshold) {
+        for (int i = start; i < end; ++i) {
+            std::vector<nf::ResultItem<int, double>> ret_matches;
             nf::SearchParameters params;
             const double query_pt[3] = { cloud_.pts[i].x, cloud_.pts[i].y, cloud_.pts[i].z };
 
@@ -591,7 +591,7 @@ std::tuple<py::array_t<float>, py::array_t<float>, py::array_t<float>> to_array(
     auto clr = colors.mutable_unchecked<2>();
 
     // add the data to the numpy arrays
-    for (size_t i = 0; i < total_points; ++i) {
+    for (int i = 0; i < total_points; ++i) {
         // add points x y z and winding angle to points
         pts(i, 0) = cloud.pts[i].x;
         pts(i, 1) = cloud.pts[i].y;
@@ -621,7 +621,7 @@ py::array_t<bool> vector_to_array(std::vector<bool> selected_originals) {
     auto pts_mask = points_mask.mutable_unchecked<1>();  // for direct access without bounds checking
 
     // add the data to the numpy arrays
-    for (size_t i = 0; i < total_points; ++i) {
+    for (int i = 0; i < total_points; ++i) {
         // add mask entry
         pts_mask(i) = selected_originals[i];
     }
@@ -679,7 +679,7 @@ py::array_t<bool> upsample_pointclouds(py::array_t<float> original_points, py::a
         pt.z = original_points_r(i, 2);
         pt.w = original_points_r(i, 3);
         double query_pt[3] = { pt.x, pt.y, pt.z };
-        size_t closest_idx;
+        int closest_idx;
         double out_dist_sqr;
 
         tree_selected.knnSearch(&query_pt[0], 1, &closest_idx, &out_dist_sqr);
@@ -753,7 +753,7 @@ std::tuple<std::vector<float>, std::vector<float>, std::vector<std::vector<float
 
     float lineVectorNorm = vector_norm(lineVector);
     
-    for (size_t i = 0; i < points.size(); ++i) {
+    for (int i = 0; i < points.size(); ++i) {
         std::vector<float> point = points[i];
         std::vector<float> normal = normals[i];
         // skip computation of points that are too far away
@@ -797,7 +797,7 @@ std::pair<int, int> pointsAtWindingAngle(const std::vector<std::vector<float>>& 
     // Find the start and end indices of points within the maxAngleDiff range
     int startIndex = last_start_index;
     int endIndex = last_end_index;
-    for (size_t i = startIndex; i < points.size(); ++i) {
+    for (int i = startIndex; i < points.size(); ++i) {
         if (points[i][3] >= windingAngle - maxAngleDiff) {
             startIndex = i;
             break;
@@ -806,7 +806,7 @@ std::pair<int, int> pointsAtWindingAngle(const std::vector<std::vector<float>>& 
     if (startIndex == -1) {
         startIndex = points.size();
     }
-    for (size_t i = startIndex; i < points.size(); ++i) {
+    for (int i = startIndex; i < points.size(); ++i) {
         if (points[i][3] > windingAngle + maxAngleDiff) {
             endIndex = i;
             break;
@@ -840,7 +840,7 @@ std::vector<float> umbilicus_xz_at_y(const std::vector<std::vector<float>>& poin
     };
 
     // Iterate over each segment in the points array
-    for (size_t i = 0; i < points_array.size() - 1; ++i) {
+    for (int i = 0; i < points_array.size() - 1; ++i) {
         if ((points_array[i][1] <= y_new && points_array[i + 1][1] >= y_new) ||
             (points_array[i][1] >= y_new && points_array[i + 1][1] <= y_new)) {
             // Perform interpolation
@@ -879,15 +879,15 @@ std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<std::vector<
         auto [distances, ts, normals_closest] = closestPointsAndDistancesCylindrical(points, normals, umbilicus_position, angle_vector, max_eucledian_distance);
 
         // sort distances and ts from smalles to largest distance
-        std::vector<size_t> indices(distances.size());
+        std::vector<int> indices(distances.size());
         std::iota(indices.begin(), indices.end(), 0);
-        std::sort(indices.begin(), indices.end(), [&distances](size_t i1, size_t i2) { return distances[i1] < distances[i2]; });
+        std::sort(indices.begin(), indices.end(), [&distances](int i1, int i2) { return distances[i1] < distances[i2]; });
 
         // reorder distances and ts
         std::vector<float> sorted_distances(distances.size());
         std::vector<float> sorted_ts(distances.size());
         std::vector<std::vector<float>> sorted_normals(distances.size());
-        for (size_t j = 0; j < distances.size(); ++j) {
+        for (int j = 0; j < distances.size(); ++j) {
             sorted_distances[j] = distances[indices[j]];
             sorted_ts[j] = ts[indices[j]];
             sorted_normals[j] = normals_closest[indices[j]];
@@ -898,7 +898,7 @@ std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<std::vector<
         int max_number_closest_points = 10;
         int current_number_closest_points = 0;
 
-        for (size_t j = 0; j < distances.size(); ++j) {
+        for (int j = 0; j < distances.size(); ++j) {
             if (sorted_distances[j] < max_eucledian_distance && sorted_ts[j] < 0) {
                 valid_ts.push_back(sorted_ts[j]);
                 valid_normals.push_back(sorted_normals[j]);
@@ -943,7 +943,7 @@ std::tuple<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<s
     // Extract the points and normals within the specified index range
     std::vector<std::vector<float>> extractedPoints(endIndex - startIndex);
     std::vector<std::vector<float>> extractedNormals(endIndex - startIndex);
-    for (size_t i = startIndex; i < endIndex; ++i) {
+    for (int i = startIndex; i < endIndex; ++i) {
         extractedPoints[i - startIndex] = points[i];
         extractedNormals[i - startIndex] = normals[i];
     }
@@ -1078,7 +1078,7 @@ std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<
     umbilicus_points_vector.reserve(umbilicus_points.shape(0)); // reserve space for all umbilicus points to improve performance
 
     // Process points: just a placeholder for actual operations
-    for (ssize_t i = 0; i < original_points.shape(0); ++i) {
+    for (int i = 0; i < original_points.shape(0); ++i) {
         std::vector<float> point = {
             points_buf(i, 0), // x coordinate
             points_buf(i, 1), // y coordinate
@@ -1096,7 +1096,7 @@ std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<
     }
 
     // Process umbilicus points
-    for (ssize_t i = 0; i < umbilicus_points.shape(0); ++i) {
+    for (int i = 0; i < umbilicus_points.shape(0); ++i) {
         std::vector<float> umbilicus_point = {
             umbilicus_points_buf(i, 0), // x coordinate
             umbilicus_points_buf(i, 1), // y coordinate
