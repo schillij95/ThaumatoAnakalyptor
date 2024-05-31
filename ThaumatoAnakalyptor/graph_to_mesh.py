@@ -412,9 +412,9 @@ class WalkToSheet():
                                 neighbours_dict[dict_key]["left"] = (same_vector_indices[e+l], k)
                             else:
                                 neighbours_dict[dict_key]["right"] = (same_vector_indices[e+l], k)
-                            # swap left and right if winding direction is reversed
-                            if not winding_direction:
-                                neighbours_dict[dict_key]["left"], neighbours_dict[dict_key]["right"] = neighbours_dict[dict_key]["right"], neighbours_dict[dict_key]["left"]
+                    # swap left and right if winding direction is reversed
+                    if not winding_direction:
+                        neighbours_dict[dict_key]["left"], neighbours_dict[dict_key]["right"] = neighbours_dict[dict_key]["right"], neighbours_dict[dict_key]["left"]
                     # append front and back neighbours
                     for l in range(-1, 2):
                         if l == 0:
