@@ -702,7 +702,13 @@ class PPMAndTextureModel(pl.LightningModule):
 
             # vertices: T x 3 x 3, normals: T x 3 x 3, baryicentric_coords: T x W*H x 3
             coords = torch.einsum('ijk,isj->isk', vertices_, baryicentric_coords).squeeze()
-            norms = normalize(torch.einsum('ijk,isj->isk', normals_, baryicentric_coords).squeeze(),dim=2)
+            norms = torch.einsum('ijk,isj->isk', normals_, baryicentric_coords).squeeze()
+            # Handle case where T == 1 by ensuring dimensions are not squeezed away
+            if coords.dim() == 2:
+                coords = coords.unsqueeze(0)
+            if norms.dim() == 2:
+                norms = norms.unsqueeze(0)
+            norms = normalize(norms,dim=2)
             del vertices_, normals_, uv_coords_triangles_
 
             # broadcast grid index to T x W*H -> S
@@ -779,42 +785,49 @@ class PPMAndTextureModel(pl.LightningModule):
     
 # Custom collation function
 def custom_collate_fn(batch):
-    # Initialize containers for the aggregated items
-    grid_cells = []
-    vertices = []
-    normals = []
-    uv_coords_triangles = []
-    grid_index = []
-    grid_coords = []
-
-    # Loop through each batch and aggregate its items
-    for i, items in enumerate(batch):
-        if items is None:
-            continue
-        grid_coord, grid_cell, vertice, normal, uv_coords_triangle = items
-        if grid_cell is None:
-            continue
-        grid_cells.append(grid_cell)
-        vertices.append(vertice)
-        normals.append(normal)
-        uv_coords_triangles.append(uv_coords_triangle)
-        grid_index.extend([i]*vertice.shape[0])
-        grid_coord = grid_coord.unsqueeze(0).expand(vertice.shape[0], -1)
-        grid_coords.extend(grid_coord)
-        
-    if len(grid_cells) == 0:
+    try:
+        # Initialize containers for the aggregated items
+        grid_cells = []
+        vertices = []
+        normals = []
+        uv_coords_triangles = []
+        grid_index = []
+        grid_coords = []
+    
+        # Loop through each batch and aggregate its items
+        for i, items in enumerate(batch):
+            if items is None:
+                continue
+            grid_coord, grid_cell, vertice, normal, uv_coords_triangle = items
+            if grid_cell is None:
+                continue
+            if len(grid_cell) == 0:
+                continue
+            if grid_cell.size()[0] == 0:
+                continue
+            grid_cells.append(grid_cell)
+            vertices.append(vertice)
+            normals.append(normal)
+            uv_coords_triangles.append(uv_coords_triangle)
+            grid_index.extend([i]*vertice.shape[0])
+            grid_coord = grid_coord.unsqueeze(0).expand(vertice.shape[0], -1)
+            grid_coords.extend(grid_coord)
+            
+        if len(grid_cells) == 0:
+            return None, None, None, None, None, None
+            
+        # Turn the lists into tensors
+        grid_cells = torch.stack(grid_cells, dim=0)
+        vertices = torch.concat(vertices, dim=0)
+        normals = torch.concat(normals, dim=0)
+        uv_coords_triangles = torch.concat(uv_coords_triangles, dim=0)
+        grid_index = torch.tensor(grid_index, dtype=torch.int32)
+        grid_coords = torch.stack(grid_coords, dim=0)
+    
+        # Return a single batch containing all aggregated items
+        return grid_coords, grid_cells, vertices, normals, uv_coords_triangles, grid_index
+    except:
         return None, None, None, None, None, None
-        
-    # Turn the lists into tensors
-    grid_cells = torch.stack(grid_cells, dim=0)
-    vertices = torch.concat(vertices, dim=0)
-    normals = torch.concat(normals, dim=0)
-    uv_coords_triangles = torch.concat(uv_coords_triangles, dim=0)
-    grid_index = torch.tensor(grid_index, dtype=torch.int32)
-    grid_coords = torch.stack(grid_coords, dim=0)
-
-    # Return a single batch containing all aggregated items
-    return grid_coords, grid_cells, vertices, normals, uv_coords_triangles, grid_index
     
 def ppm_and_texture(obj_path, grid_cell_path, output_path=None, grid_size=500, gpus=1, batch_size=1, r=32, format='jpg', max_side_triangle: int = 10, display=False, nr_workers=None, prefetch_factor=2):
     # Number of workers

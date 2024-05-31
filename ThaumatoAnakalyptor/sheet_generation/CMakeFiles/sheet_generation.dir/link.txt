@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -O3 -DNDEBUG -flto -shared  -o sheet_generation.cpython-310-x86_64-linux-gnu.so CMakeFiles/sheet_generation.dir/solver.cpp.o  yaml-cpp/libyaml-cpp.a -lpthread 

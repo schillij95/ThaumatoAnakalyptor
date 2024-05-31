@@ -13,13 +13,40 @@ from multiprocessing import Pool
 import time
 import argparse
 import yaml
+import ezdxf
+from ezdxf.math import Vec3
 
 from .instances_to_sheets import select_points, get_vector_mean, alpha_angles, adjust_angles_zero, adjust_angles_offset, add_overlapp_entries_to_patches_list, assign_points_to_tiles, compute_overlap_for_pair, overlapp_score, fit_sheet, winding_switch_sheet_score_raw_precomputed_surface, find_starting_patch, save_main_sheet, update_main_sheet
 from .sheet_to_mesh import load_xyz_from_file, scale_points, umbilicus_xz_at_y
-import sys
+# import sys
 ### C++ speed up. not yet fully implemented
 # sys.path.append('sheet_generation/build')
 # import sheet_generation
+
+def unit_vector(vector):
+    """ Returns the unit vector of the vector.  """
+    return vector / np.linalg.norm(vector)
+
+def angle_between(v1, v2=np.array([1, 0])):
+    """
+    Returns the signed angle in radians between vectors 'v1' and 'v2'.
+
+    Examples:
+        >>> angle_between(np.array([1, 0]), np.array([0, 1]))
+        1.5707963267948966
+        >>> angle_between(np.array([1, 0]), np.array([1, 0]))
+        0.0
+        >>> angle_between(np.array([1, 0]), np.array([-1, 0]))
+        3.141592653589793
+        >>> angle_between(np.array([1, 0]), np.array([0, -1]))
+        -1.5707963267948966
+    """
+
+    v1_u = unit_vector(v1)
+    v2_u = unit_vector(v2)
+    angle = np.arctan2(v2_u[1], v2_u[0]) - np.arctan2(v1_u[1], v1_u[0])
+    assert angle is not None, "Angle is None."
+    return angle
 
 def surrounding_volumes(volume_id, volume_size=50):
     """
@@ -191,57 +218,122 @@ class Graph:
         self.edges = {}  # Stores edges with update matrices and certainty factors
         self.nodes = {}  # Stores node beliefs and fixed status
 
-    def add_node(self, node, cardinality, centroid, fixed=False):
+    def add_node(self, node, centroid, winding_angle=None):
         node = tuple(node)
-        belief = np.zeros(cardinality)
-        belief[1:-1] = 1.0 / (cardinality - 2)
-        self.nodes[node] = {'belief': belief, 'centroid': centroid, 'fixed': fixed}
+        self.nodes[node] = {'centroid': centroid, "winding_angle": winding_angle}
 
     def compute_node_edges(self):
         """
         Compute the edges for each node and store them in the node dictionary.
         """
         print("Computing node edges...")
-        for node in self.nodes:
+        for node in tqdm(self.nodes, desc="Adding nodes"):
             self.nodes[node]['edges'] = []
-        for edge in tqdm(self.edges):
-            self.nodes[edge[0]]['edges'].append(edge)
-            self.nodes[edge[1]]['edges'].append(edge)
+        for edge in tqdm(self.edges, desc="Computing node edges"):
+            for k in self.edges[edge]:
+                self.nodes[edge[0]]['edges'].append(edge)
+                self.nodes[edge[1]]['edges'].append(edge)
 
-    def add_edge(self, node1, node2, update_matrix1, update_matrix2, certainty, sheet_offset_k=0.0, add_transition_matrices=True):
+    def remove_nodes_edges(self, nodes):
+        """
+        Remove nodes and their edges from the graph.
+        """
+        for node in tqdm(nodes, desc="Removing nodes"):
+            # Delete Node Edges
+            node_edges = list(self.nodes[node]['edges'])
+            for edge in node_edges:
+                node_ = edge[0] if edge[0] != node else edge[1]
+                if node_ in self.nodes:
+                    self.nodes[node_]['edges'].remove(edge)
+                # Delete Edges
+                if edge in self.edges:
+                    del self.edges[edge]
+            # Delete Node
+            del self.nodes[node]
+        # set length of nodes and edges
+        self.nodes_length = len(self.nodes)
+        self.edges_length = len(self.edges)
+
+    def delete_edge(self, edge):
+        """
+        Delete an edge from the graph.
+        """
+        # Delete Edges
+        try:
+            del self.edges[edge]
+        except:
+            pass
+        # Delete Node Edges
+        node1 = edge[0]
+        node2 = edge[1]
+        self.nodes[node1]['edges'].remove(edge)
+        self.nodes[node2]['edges'].remove(edge)
+
+    def edge_exists(self, node1, node2):
+        """
+        Check if an edge exists in the graph.
+        """
+        node1 = tuple(node1)
+        node2 = tuple(node2)
+        return (node1, node2) in self.edges or (node2, node1) in self.edges
+
+    def add_edge(self, node1, node2, certainty, sheet_offset_k=0.0, same_block=False, bad_edge=False):
         assert certainty > 0.0, "Certainty must be greater than 0."
         certainty = np.clip(certainty, 0.0, None)
 
         node1 = tuple(node1)
         node2 = tuple(node2)
-        if len(update_matrix1) != len(update_matrix1[0]):
-            raise ValueError("Update matrix must be square.")
-        if len(update_matrix2) != len(update_matrix2[0]):
-            raise ValueError("Update matrix must be square.")
-        update_matrix1 = np.array(update_matrix1).astype(float)
-        update_matrix2 = np.array(update_matrix2).astype(float)
         # Ensure node1 < node2 for bidirectional nodes
         if node2 < node1:
             node1, node2 = node2, node1
-            update_matrix1, update_matrix2 = update_matrix2, update_matrix1
             sheet_offset_k = sheet_offset_k * (-1.0)
-        self.edges[(node1, node2)] = {'certainty': certainty, 'sheet_offset_k': sheet_offset_k}
-        if add_transition_matrices:
-            self.edges[(node1, node2)]['matrix1'] = np.array(update_matrix1)
-            self.edges[(node1, node2)]['matrix2'] = np.array(update_matrix2)
+        sheet_offset_k = (float)(sheet_offset_k)
+        if not (node1, node2) in self.edges:
+            self.edges[(node1, node2)] = {}
+        self.edges[(node1, node2)][sheet_offset_k] = {'certainty': certainty, 'sheet_offset_k': sheet_offset_k, 'same_block': same_block, 'bad_edge': bad_edge}
 
+    def add_increment_edge(self, node1, node2, certainty, sheet_offset_k=0.0, same_block=False, bad_edge=False):
+        assert certainty > 0.0, "Certainty must be greater than 0."
+        certainty = np.clip(certainty, 0.0, None)
 
-    def get_edge_data(self, node1, node2):
-        # Maintain bidirectional invariant
+        node1 = tuple(node1)
+        node2 = tuple(node2)
+        # Ensure node1 < node2 for bidirectional nodes
         if node2 < node1:
             node1, node2 = node2, node1
-        edge_data = self.edges.get((node1, node2))
-        if edge_data is not None:
-            return node1, node2, edge_data['matrix1'], edge_data['matrix2'], edge_data['certainty'], edge_data['sheet_offset_k']
-        else:
-            raise KeyError(f"No edge found from {node1} to {node2}")
+            sheet_offset_k = sheet_offset_k * (-1.0)
+        sheet_offset_k = (float)(sheet_offset_k)
+        if not (node1, node2) in self.edges:
+            self.edges[(node1, node2)] = {}
+        if not sheet_offset_k in self.edges[(node1, node2)]:
+            self.edges[(node1, node2)][sheet_offset_k] = {'certainty': 0.0, 'sheet_offset_k': sheet_offset_k, 'same_block': same_block, 'bad_edge': bad_edge}
+
+        assert bad_edge == self.edges[(node1, node2)][sheet_offset_k]['bad_edge'], "Bad edge must be the same."
+        if same_block != self.edges[(node1, node2)][sheet_offset_k]['same_block']:
+            print("Same block must be the same.")
+        self.edges[(node1, node2)][sheet_offset_k]['same_block'] = self.edges[(node1, node2)][sheet_offset_k]['same_block'] and same_block
+        # Increment certainty
+        self.edges[(node1, node2)][sheet_offset_k]['certainty'] += certainty
+
+    def get_certainty(self, node1, node2, k):
+        node1 = tuple(node1)
+        node2 = tuple(node2)
+        if node2 < node1:
+            node1, node2 = node2, node1
+            k = k * (-1.0)
+        edge_dict = self.edges.get((node1, node2))
+        if edge_dict is not None:
+            edge = edge_dict.get(k)
+            if edge is not None:
+                return edge['certainty']
+        return None
+    
+    def get_edge(self, node1, node2):
+        if node2 < node1:
+            node1, node2 = node2, node1
+        return (node1, node2)
         
-    def get_edge_k(self, node1, node2):            
+    def get_edge_ks(self, node1, node2):            
         k_factor = 1.0
         # Maintain bidirectional invariant
         if node2 < node1:
@@ -249,52 +341,79 @@ class Graph:
             k_factor = - 1.0
         edge_dict = self.edges.get((node1, node2))
         if edge_dict is not None:
-            return edge_dict['sheet_offset_k'] * k_factor
+            ks = []
+            for k in edge_dict.keys():
+                ks.append(k * k_factor)
+            return ks
         else:
             raise KeyError(f"No edge found from {node1} to {node2}")
-
-    def is_node_fixed(self, node):
-        return self.nodes[node]['fixed']
-
-    def get_node_belief(self, node):
-        return self.nodes[node]['belief']
     
-    def get_node_value(self, node):
-        current_node = self.nodes[node]
-        return current_node['belief'], current_node['fixed']
-
-    def set_node_belief(self, node, belief):
-        if node not in self.nodes:
-            raise KeyError(f"Node {node} does not exist.")
-        belief = np.array(belief).astype(float)
-        if self.is_node_fixed(node):
-            raise ValueError(f"Node {node} belief is fixed and cannot be updated.")
-        if len(belief) != len(self.nodes[node]['belief']):
-            raise ValueError(f"New belief must have length {len(self.nodes[node]['belief'])}.")
-        self.nodes[node]['belief'] = belief
-
-    def set_node_fixed(self, node):
-        self.nodes[node]['fixed'] = True
+    def remove_unused_nodes(self, used_nodes):
+        used_nodes = set([tuple(node) for node in used_nodes])
+        unused_nodes = []
+        # Remove unused nodes
+        for node in list(self.nodes.keys()):
+            if tuple(node) not in used_nodes:
+                unused_nodes.append(node)
+        self.remove_nodes_edges(unused_nodes)
+        self.compute_node_edges()
+        
+    def update_winding_angles(self, nodes, ks, update_winding_angles=False):
+        # Update winding angles
+        for i, node in enumerate(nodes):
+            node = tuple(node)
+            self.nodes[node]['assigned_k'] = ks[i]
+            if update_winding_angles:
+                self.nodes[node]['winding_angle'] = - ks[i]*360 + self.nodes[node]['winding_angle']
 
     def save_graph(self, path):
+        print(f"Saving graph to {path} ...")
         # Save graph class object to file
         with open(path, 'wb') as file:
             pickle.dump(self, file)
+        print(f"Graph saved to {path}")
 
-def score_same_block_patches(patch1, patch2, overlapp_threshold):
+    def bfs(self, start_node):
+        """
+        Breadth-first search from start_node.
+        """
+        visited = set()
+        queue = [start_node]
+        while queue:
+            node = queue.pop(0)
+            if node not in visited:
+                visited.add(node)
+                edges = self.nodes[node]['edges']
+                for edge in edges:
+                    queue.append(edge[0] if edge[0] != node else edge[1])
+        return list(visited)
+
+def score_same_block_patches(patch1, patch2, overlapp_threshold, umbilicus_distance):
     """
     Calculate the score between two patches from the same block.
     """
     # Calculate winding switch sheet scores
-    score_raw, k = winding_switch_sheet_score_raw_precomputed_surface(patch1, patch2, overlapp_threshold)
+    distance_raw = umbilicus_distance(patch1, patch2)
+    score_raw, k = np.mean(distance_raw), np.sign(distance_raw)
     k = k * overlapp_threshold["winding_direction"] # because of scroll's specific winding direction
 
     score_val = (overlapp_threshold["max_winding_switch_sheet_distance"] - score_raw) / (overlapp_threshold["max_winding_switch_sheet_distance"] - overlapp_threshold["min_winding_switch_sheet_distance"]) # calculate score
     
     score = score_val * overlapp_threshold["winding_switch_sheet_score_factor"]
 
+    # Centroid distance between patches
+    centroid1 = np.mean(patch1["points"], axis=0)
+    centroid2 = np.mean(patch2["points"], axis=0)
+    centroid_distance = np.linalg.norm(centroid1 - centroid2)
+
     # Check for enough points
-    if score <= 0.0:
+    if centroid_distance > overlapp_threshold["max_winding_switch_sheet_distance"]:
+        score = -1.0
+    if centroid_distance < overlapp_threshold["min_winding_switch_sheet_distance"]:
+        score = -1.0
+    if score_val <= 0.0:
+        score = -1.0
+    if score_val >= 1.0:
         score = -1.0
     if patch1["points"].shape[0] < overlapp_threshold["min_points_winding_switch"] * overlapp_threshold["sample_ratio_score"]:
         score = -1.0
@@ -309,7 +428,7 @@ def score_same_block_patches(patch1, patch2, overlapp_threshold):
 
     return (score, k), patch1["anchor_angles"][0], patch2["anchor_angles"][0]
 
-def process_same_block(main_block_patches_list, overlapp_threshold):
+def process_same_block(main_block_patches_list, overlapp_threshold, umbilicus_distance):
     def scores_cleaned(direction_scores):
         if len(direction_scores) == 0:
             return []
@@ -322,20 +441,24 @@ def process_same_block(main_block_patches_list, overlapp_threshold):
         score_val = score[2]
         if score_val < 0.0:
             score_val = -1.0
-        score = (score[0], score[1], score_val, score[3], score[4], score[5])
+        score = (score[0], score[1], score_val, score[3], score[4], score[5], score[6], score[7])
 
         return [score]
 
     # calculate switching scores of main patches
     score_switching_sheets = []
+    score_bad_edges = []
     for i in range(len(main_block_patches_list)):
         score_switching_sheets_ = []
         for j in range(len(main_block_patches_list)):
             if i == j:
                 continue
-            (score_, k_), anchor_angle1, anchor_angle2 = score_same_block_patches(main_block_patches_list[i], main_block_patches_list[j], overlapp_threshold)
+            (score_, k_), anchor_angle1, anchor_angle2 = score_same_block_patches(main_block_patches_list[i], main_block_patches_list[j], overlapp_threshold, umbilicus_distance)
             if score_ > 0.0:
-                score_switching_sheets_.append((main_block_patches_list[i]['ids'][0], main_block_patches_list[j]['ids'][0], score_, k_, anchor_angle1, anchor_angle2))
+                score_switching_sheets_.append((main_block_patches_list[i]['ids'][0], main_block_patches_list[j]['ids'][0], score_, k_, anchor_angle1, anchor_angle2, np.mean(main_block_patches_list[i]["points"], axis=0), np.mean(main_block_patches_list[j]["points"], axis=0)))
+
+            # Add bad edges
+            score_bad_edges.append((main_block_patches_list[i]['ids'][0], main_block_patches_list[j]['ids'][0], 1.0, 0.0, anchor_angle1, anchor_angle2, np.mean(main_block_patches_list[i]["points"], axis=0), np.mean(main_block_patches_list[j]["points"], axis=0)))
 
         # filter and only take the scores closest to the main patch (smallest scores) for each k in +1, -1
         direction1_scores = [score for score in score_switching_sheets_ if score[3] > 0.0]
@@ -344,7 +467,7 @@ def process_same_block(main_block_patches_list, overlapp_threshold):
         score1 = scores_cleaned(direction1_scores)
         score2 = scores_cleaned(direction2_scores)
         score_switching_sheets += score1 + score2
-    return score_switching_sheets
+    return score_switching_sheets, score_bad_edges
 
 def score_other_block_patches(patches_list, i, j, overlapp_threshold):
     """
@@ -368,7 +491,6 @@ def score_other_block_patches(patches_list, i, j, overlapp_threshold):
             patches_list[i]["non_overlap"][j] = non_overlap
             patches_list[i]["points_overlap"][j] = points_overlap
             score = overlapp_score(i, j, patches_list, overlapp_threshold=overlapp_threshold, sample_ratio=overlapp_threshold["sample_ratio_score"])
-            id = patches_list[j]["ids"][0]
 
             if score <= 0.0:
                 score = -1.0
@@ -391,7 +513,17 @@ def process_block(args):
     """
     Worker function to process a single block.
     """
-    file_path, path_instances, overlapp_threshold = args
+    file_path, path_instances, overlapp_threshold, umbilicus_data = args
+    umbilicus_func = lambda z: umbilicus_xz_at_y(umbilicus_data, z)
+    def umbilicus_distance(patch1, patch2):
+        centroid1 = np.mean(patch1["points"], axis=0)
+        centroid2 = np.mean(patch2["points"], axis=0)
+        def d_(patch_centroid):
+            umbilicus_point = umbilicus_func(patch_centroid[1])
+            patch_centroid_vec = patch_centroid - umbilicus_point
+            return np.linalg.norm(patch_centroid_vec)
+        return d_(centroid1) - d_(centroid2)
+
     file_name = ".".join(file_path.split(".")[:-1])
     main_block_patches_list = subvolume_surface_patches_folder(file_name, sample_ratio=overlapp_threshold["sample_ratio_score"])
 
@@ -404,12 +536,15 @@ def process_block(args):
     block_id = np.array(block_id)
     surrounding_ids = surrounding_volumes(block_id)
     surrounding_blocks_patches_list = []
+    surrounding_blocks_patches_list_ = []
     for surrounding_id in surrounding_ids:
         volume_path = path_instances + f"{file_path.split('/')[0]}/{surrounding_id[0]:06}_{surrounding_id[1]:06}_{surrounding_id[2]:06}"
-        surrounding_blocks_patches_list.extend(subvolume_surface_patches_folder(volume_path, sample_ratio=overlapp_threshold["sample_ratio_score"]))
+        patches_temp = subvolume_surface_patches_folder(volume_path, sample_ratio=overlapp_threshold["sample_ratio_score"])
+        surrounding_blocks_patches_list.append(patches_temp)
+        surrounding_blocks_patches_list_.extend(patches_temp)
 
     # Add the overlap base to the patches list that contains the points + normals + scores only before
-    patches_list = main_block_patches_list + surrounding_blocks_patches_list
+    patches_list = main_block_patches_list + surrounding_blocks_patches_list_
     add_overlapp_entries_to_patches_list(patches_list)
     subvolume = {"start": block_id - 50, "end": block_id + 50}
 
@@ -419,80 +554,97 @@ def process_block(args):
     # calculate scores between each main block patch and surrounding blocks patches
     score_sheets = []
     for i, main_block_patch in enumerate(main_block_patches_list):
-        for j, surrounding_block_patch in enumerate(surrounding_blocks_patches_list):
-            patches_list_ = [main_block_patch, surrounding_block_patch]
-            score_ = score_other_block_patches(patches_list_, 0, 1, overlapp_threshold) # score, anchor_angle1, anchor_angle2
-            if score_[0] > overlapp_threshold["final_score_min"]:
-                score_sheets.append((main_block_patch['ids'][0], surrounding_block_patch['ids'][0], score_[0], None, score_[1], score_[2]))
+        for surrounding_blocks_patches in surrounding_blocks_patches_list:
+            score_sheets_patch = []
+            for j, surrounding_block_patch in enumerate(surrounding_blocks_patches):
+                patches_list_ = [main_block_patch, surrounding_block_patch]
+                score_ = score_other_block_patches(patches_list_, 0, 1, overlapp_threshold) # score, anchor_angle1, anchor_angle2
+                if score_[0] > overlapp_threshold["final_score_min"]:
+                    score_sheets_patch.append((main_block_patch['ids'][0], surrounding_block_patch['ids'][0], score_[0], None, score_[1], score_[2], np.mean(main_block_patch["points"], axis=0), np.mean(surrounding_block_patch["points"], axis=0)))
+
+            # Find the best score for each main block patch
+            if len(score_sheets_patch) > 0:
+                score_sheets_patch = max(score_sheets_patch, key=lambda x: x[2])
+                score_sheets.append(score_sheets_patch)
     
-    score_switching_sheets = process_same_block(main_block_patches_list, overlapp_threshold)
+    score_switching_sheets, score_bad_edges = process_same_block(main_block_patches_list, overlapp_threshold, umbilicus_distance)
 
     # Process and return results...
-    return score_sheets, score_switching_sheets, patches_centroids
+    return score_sheets, score_switching_sheets, score_bad_edges, patches_centroids
 
 class ScrollGraph(Graph):
-    def __init__(self, cardinality, overlapp_threshold, limit_stickiness=0.5, add_transition_matrices=False):
+    def __init__(self, overlapp_threshold, umbilicus_path):
         super().__init__()
-        self.cardinality = cardinality + 2  # Add two extra values for the upper and lower limits
-        self.limit_stickiness = limit_stickiness
-        self.add_transition_matrices = add_transition_matrices
         self.set_overlapp_threshold(overlapp_threshold)
+        self.umbilicus_path = umbilicus_path
+        self.init_umbilicus(umbilicus_path)
 
-    def add_switch_edge(self, node_lower, node_upper, certainty):
+    def init_umbilicus(self, umbilicus_path):
+        # Load the umbilicus data
+        umbilicus_data = load_xyz_from_file(umbilicus_path)
+        # scale and swap axis
+        self.umbilicus_data = scale_points(umbilicus_data, 50.0/200.0, axis_offset=0)
+
+    def add_switch_edge(self, node_lower, node_upper, certainty, same_block):
         # Build a switch edge between two nodes
-        update_matrix_down = np.zeros((self.cardinality, self.cardinality), dtype=float)
-        update_matrix_up = np.zeros((self.cardinality, self.cardinality), dtype=float)
-        for i in range(self.cardinality):
-            if i < self.cardinality - 1:
-                update_matrix_down[i, i + 1] = 1.0
-            if i > 0:
-                update_matrix_up[i, i - 1] = 1.0
-        
-        update_matrix_down[0, 0] = 1.0
-        update_matrix_down[0, 1] = 1.0
+        self.add_edge(node_lower, node_upper, certainty, sheet_offset_k=1.0, same_block=same_block)
 
-        update_matrix_up[self.cardinality - 1, self.cardinality - 1] = 1.0
-        update_matrix_up[self.cardinality - 1, self.cardinality - 2] = 1.0
-
-        self.add_edge(node_lower, node_upper, update_matrix_up, update_matrix_down, certainty, sheet_offset_k=1.0, add_transition_matrices=self.add_transition_matrices)
-
-    def add_same_sheet_edge(self, node1, node2, certainty):
+    def add_same_sheet_edge(self, node1, node2, certainty, same_block):
         # Build a same sheet edge between two nodes
-        update_matrix = np.zeros((self.cardinality, self.cardinality), dtype=float)
-        for i in range(self.cardinality):
-            update_matrix[i, i] = 1
-        self.add_edge(node1, node2, update_matrix, update_matrix, certainty, sheet_offset_k=0.0, add_transition_matrices=self.add_transition_matrices)
+        self.add_edge(node1, node2, certainty, sheet_offset_k=0.0, same_block=same_block)
 
     def build_other_block_edges(self, score_sheets):
+        # Define a wrapper function for umbilicus_xz_at_y
+        umbilicus_func = lambda z: umbilicus_xz_at_y(self.umbilicus_data, z)
         # Build edges between patches from different blocks
         for score_ in score_sheets:
-            id1, id2, score, _, anchor_angle1, anchor_angle2 = score_
+            id1, id2, score, _, anchor_angle1, anchor_angle2, centroid1, centroid2 = score_
             if score < self.overlapp_threshold["final_score_min"]:
                 continue
-            if abs(anchor_angle1 - anchor_angle2) > 180.0:
-                if anchor_angle1 > anchor_angle2:
+            umbilicus_point1 = umbilicus_func(centroid1[1])[[0, 2]]
+            umbilicus_vector1 = umbilicus_point1 - centroid1[[0, 2]]
+            angle1 = angle_between(umbilicus_vector1) * 180.0 / np.pi
+            umbilicus_point2 = umbilicus_func(centroid2[1])[[0, 2]]
+            umbilicus_vector2 = umbilicus_point2 - centroid2[[0, 2]]
+            angle2 = angle_between(umbilicus_vector2) * 180.0 / np.pi
+            if abs(angle1 - angle2) > 180.0:
+                if angle1 > angle2:
                     id1, id2 = id2, id1
-                self.add_switch_edge(id1, id2, score)
+                self.add_switch_edge(id1, id2, score, same_block=False)
             else:
-                self.add_same_sheet_edge(id1, id2, score)
+                self.add_same_sheet_edge(id1, id2, score, same_block=False)
 
     def build_same_block_edges(self, score_switching_sheets):
+        # Define a wrapper function for umbilicus_xz_at_y
+        umbilicus_func = lambda z: umbilicus_xz_at_y(self.umbilicus_data, z)
         # Build edges between patches from the same block
         disregarding_count = 0
         total_count = 0
         grand_total = 0
         for score_ in score_switching_sheets:
             grand_total += 1
-            id1, id2, score, k, anchor_angle1, anchor_angle2 = score_
+            id1, id2, score, k, anchor_angle1, anchor_angle2, centroid1, centroid2 = score_
             if score < 0.0:
                 continue
             total_count += 1
-            if abs(anchor_angle1 - anchor_angle2) > 180.0:
+            umbilicus_point1 = umbilicus_func(centroid1[1])[[0, 2]]
+            umbilicus_vector1 = umbilicus_point1 - centroid1[[0, 2]]
+            angle1 = angle_between(umbilicus_vector1) * 180.0 / np.pi
+            umbilicus_point2 = umbilicus_func(centroid2[1])[[0, 2]]
+            umbilicus_vector2 = umbilicus_point2 - centroid2[[0, 2]]
+            angle2 = angle_between(umbilicus_vector2) * 180.0 / np.pi
+            if abs(angle1 - angle2) > 180.0:
                 disregarding_count += 1
             else:
                 if k < 0.0:
                     id1, id2 = id2, id1
-                self.add_switch_edge(id1, id2, score)
+                self.add_switch_edge(id1, id2, score, same_block=True)
+
+    def build_bad_edges(self, score_bad_edges):
+        for score_ in score_bad_edges:
+            node1, node2, score, k, anchor_angle1, anchor_angle2, centroid1, centroid2 = score_
+            # Build a same sheet edge between two nodes in same subvolume that is bad
+            self.add_edge(node1, node2, 1.0, sheet_offset_k=0.0, same_block=True, bad_edge=True)
 
     def filter_blocks(self, blocks_tar_files, blocks_tar_files_int, start_block, distance):
         blocks_tar_files_int = np.array(blocks_tar_files_int)
@@ -504,50 +656,189 @@ class ScrollGraph(Graph):
         blocks_tar_files = [blocks_tar_files[i] for i in range(len(blocks_tar_files)) if filter_mask[i]]
         return blocks_tar_files, blocks_tar_files_int
     
-    def prune_unconnected_nodes(self, start_node):
-        # Prune nodes that are not connected to the start node
+    def filter_blocks_z(self, blocks_tar_files, z_min, z_max):
+        # Filter blocks by z range
+        blocks_tar_files_int = [[int(i) for i in x.split('/')[-1].split('.')[0].split("_")] for x in blocks_tar_files]
+        blocks_tar_files_int = np.array(blocks_tar_files_int)
+        filter_mask = np.logical_and(blocks_tar_files_int[:,1] >= z_min, blocks_tar_files_int[:,1] <= z_max)
+        blocks_tar_files = [blocks_tar_files[i] for i in range(len(blocks_tar_files)) if filter_mask[i]]
+        return blocks_tar_files
+    
+    def largest_connected_component(self, delete_nodes=True, min_size=None):
+        print("Finding largest connected component...")        
         # walk the graph from the start node
         visited = set()
-        queue = [start_node]
         # tqdm object showing process of visited nodes untill all nodes are visited
         tqdm_object = tqdm(total=len(self.nodes))
-        while queue:
-            node = queue.pop(0)
-            if node not in visited:
-                tqdm_object.update(1)
-                visited.add(node)
-                edges = self.nodes[node]['edges']
-                for edge in edges:
-                    queue.append(edge[0] if edge[0] != node else edge[1])
+        components = []
+        starting_index = 0
+        def build_nodes(edges):
+            nodes = set()
+            for edge in edges:
+                nodes.add(edge[0])
+                nodes.add(edge[1])
+            return list(nodes)
+        nodes = build_nodes(self.edges)
+        max_component_length = 0
+        nodes_length = len(nodes)
+        nodes_remaining = nodes_length
+        print(f"Number of active nodes: {nodes_length}, number of total nodes: {len(self.nodes)}")
+        while True:
+            start_node = None
+            # Pick first available unvisited node
+            for node_idx in range(starting_index, nodes_length):
+                node = nodes[node_idx]
+                if node not in visited:
+                    start_node = node
+                    break
+            if start_node is None:
+                break    
+
+            queue = [start_node]
+            component = set()
+            while queue:
+                node = queue.pop(0)
+                component.add(node)
+                if node not in visited:
+                    tqdm_object.update(1)
+                    visited.add(node)
+                    edges = self.nodes[node]['edges']
+                    for edge in edges:
+                        queue.append(edge[0] if edge[0] != node else edge[1])
+
+            components.append(component)
+            # update component length tracking
+            component_length = len(component)
+            max_component_length = max(max_component_length, component_length)
+            nodes_remaining -= component_length
+            if (min_size is None) and (nodes_remaining < max_component_length): # early stopping, already found the largest component
+                print(f"breaking in early stopping")
+                print()
+                break
+
         nodes_total = len(self.nodes)
         edges_total = len(self.edges)
         print(f"number of nodes: {nodes_total}, number of edges: {edges_total}")
-        # remove unvisited nodes
-        for node in list(self.nodes.keys()):
-            if node not in visited:
-                del self.nodes[node]
 
-        # remove unvisited edges
-        for edge in list(self.edges.keys()):
-            if edge[0] not in visited or edge[1] not in visited:
-                del self.edges[edge]
+        # largest component
+        largest_component = list(max(components, key=len))
+        if min_size is not None:
+            components = [component for component in components if len(component) >= min_size]
+            for component in components:
+                largest_component.extend(list(component))
+        largest_component = set(largest_component)
+        
+        # Remove all other Nodes, Edges and Node Edges
+        if delete_nodes:
+            other_nodes = [node for node in self.nodes if node not in largest_component]
+            self.remove_nodes_edges(other_nodes)
         
         print(f"Pruned {nodes_total - len(self.nodes)} nodes. Of {nodes_total} nodes.")
         print(f"Pruned {edges_total - len(self.edges)} edges. Of {edges_total} edges.")
 
-    def build_graph(self, path_instances, start_point, distance, num_processes=4, prune_unconnected=False):
+        result = list(largest_component)
+        print(f"Found largest connected component with {len(result)} nodes.")
+        return result
+    
+    def update_graph_version(self):
+        edges = self.edges
+        self.edges = {}
+        for edge in tqdm(edges):
+            self.add_edge(edge[0], edge[1], edges[edge]['certainty'], edges[edge]['sheet_offset_k'], edges[edge]['same_block'])
+        self.compute_node_edges()
+
+    def flip_winding_direction(self):
+        for edge in tqdm(self.edges):
+            for k in self.edges[edge]:
+                if self.edges[edge][k]['same_block']:
+                    self.edges[edge][k]['sheet_offset_k'] = - self.edges[edge][k]['sheet_offset_k']
+
+    def compute_bad_edges(self, iteration, k_factor_bad=1.0):
+        print(f"Bad k factor is {k_factor_bad}.")
+        # Compute bad edges
+        node_cubes = {}
+        for node in tqdm(self.nodes):
+            if node[:3] not in node_cubes:
+                node_cubes[node[:3]] = []
+            node_cubes[node[:3]].append(node)
+
+        # add bad edges between adjacent nodes
+        # two indices equal, abs third is 25
+        count_added_bad_edges = 0
+        for node_cube in node_cubes:
+            node_cube = np.array(node_cube)
+            adjacent_cubes = [node_cube, node_cube + np.array([0, 0, 25]), node_cube + np.array([0, 25, 0]), node_cube + np.array([25, 0, 0]), node_cube + np.array([0, 0, -25]), node_cube + np.array([0, -25, 0]), node_cube + np.array([-25, 0, 0])]
+            for adjacent_cube in adjacent_cubes:
+                if tuple(adjacent_cube) in node_cubes:
+                    node1s = node_cubes[tuple(node_cube)]
+                    node2s = node_cubes[tuple(adjacent_cube)]
+                    for node1 in node1s:
+                        for node2 in node2s:
+                            if node1 == node2:
+                                continue
+                            if not self.edge_exists(node1, node2):
+                                self.add_edge(node1, node2, k_factor_bad*((iteration+1)**2), 0.0, same_block=True, bad_edge=True)
+                                count_added_bad_edges += 1
+                            else:
+                                edge = self.get_edge(node1, node2)
+                                for k in self.get_edge_ks(edge[0], edge[1]):
+                                    if k == 0:
+                                        continue
+                                    same_block = self.edges[edge][k]['same_block']
+                                    bad_edge = self.edges[edge][k]['bad_edge']
+                                    if not bad_edge and same_block:
+                                        if not k in self.edges[edge]:
+                                            self.add_increment_edge(node1, node2, k_factor_bad*((iteration+1)**2), k, same_block=True, bad_edge=True)
+                                            count_added_bad_edges += 1
+
+            nodes = node_cubes[tuple(node_cube)]
+            for i in range(len(nodes)):
+                for j in range(i+1, len(nodes)):
+                    self.add_edge(nodes[i], nodes[j], k_factor_bad*((iteration+1)**2), 0.0, same_block=True, bad_edge=True)
+
+        print(f"Added {count_added_bad_edges} bad edges.")
+
+    def adjust_edge_certainties(self):
+        # Adjust same block and other block edge certainty values, such that both have the total quantity as even
+        certainty_same_block = 0.0
+        certainty_other_block = 0.0
+        certainty_bad_block = 0.0
+        for edge in tqdm(self.edges, desc="Calculating edge certainties"):
+            for k in self.edges[edge]:
+                if self.edges[edge][k]['bad_edge']:
+                    certainty_bad_block += self.edges[edge][k]['certainty']
+                elif self.edges[edge][k]['same_block']:
+                    certainty_same_block += self.edges[edge][k]['certainty']
+                else:
+                    certainty_other_block += self.edges[edge][k]['certainty']
+
+        factor_0 = 1.0
+        factor_not_0 = 1.0*certainty_same_block / certainty_other_block
+        factor_bad = certainty_same_block / certainty_bad_block
+        # factor_bad = factor_bad**(2.0/3.0)
+        # factor_bad = 2*factor_bad
+        # factor_bad = 1.0
+        print(f"Adjusted certainties: factor_0: {factor_0}, factor_not_0: {factor_not_0}, factor_bad: {factor_bad}")
+
+        # adjust graph edge certainties
+        for edge in tqdm(self.edges, desc="Adjusting edge certainties"):
+            for k in self.edges[edge]:
+                if self.edges[edge][k]['bad_edge']:
+                    self.edges[edge][k]['certainty'] = factor_bad * self.edges[edge][k]['certainty']
+                elif self.edges[edge][k]['same_block']:
+                    self.edges[edge][k]['certainty'] = factor_0 * self.edges[edge][k]['certainty']
+                else:
+                    self.edges[edge][k]['certainty'] = factor_not_0 * self.edges[edge][k]['certainty']
+
+        self.compute_node_edges()
+        return (factor_0, factor_not_0, factor_bad)
+
+    def build_graph(self, path_instances, start_point, num_processes=4, prune_unconnected=False):
         blocks_tar_files = glob.glob(path_instances + '/*.tar')
-        blocks_tar_files_int = [[int(i) for i in x.split('/')[-1].split('.')[0].split("_")] for x in blocks_tar_files]
 
         #from original coordinates to instance coordinates
         start_block, patch_id = find_starting_patch([start_point], path_instances)
         self.start_block, self.patch_id, self.start_point = start_block, patch_id, start_point
-
-        distance = distance / (200.0 / 50.0)
-        self.distance = distance
-
-        if distance and distance > 0.0:
-            blocks_tar_files, blocks_tar_files_int = self.filter_blocks(blocks_tar_files, blocks_tar_files_int, start_block, distance)
 
         print(f"Found {len(blocks_tar_files)} blocks.")
         print("Building graph...")
@@ -555,7 +846,7 @@ class ScrollGraph(Graph):
         # Create a pool of worker processes
         with Pool(num_processes) as pool:
             # Map the process_block function to each file
-            zipped_args = list(zip(blocks_tar_files, [path_instances] * len(blocks_tar_files), [self.overlapp_threshold] * len(blocks_tar_files)))
+            zipped_args = list(zip(blocks_tar_files, [path_instances] * len(blocks_tar_files), [self.overlapp_threshold] * len(blocks_tar_files), [self.umbilicus_data] * len(blocks_tar_files)))
             results = list(tqdm(pool.imap(process_block, zipped_args), total=len(zipped_args)))
 
         print(f"Number of results: {len(results)}")
@@ -563,34 +854,54 @@ class ScrollGraph(Graph):
         count_res = 0
         patches_centroids = {}
         # Process results from each worker
-        for score_sheets, score_switching_sheets, volume_centroids in results:
+        for score_sheets, score_switching_sheets, score_bad_edges, volume_centroids in results:
             count_res += len(score_sheets)
             # Calculate scores, add patches edges to graph, etc.
             self.build_other_block_edges(score_sheets)
             self.build_same_block_edges(score_switching_sheets)
+            self.build_bad_edges(score_bad_edges)
             patches_centroids.update(volume_centroids)
         print(f"Number of results: {count_res}")
 
+        # Define a wrapper function for umbilicus_xz_at_y
+        umbilicus_func = lambda z: umbilicus_xz_at_y(self.umbilicus_data, z)
+
         # Add patches as nodes to graph
-        for edge in self.edges:
-            self.add_node(edge[0], self.cardinality, patches_centroids[edge[0]])
-            self.add_node(edge[1], self.cardinality, patches_centroids[edge[1]])
+        edges_keys = list(self.edges.keys())
+        nodes_from_edges = set()
+        for edge in tqdm(edges_keys, desc="Initializing nodes"):
+            nodes_from_edges.add(edge[0])
+            nodes_from_edges.add(edge[1])
+        for node in nodes_from_edges:
+            try:
+                umbilicus_point = umbilicus_func(patches_centroids[node][1])[[0, 2]]
+                umbilicus_vector = umbilicus_point - patches_centroids[node][[0, 2]]
+                angle = angle_between(umbilicus_vector) * 180.0 / np.pi
+                self.add_node(node, patches_centroids[node], winding_angle=angle)
+            except:
+                del self.edges[edge]
 
         node_id = tuple((*start_block, patch_id))
         print(f"Start node: {node_id}, nr nodes: {len(self.nodes)}, nr edges: {len(self.edges)}")
-        belief = np.zeros(self.cardinality)
-        belief[belief.shape[0]//2] = 1.0
-        self.set_node_belief(node_id, belief)
-        # Set node fixed
-        self.set_node_fixed(node_id)
         self.compute_node_edges()
         if prune_unconnected:
             print("Prunning unconnected nodes...")
-            self.prune_unconnected_nodes(node_id)
+            self.largest_connected_component()
 
         print(f"Nr nodes: {len(self.nodes)}, nr edges: {len(self.edges)}")
 
         return start_block, patch_id
+    
+    def naked_graph(self):
+        """
+        Return a naked graph with only nodes.
+        """
+        # Remove all nodes and edges
+        graph = ScrollGraph(self.overlapp_threshold, self.umbilicus_path)
+        # add all nodes
+        for node in self.nodes:
+            graph.add_node(node, self.nodes[node]['centroid'], winding_angle=self.nodes[node]['winding_angle'])
+        return graph
     
     def set_overlapp_threshold(self, overlapp_threshold):
         if hasattr(self, "overlapp_threshold"):
@@ -612,11 +923,160 @@ class ScrollGraph(Graph):
 
         print("Setting overlapping threshold...")
         self.overlapp_threshold = overlapp_threshold
-        # update nodes entries
-        for node in self.nodes:
-            if "volume_precomputation" in self.nodes[node]:
-                del self.nodes[node]["volume_precomputation"]
         print("Overlapping threshold set.")
+
+    def create_dxf_with_colored_polyline(self, filename, color=1, min_z=None, max_z=None):
+        # Create a new DXF document.
+        doc = ezdxf.new('R2010')
+        msp = doc.modelspace()
+
+        for edge in tqdm(self.edges, desc="Creating DXF..."):
+            ks = self.get_edge_ks(edge[0], edge[1])
+            for k in ks:
+                same_block = self.edges[edge][k]['same_block']
+                c = color
+                if same_block:
+                    c = 2
+                elif k != 0.0:
+                    c = 5
+                # Create polyline points 
+                polyline_points = []
+                polyline_points_raw = []
+                to_add = True
+                for pi, point in enumerate(edge):
+                    centroid = self.nodes[point]['centroid']
+                    if min_z is not None and centroid[1] < min_z:
+                        to_add = False
+                    if max_z is not None and centroid[1] > max_z:
+                        to_add = False
+                    if not to_add:
+                        break
+                    polyline_points.append(Vec3(int(centroid[0]), int(centroid[1]), int(centroid[2])))
+                    polyline_points_raw.append(Vec3(int(centroid[0]), int(centroid[1]), int(centroid[2])))
+                    
+                    # Add an indicator which node of the edge has the smaller k value
+                    if same_block:
+                        if k > 0.0 and pi == 0:
+                            polyline_points = [Vec3(int(centroid[0]), int(centroid[1]) + 10, int(centroid[2]))] + polyline_points
+                        elif k < 0.0 and pi == 1:
+                            polyline_points += [Vec3(int(centroid[0]), int(centroid[1]) + 10, int(centroid[2]))]
+
+                if same_block and k == 0.0:
+                    c = 4
+
+                # Add an indicator which node of the edge has the smaller k value
+                if k != 0.0:
+                    # Add indicator for direction
+                    start_point = Vec3(polyline_points_raw[0].x+1, polyline_points_raw[0].y+1, polyline_points_raw[0].z+1)
+                    end_point = Vec3(polyline_points_raw[1].x+1, polyline_points_raw[1].y+1, polyline_points_raw[1].z+1)
+                    if k < 0.0:
+                        start_point, end_point = end_point, start_point
+                    indicator_vector = (end_point - start_point) * 0.5
+                    indicator_end = start_point + indicator_vector
+                    if c == 2:
+                        indicator_color = 7
+                    else:
+                        indicator_color = 6  # Different color for the indicator
+                    
+                    # Add the indicator line
+                    msp.add_line(start_point, indicator_end, dxfattribs={'color': indicator_color})
+
+                if to_add:
+                    # Add the 3D polyline to the model space
+                    msp.add_polyline3d(polyline_points, dxfattribs={'color': c})
+
+        # Save the DXF document
+        doc.saveas(filename)
+    
+    def compare_polylines_graph(self, other, filename, color=1, min_z=None, max_z=None):
+        # Create a new DXF document.
+        doc = ezdxf.new('R2010')
+        msp = doc.modelspace()
+
+        for edge in tqdm(self.edges):
+            ks = self.get_edge_ks(edge[0], edge[1])
+            for k in ks:
+                same_block = self.edges[edge][k]['same_block']
+                c = color
+                if same_block:
+                    c = 2
+                elif k != 0.0:
+                    c = 5
+                if edge not in other.edges:
+                    if c == 2:
+                        c = 4
+                    elif c == 5:
+                        c = 6
+                    else:
+                        c = 3
+                
+                # Create polyline points 
+                polyline_points = []
+                to_add = True
+                for pi, point in enumerate(edge):
+                    centroid = self.nodes[point]['centroid']
+                    if min_z is not None and centroid[1] < min_z:
+                        to_add = False
+                    if max_z is not None and centroid[1] > max_z:
+                        to_add = False
+                    if not to_add:
+                        break
+                    polyline_points.append(Vec3(int(centroid[0]), int(centroid[1]), int(centroid[2])))
+
+                    # Add an indicator which node of the edge has the smaller k value
+                    if same_block:
+                        if k > 0.0 and pi == 0:
+                            polyline_points = [Vec3(int(centroid[0]), int(centroid[1]) + 10, int(centroid[2]))] + polyline_points
+                        elif k < 0.0 and pi == 1:
+                            polyline_points += [Vec3(int(centroid[0]), int(centroid[1]) + 10, int(centroid[2]))]
+
+                if to_add:
+                    # Add the 3D polyline to the model space
+                    msp.add_polyline3d(polyline_points, dxfattribs={'color': c})
+
+        # Save the DXF document
+        doc.saveas(filename)
+
+    def extract_subgraph(self, min_z=None, max_z=None, umbilicus_max_distance=None, add_same_block_edges=False, tolerated_nodes=None, min_x=None, max_x=None, min_y=None, max_y=None):
+        # Define a wrapper function for umbilicus_xz_at_y
+        umbilicus_func = lambda z: umbilicus_xz_at_y(self.umbilicus_data, z)
+        # Extract subgraph with nodes within z range
+        subgraph = ScrollGraph(self.overlapp_threshold, self.umbilicus_path)
+        # starting block info
+        subgraph.start_block = self.start_block
+        subgraph.patch_id = self.patch_id
+        for node in tqdm(self.nodes, desc="Extracting subgraph..."):
+            centroid = self.nodes[node]['centroid']
+            winding_angle = self.nodes[node]['winding_angle']
+            if (tolerated_nodes is not None) and (node in tolerated_nodes):
+                subgraph.add_node(node, centroid, winding_angle=winding_angle)
+                continue
+            elif (min_z is not None) and (centroid[1] < min_z):
+                continue
+            elif (max_z is not None) and (centroid[1] > max_z):
+                continue
+            elif (min_x is not None) and (centroid[2] < min_x):
+                continue
+            elif (max_x is not None) and (centroid[2] > max_x):
+                continue
+            elif (min_y is not None) and (centroid[0] < min_y):
+                continue
+            elif (max_y is not None) and (centroid[0] > max_y):
+                continue
+            elif (umbilicus_max_distance is not None) and np.linalg.norm(umbilicus_func(centroid[1]) - centroid) > umbilicus_max_distance:
+                continue
+            else:
+                subgraph.add_node(node, centroid, winding_angle=winding_angle)
+        for edge in self.edges:
+            node1, node2 = edge
+            if (tolerated_nodes is not None) and (node1 in tolerated_nodes) and (node2 in tolerated_nodes): # dont add useless edges
+                continue
+            if node1 in subgraph.nodes and node2 in subgraph.nodes:
+                for k in self.get_edge_ks(node1, node2):
+                    if add_same_block_edges or (not self.edges[edge][k]['same_block']):
+                        subgraph.add_edge(node1, node2, self.edges[edge][k]['certainty'], k, self.edges[edge][k]['same_block'], bad_edge=self.edges[edge][k]['bad_edge'])
+        subgraph.compute_node_edges()
+        return subgraph
         
 class RandomWalkSolver:
     def __init__(self, graph, umbilicus_path):
@@ -963,7 +1423,7 @@ class RandomWalkSolver:
             if other_node[:3] == node[:3]:
                 # node not in volume_dict and k not in ks for volume_dict volume id
                 if (not other_node[:3] in volume_dict) or (not other_node[3] in volume_dict[other_node[:3]]):
-                    k_other = k + self.graph.get_edge_k(node, other_node)
+                    k_other = k + self.graph.get_edge_ks(node, other_node)[0]
                     if (node[:3] in volume_dict) and (k_other in [ks[volume_dict[node[:3]][key]] for key in volume_dict[node[:3]]]):
                         continue
                     if k_other < overlapp_threshold["sheet_k_range"][0] or k_other > overlapp_threshold["sheet_k_range"][1]:
@@ -980,6 +1440,7 @@ class RandomWalkSolver:
         new_nodes = []
         new_ks = []
         found_aggregated_nodes = False
+        # Update walk_aggregation
         for i, node in enumerate(nodes):
             k = ks[i]
             key = tuple((node, k))
@@ -991,11 +1452,14 @@ class RandomWalkSolver:
                 if not node in new_nodes:
                     new_nodes.append(node)
                     new_ks.append(k)
+        # found aggregated nodes
         if found_aggregated_nodes:
             if overlapp_threshold["enable_winding_switch_postprocessing"]:
                 nodes_switched = []
                 ks_switched = []
-                for node in new_nodes:
+                # Switch winding for nodes with same volume and different winding
+                for ni, node in enumerate(new_nodes):
+                    k = new_ks[ni]
                     nodes_node, ks_node = self.sheet_switching_nodes(node, k, volume_dict, ks_original)
                     for i, node_ in enumerate(nodes_node):
                         k_ = ks_node[i]
@@ -1039,21 +1503,30 @@ class RandomWalkSolver:
         edges = self.graph.nodes[node]['edges']
         volumes = {}
         for edge in edges:
-            certainty = self.graph.edges[edge]['certainty']
+            ks = self.graph.get_edge_ks(edge[0], edge[1])
+            max_certainty = 0.0
+            max_certainty_k = 0.0
+            for k in ks:
+                bad_edge = self.graph.edges[edge][k]['bad_edge']
+                if bad_edge:
+                    continue
+                certainty = self.graph.edges[edge][k]['certainty']
+                if certainty > max_certainty:
+                    max_certainty = certainty
+                    max_certainty_k = k
+            certainty = max_certainty
             if certainty <= 0.0:
                 continue
             if edge[0] == node:
                 next_node = edge[1]
             else:
                 next_node = edge[0]
+                max_certainty_k = -max_certainty_k
             next_volume = next_node[:3]
             if (not self.graph.overlapp_threshold["enable_winding_switch"]) and (next_volume == node[:3]): # same_volume, winding switch disregarded for random walks if enable_winding_switch is False
                 continue
 
-            if next_volume == node[:3]:
-                k = self.graph.get_edge_k(node, next_node)
-            else:
-                k = None
+            k = max_certainty_k
             next_volume = (next_volume[0], next_volume[1], next_volume[2], k)
             if next_volume not in volumes:
                 volumes[next_volume] = 0.0
@@ -1097,16 +1570,35 @@ class RandomWalkSolver:
             if tuple(node_[:3]) != tuple(next_volume[:3]):
                 continue
             if not next_volume[3] is None:
-                if next_volume[3] != self.graph.get_edge_k(node, node_):
+                max_certainty_k = next_volume[3]
+                k = k_factor*max_certainty_k
+                if not k in self.graph.edges[edge]:
                     continue
+                certainty = self.graph.edges[edge][k]['certainty']
+                bad_edge = self.graph.edges[edge][k]['bad_edge']
+                if bad_edge:
+                    continue
+            else:
+                ks = self.graph.get_edge_ks(edge[0], edge[1])
+                max_certainty = 0.0
+                max_certainty_k = 0.0
+                for k in ks:
+                    bad_edge = self.graph.edges[edge][k]['bad_edge']
+                    if bad_edge:
+                        continue
+                    certainty = self.graph.edges[edge][k]['certainty']
+                    if certainty > max_certainty:
+                        max_certainty = certainty
+                        max_certainty_k = k
+                certainty = max_certainty
+                max_certainty_k = k_factor * max_certainty_k
             # check if edge has higher certainty
-            certainty = self.graph.edges[edge]['certainty']
             if certainty <= next_certainty:
                 continue
 
             next_node = node_
             next_certainty = certainty
-            next_node_k = k_factor * self.graph.edges[edge]['sheet_offset_k']
+            next_node_k = max_certainty_k
         
         if not ("next_volume" in self.graph.nodes[node]["volume_precomputation"]):
             self.graph.nodes[node]["volume_precomputation"]["next_volume"] = {}
@@ -1154,7 +1646,7 @@ class RandomWalkSolver:
                                 dist_ = self.umbilicus_distance((volume[0], volume[1], volume[2], patch))
                                 if abs(dist - dist_) > self.graph.overlapp_threshold["max_umbilicus_difference"]:
                                     return False
-            return True
+        return True
         
     def centroid_vector(self, node):
         if "centroid_vector" in node:
@@ -1219,7 +1711,7 @@ class RandomWalkSolver:
                     if steps < min_steps:
                         return None, "too few steps"
                     else:
-                        if self.check_walk(walk): # check if walk is valid over inverse loop closure
+                        if self.check_walk(walk, ks): # check if walk is valid over inverse loop closure
                             return walk, ks
                         else:
                             return None, "inverse loop closure failed"
@@ -1230,7 +1722,7 @@ class RandomWalkSolver:
                     if ks_nodes[index_] == current_k: # same winding
                         if node[3] == key_volume: # same patch
                             if steps >= min_steps: # has enough steps
-                                if self.check_walk(walk): # check if walk is valid over inverse loop closure
+                                if self.check_walk(walk, ks): # check if walk is valid over inverse loop closure
                                     return walk, ks
                                 else:
                                     return None, "inverse loop closure failed"
@@ -1242,13 +1734,15 @@ class RandomWalkSolver:
             
         return None, "loop not closed in max_steps"
     
-    def check_walk(self, walk):
+    def check_walk(self, walk, ks):
         for i in range(len(walk) - 1, 0, -1):
             node = walk[i]
             node_next = walk[i-1]
-            k = self.graph.get_edge_k(node, node_next) if tuple(node[:3]) == tuple(node_next[:3]) else None
+            kn = ks[i]
+            kn_next = ks[i-1]
+            k = kn_next - kn
             next_volume = (node_next[0], node_next[1], node_next[2], k)
-            bn, _ = self.pick_best_node(walk[i], next_volume)
+            bn, _ = self.pick_best_node(node, next_volume)
             if (not bn) or (not all([walk[i-1][u] == bn[u] for u in range(len(bn))])):
                 return False
         return True
@@ -1281,42 +1775,6 @@ class RandomWalkSolver:
         # self.graph.save_graph(path.replace("blocks", "graph_RW_solved") + ".pkl")
         print(f"\033[94m[ThaumatoAnakalyptor]:\033[0m Saved")
 
-class WalkToSheet():
-    def __init__(self, graph, nodes, ks, path, save_path, overlapp_threshold):
-        self.graph = graph
-        self.path = path
-        self.save_path = save_path
-        self.nodes = list(map(tuple, nodes))
-        self.ks  = ks
-        self.overlapp_threshold = overlapp_threshold
-
-    def create_sheet(self):
-        print(f"Min and max k: {np.min(self.ks)}, {np.max(self.ks)}")
-        start_block, patch_id = self.graph.start_block, self.graph.patch_id
-        # get start node
-        main_sheet_patch_info = (start_block, int(patch_id), float(0.0))
-        main_sheet_patch, _ = build_patch_tar(main_sheet_patch_info, (50, 50, 50), self.path, sample_ratio=1.0)
-        anchor_angle = main_sheet_patch["anchor_angles"][0]
-        main_sheet = {}
-        main_sheet[tuple(start_block)] = {patch_id: {"offset_angle": anchor_angle, "displaying_points": []}}
-        # visit all connected nodes
-        print(F"Creating sheet with {len(self.nodes)} patches.")
-        for i in range(len(self.nodes)):
-            node = self.nodes[i]
-            k = self.ks[i]
-            # build patch and add to sheet
-            sheet_patch = (node[:3], int(node[3]), float(0.0))
-            patch, _ = build_patch_tar(sheet_patch, (50, 50, 50), self.path, sample_ratio=self.overlapp_threshold["sample_ratio_score"])
-            angle_offset = patch["anchor_angles"][0] - k * 360.0
-            patches = [(node[:3], int(node[3]), angle_offset, None)]
-            offset_angles = [angle_offset]
-            update_main_sheet(main_sheet, patches, offset_angles, [[]])
-
-        return main_sheet
-    
-    def save(self, main_sheet):
-        save_main_sheet(main_sheet, {}, self.save_path.replace("blocks", "main_sheet_RW") + ".ta")
-
 def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_translation=False, stop_event=None):
 
     umbilicus_path = os.path.dirname(path) + "/umbilicus.txt"
@@ -1328,13 +1786,13 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
 
     print(f"Configs: {overlapp_threshold}")
 
-    recompute_path = path.replace("blocks", "graph_raw") + ".pkl"
+    recompute_path = path.replace("blocks", "scroll_graph") + ".pkl"
     recompute = recompute or not os.path.exists(recompute_path)
     
     # Build graph
     if recompute:
-        scroll_graph = ScrollGraph(7, overlapp_threshold, limit_stickiness=0.6)
-        start_block, patch_id = scroll_graph.build_graph(path, num_processes=30, start_point=start_point, distance=-1)
+        scroll_graph = ScrollGraph(overlapp_threshold, umbilicus_path)
+        start_block, patch_id = scroll_graph.build_graph(path, num_processes=30, start_point=start_point, prune_unconnected=False)
         print("Saving built graph...")
         scroll_graph.save_graph(recompute_path)
 
@@ -1369,6 +1827,11 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
         solver = RandomWalkSolver(scroll_graph, umbilicus_path)
         solver.save_overlapp_threshold()
         nodes, ks = solver.solve_(path=save_path, starting_node=starting_node, max_nr_walks=overlapp_threshold["max_nr_walks"], max_unchanged_walks=overlapp_threshold["max_unchanged_walks"], max_steps=overlapp_threshold["max_steps"], max_tries=overlapp_threshold["max_tries"], min_steps=overlapp_threshold["min_steps"], min_end_steps=overlapp_threshold["min_end_steps"], continue_walks=overlapp_threshold["continue_walks"], nodes=nodes, ks=ks, stop_event=stop_event)
+        
+        # Update the solved scroll graph with the nodes and ks. Remove unused nodes and update winding angles
+        scroll_graph.remove_unused_nodes(used_nodes=nodes)
+        scroll_graph.update_winding_angles(nodes, ks, update_winding_angles=True)
+
         # save graph ks and nodes
         np.save(save_path.replace("blocks", "graph_RW") + "_ks.npy", ks)
         np.save(save_path.replace("blocks", "graph_RW") + "_nodes.npy", nodes)
@@ -1378,13 +1841,6 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
         nodes = np.load(path.replace("blocks", "graph_RW") + "_nodes.npy")
         scroll_graph = load_graph(path.replace("blocks", "graph_RW_solved") + ".pkl")
         scroll_graph.overlapp_threshold = overlapp_threshold
-    
-    if True:
-        print("Creating sheet...")
-        w2s = WalkToSheet(scroll_graph, nodes, ks, path, save_path, overlapp_threshold)
-        main_sheet = w2s.create_sheet()
-        print("Saving sheet...")
-        w2s.save(main_sheet)
 
 def random_walks():
     path = "/media/julian/SSD4TB/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks"
@@ -1402,16 +1858,9 @@ def random_walks():
                           "surrounding_patches_size": 3, "max_sheet_clip_distance": 60, "sheet_z_range": (-5000, 400000), "sheet_k_range": (-1, 2), "volume_min_certainty_total_percentage": 0.0, "max_umbilicus_difference": 30,
                           "walk_aggregation_threshold": 100, "walk_aggregation_max_current": -1
                           }
-    # scroll 3
-    # overlapp_threshold = {"sample_ratio_score": sample_ratio_score, "display": False, "print_scores": True, "picked_scores_similarity": 0.7, "final_score_max": 1.5, "final_score_min": 0.01, "score_threshold": 0.010, "fit_sheet": False, "cost_threshold": 16, "cost_percentile": 75, "cost_percentile_threshold": 12, 
-    #                     "cost_sheet_distance_threshold": 4.0, "rounddown_best_score": 0.05,
-    #                     "cost_threshold_prediction": 2.0, "min_prediction_threshold": 0.50, "nr_points_min": 300.0, "nr_points_max": 8000.0, "min_patch_points": 400.0, 
-    #                     "winding_angle_range": None, "multiple_instances_per_batch_factor": 1.0,
-    #                     "epsilon": 1e-5, "angle_tolerance": 85, "max_threads": 30,
-    #                     "min_points_winding_switch": 3800, "min_winding_switch_sheet_distance": 9, "max_winding_switch_sheet_distance": 20, "winding_switch_sheet_score_factor": 1.5, "winding_direction": 1.0, "enable_winding_switch": False, "enable_winding_switch_postprocessing": False,
-    #                     "surrounding_patches_size": 3, "max_sheet_clip_distance": 60, "sheet_z_range": (-5000, 400000), "sheet_k_range": (-1, 2), "volume_min_certainty_total_percentage": 0.015, "max_umbilicus_difference": 20,
-    #                     "walk_aggregation_threshold": 100, "walk_aggregation_max_current": -1
-    #                     }
+    # Scroll 1: "winding_direction": 1.0
+    # Scroll 3: "winding_direction": -1.0
+
     max_nr_walks = 10000
     max_steps = 101
     min_steps = 16

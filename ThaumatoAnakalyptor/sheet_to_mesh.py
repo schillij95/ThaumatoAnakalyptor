@@ -138,6 +138,7 @@ def save_surface_ply(surface_points, normals, filename, colors=None):
         pcd.colors = o3d.utility.Vector3dVector(colors)
 
     # Create folder if it doesn't exist
+    print(filename)
     os.makedirs(os.path.dirname(filename), exist_ok=True)
 
     # Save as a PLY file
@@ -693,6 +694,8 @@ def cut_main_dicts(main_sheet_info, points_dict, umbilicus_path, path, winding_a
 
     assert found, "Could not find patch with offset angle 0"
     
+    # This next line is buggy!
+    print(f"Start piece normal angle: {start_piece_normal_angle}, patch offset angle: {patch_offset_angle}")
     rotate_offset = + start_piece_normal_angle + patch_offset_angle + 180
     rotate_offset = angle_to_180(np.array([rotate_offset]))[0]
     print(f"Rotate offset: {rotate_offset}, start piece normal angle: {start_piece_normal_angle}, patch offset angle: {patch_offset_angle}")
@@ -1717,7 +1720,7 @@ def load_mesh(path):
     # Return mesh
     return mesh
 
-def filter_points(points, normals, max_single_dist=20):
+def filter_points(points, normals, max_single_dist=20, min_cluster_size=8000):
     """
     Filter points based on the largest connected component.
 
@@ -1735,7 +1738,7 @@ def filter_points(points, normals, max_single_dist=20):
 
     # find all clusters of size 10000 or more
     cluster_labels, cluster_counts = np.unique(clusters, return_counts=True)
-    large_clusters = cluster_labels[cluster_counts >= 8000]
+    large_clusters = cluster_labels[cluster_counts >= min_cluster_size]
     large_clusters = large_clusters[large_clusters != -1]
 
     # filter points and normals based on the largest clusters
@@ -1853,7 +1856,7 @@ def main():
     sheet_length = 14
     only_originals = True # whether to not also compute winding 2.5D surface to generate interpolated 3d pointcloud instead of the raw data
     sample_ratio = 0.1
-    min_num_points = 100000 * sample_ratio
+    min_num_points = 50000 * sample_ratio
     overlap_y = 20 # overlap of cuts
     subvolume_size = 50.0
     scale = 200.0 / subvolume_size

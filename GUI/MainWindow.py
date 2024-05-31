@@ -57,9 +57,6 @@ class ThaumatoAnakalyptor(QMainWindow):
     instancesComputationDone = pyqtSignal()
     stitchSheetComputationDone = pyqtSignal()
     meshingComputationDone = pyqtSignal()
-    flatteningComputationDone = pyqtSignal()
-    slimComputationDone = pyqtSignal()
-    finalizeComputationDone = pyqtSignal()
     swapVolumeComputationDone = pyqtSignal()
     ppmComputationDone = pyqtSignal()
     texturingComputationDone = pyqtSignal()
@@ -73,9 +70,6 @@ class ThaumatoAnakalyptor(QMainWindow):
         self.process_instances = None
         self.process_stitching = None
         self.process_meshing = None
-        self.process_flattening = None
-        self.process_slim = None
-        self.process_finalize = None
         self.process_swap_volume = None
         self.process_ppm = None
         self.process_texturing = None
@@ -591,21 +585,6 @@ class ThaumatoAnakalyptor(QMainWindow):
         self.addMeshingArea(meshingBox)
         volumeBox.add_widget(meshingBox)
 
-        # Flattening Area
-        flatteningBox = CollapsibleBox("Flattening")
-        self.addFlatteningArea(flatteningBox)
-        volumeBox.add_widget(flatteningBox)
-
-        # Slim UV Area
-        slimUVBox = CollapsibleBox("Slim UV")
-        self.addSlimArea(slimUVBox)
-        volumeBox.add_widget(slimUVBox)
-
-        # Finalize Area
-        finalizeBox = CollapsibleBox("Finalize")
-        self.addFinalizeArea(finalizeBox)
-        volumeBox.add_widget(finalizeBox)
-
         # Swap Volume Area
         swapVolumeBox = CollapsibleBox("Swap Volume")
         self.addSwapVolumeArea(swapVolumeBox)
@@ -833,14 +812,16 @@ class ThaumatoAnakalyptor(QMainWindow):
     def computeMeshing(self):
         try:
             starting_point = [self.xField.text(), self.yField.text(), self.zField.text()]
-            path_base = os.path.join(self.Config["surface_points_path"], f"{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/")
-            print(f"path_base: {path_base}")
+            path = os.path.join(self.Config["surface_points_path"], "point_cloud_colorized_verso_subvolume_blocks")
+            graph = f"{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/point_cloud_colorized_verso_subvolume_graph_RW_solved.pkl"
+            start_point = f"{starting_point[0]} {starting_point[1]} {starting_point[2]}"
 
             command = [
-                "python3", "-m", "ThaumatoAnakalyptor.sheet_to_mesh",
-                "--path_base", path_base, 
-                "--path_ta", "point_cloud_colorized_verso_subvolume_main_sheet_RW.ta", 
-                "--umbilicus_path", self.Config["umbilicus_path"]
+                "python3", "-m", "ThaumatoAnakalyptor.graph_to_mesh",
+                "--path", path,
+                "--graph", graph,
+                "--start_point", start_point,
+                "--scale_factor", f"{abs(self.Config['downsample_factor']):f}"
             ]
             
             def run():
@@ -871,179 +852,6 @@ class ThaumatoAnakalyptor(QMainWindow):
         self.stopMeshingButton.setEnabled(False)
         print("Computation process stopped.")
 
-    def addFlatteningArea(self, box):
-        label = QLabel("Flattening")
-        self.delaunyCheckbox = QCheckBox("Use Delaunay")
-        self.delaunyCheckbox.setChecked(True)
-        self.computeFlatteningButton = QPushButton("Compute")
-        self.stopFlatteningButton = QPushButton("Stop")
-        self.stopFlatteningButton.setEnabled(False)
-
-        self.computeFlatteningButton.clicked.connect(self.computeFlattening)
-        self.stopFlatteningButton.clicked.connect(self.stopFlattening)
-
-        box.add_widget(label)
-        box.add_widget(self.delaunyCheckbox)
-        box.add_widget(self.computeFlatteningButton)
-        box.add_widget(self.stopFlatteningButton)
-
-        # Connect the signal to the slot method
-        self.flatteningComputationDone.connect(self.onFlatteningComputationDone)
-
-    def computeFlattening(self):
-        try:
-            starting_point = [self.xField.text(), self.yField.text(), self.zField.text()]
-            path = os.path.join(self.Config["surface_points_path"], f"{starting_point[0]}_{starting_point[1]}_{starting_point[2]}", "point_cloud_colorized_verso_subvolume_blocks.obj")
-
-            command = [
-                "python3", "-m", "ThaumatoAnakalyptor.mesh_to_uv", 
-                "--path", path, 
-                "--umbilicus_path", self.Config["umbilicus_path"]
-            ]
-
-            if self.delaunyCheckbox.isChecked():
-                command += ["--enable_delauny"]
-
-            def run():
-                self.process_flattening = subprocess.Popen(command)
-                self.process_flattening.wait()
-                self.flatteningComputationDone.emit()
-
-            # Start the monitoring thread
-            thread = threading.Thread(target=run)
-            
-            thread.start()
-            self.computeFlatteningButton.setEnabled(False)
-            self.stopFlatteningButton.setEnabled(True)
-
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to start the script: {e}")
-            self.computeFlatteningButton.setEnabled(True)
-            self.stopFlatteningButton.setEnabled(False)
-
-    def stopFlattening(self):
-        if self.process_flattening and self.process_flattening.poll() is None:
-            self.process_flattening.kill()
-            self.process_flattening = None
-            self.flatteningComputationDone.emit()
-
-    def onFlatteningComputationDone(self):
-        self.computeFlatteningButton.setEnabled(True)
-        self.stopFlatteningButton.setEnabled(False)
-        print("Computation process stopped.")
-
-    def addSlimArea(self, box):
-        label = QLabel("Slim")
-        self.computeSlimButton = QPushButton("Compute")
-        self.stopSlimButton = QPushButton("Stop")
-        self.stopSlimButton.setEnabled(False)
-
-        self.computeSlimButton.clicked.connect(self.computeSlim)
-        self.stopSlimButton.clicked.connect(self.stopSlim)
-
-        box.add_widget(label)
-        box.add_widget(self.computeSlimButton)
-        box.add_widget(self.stopSlimButton)
-
-        # Connect the signal to the slot method
-        self.slimComputationDone.connect(self.onSlimComputationDone)
-
-    def computeSlim(self):
-        try:
-            starting_point = [self.xField.text(), self.yField.text(), self.zField.text()]
-            path = os.path.join(self.Config["surface_points_path"], f"{starting_point[0]}_{starting_point[1]}_{starting_point[2]}", "point_cloud_colorized_verso_subvolume_blocks_uv.obj")
-
-            command_slimFlattening = [
-                "python3", "-m", "ThaumatoAnakalyptor.slim_uv",
-                "--path", path,
-                "--iter", "20"
-            ]
-
-            command = command_slimFlattening
-
-            def run():
-                self.process_slim = subprocess.Popen(command)
-                self.process_slim.wait()
-                self.slimComputationDone.emit()
-
-            # Start the monitoring thread
-            thread = threading.Thread(target=run)
-
-            thread.start()
-            self.computeSlimButton.setEnabled(False)
-            self.stopSlimButton.setEnabled(True)
-
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to start the script: {e}")
-            self.computeSlimButton.setEnabled(True)
-            self.stopSlimButton.setEnabled(False)
-
-    def stopSlim(self):
-        if self.process_slim and self.process_slim.poll() is None:
-            self.process_slim.kill()
-            self.process_slim = None
-            self.slimComputationDone.emit()
-
-    def onSlimComputationDone(self):
-        self.computeSlimButton.setEnabled(True)
-        self.stopSlimButton.setEnabled(False)
-        print("Computation process stopped.")
-
-    def addFinalizeArea(self, box):
-        label = QLabel("Finalize")
-        self.computeFinalizeButton = QPushButton("Compute")
-        self.stopFinalizeButton = QPushButton("Stop")
-        self.stopFinalizeButton.setEnabled(False)
-
-        self.computeFinalizeButton.clicked.connect(self.computeFinalize)
-        self.stopFinalizeButton.clicked.connect(self.stopFinalize)
-
-        box.add_widget(label)
-        box.add_widget(self.computeFinalizeButton)
-        box.add_widget(self.stopFinalizeButton)
-
-        # Connect the signal to the slot method
-        self.finalizeComputationDone.connect(self.onFinalizeComputationDone)
-
-    def computeFinalize(self):
-        try:
-            starting_point = [self.xField.text(), self.yField.text(), self.zField.text()]
-            input_mesh = os.path.join(self.Config["surface_points_path"], f"{starting_point[0]}_{starting_point[1]}_{starting_point[2]}", "point_cloud_colorized_verso_subvolume_blocks_uv_flatboi.obj")
-            command = [
-                "python3", "-m", "ThaumatoAnakalyptor.finalize_mesh", 
-                "--input_mesh", input_mesh, 
-                "--cut_size", "40000", 
-                "--scale_factor", f"{abs(self.Config['downsample_factor']):f}"
-            ]
-
-            def run():
-                self.process_finalize = subprocess.Popen(command)
-                self.process_finalize.wait()
-                self.finalizeComputationDone.emit()
-            
-            # Start the monitoring thread
-            thread = threading.Thread(target=run)
-
-            thread.start()
-            self.computeFinalizeButton.setEnabled(False)
-            self.stopFinalizeButton.setEnabled(True)
-
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to start the script: {e}")
-            self.computeFinalizeButton.setEnabled(True)
-            self.stopFinalizeButton.setEnabled(False)
-
-    def stopFinalize(self):
-        if self.process_finalize and self.process_finalize.poll() is None:
-            self.process_finalize.kill()
-            self.process_finalize = None
-            self.finalizeComputationDone.emit()
-
-    def onFinalizeComputationDone(self):
-        self.computeFinalizeButton.setEnabled(True)
-        self.stopFinalizeButton.setEnabled(False)
-        print("Computation process stopped.")
-
     def addSwapVolumeArea(self, box):
         label = QLabel("Swap Volume")
         self.targetVolumeIdField = QLineEdit()
@@ -1065,18 +873,26 @@ class ThaumatoAnakalyptor(QMainWindow):
 
     def computeSwapVolume(self):
         try:
+            starting_point = [self.xField.text(), self.yField.text(), self.zField.text()]
+            original_volume_id = self.Config.get("original_2d_tiffs", None)
+            if original_volume_id is None:
+                QMessageBox.critical(self, "Error", f"Please specify the 2D Tiff files path")
+                return
+            original_volume_id = os.path.basename(original_volume_id)
+
             target_volume_id = self.targetVolumeIdField.text()
             base_path = self.Config.get("surface_points_path", None)
             if base_path is None:
                 QMessageBox.critical(self, "Error", f"Please specify the surface points path")
                 return
-            base_path = os.path.join(base_path, "working", f"working_{self.xField.text()}_{self.yField.text()}_{self.zField.text()}")
+            obj_path =  os.path.join(base_path, f"{starting_point[0]}_{starting_point[1]}_{starting_point[2]}", "point_cloud_colorized_verso_subvolume_blocks/mesh_flatboi.obj")
 
             command = [
                 "python3", "-m", "ThaumatoAnakalyptor.mesh_transform", 
                 "--transform_path", self.Config["surface_points_path"], 
+                "--original_volume_id", original_volume_id,
                 "--targed_volume_id", target_volume_id,
-                "--base_path", base_path
+                "--obj_path", obj_path
             ]
 
             def run():
@@ -1108,16 +924,18 @@ class ThaumatoAnakalyptor(QMainWindow):
         print("Computation process stopped.")
 
     def addRendering(self, layout):
+        # TODO: switch rendering to large_mesh_to_surface
+        
         # Main Collapsible Box for Rendering
-        renderingBox = CollapsibleBox("Rendering")
+        renderingBox = CollapsibleBox("Rendering (in renovation)")
 
         # PPM Area
-        ppmBox = CollapsibleBox("PPM")
+        ppmBox = CollapsibleBox("PPM (not working)")
         self.addPpmArea(ppmBox)
         renderingBox.add_widget(ppmBox)
 
         # Texturing Area
-        texturingBox = CollapsibleBox("Texturing")
+        texturingBox = CollapsibleBox("Texturing (not working)")
         self.addTexturingArea(texturingBox)
         renderingBox.add_widget(texturingBox)
 

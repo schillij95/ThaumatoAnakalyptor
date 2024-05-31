@@ -37,7 +37,9 @@ class Flatboi:
         self.triangles = [t for t in self.triangles if abs(igl.triangle_area(self.vertices[t[0]], self.vertices[t[1]], self.vertices[t[2]])) > 0.0001]
 
     def generate_boundary(self):
-        return igl.boundary_loop(self.triangles)
+        res = igl.boundary_loop(self.triangles)
+        print("Generated Boundary")
+        return res
     
     def harmonic_ic(self):
         bnd = self.generate_boundary()
@@ -51,6 +53,7 @@ class Flatboi:
         bnd_uv = igl.map_vertices_to_circle(self.vertices, bnd)
         uv = igl.harmonic(self.vertices, self.triangles, bnd, bnd_uv, 1)
         arap = igl.ARAP(self.vertices, self.triangles, 2, np.zeros(0))
+        print("ARAP")
         uva = arap.solve(np.zeros((0, 0)), uv)
 
         bc = np.zeros((bnd.shape[0],2), dtype=np.float64)
@@ -90,6 +93,25 @@ class Flatboi:
             bnd_uv[i] = uv[bnd[i]]
 
         return bnd, bnd_uv, uv
+    
+    def ordered_ic(self):
+        uv = np.zeros((self.vertices.shape[0], 2), dtype=np.float64)
+        uvs = self.original_uvs.reshape((self.triangles.shape[0], self.triangles.shape[1], 2))
+        for t in range(self.triangles.shape[0]):
+            for v in range(self.triangles.shape[1]):
+                uv[self.triangles[t,v]] = uvs[t,v]
+
+        bnd = np.array([[0]])
+        bnd_uv = np.zeros((bnd.shape[0], 2), dtype=np.float64)
+        for i in range(bnd.shape[0]):
+            bnd_uv[i] = uv[bnd[i]]
+
+        arap = igl.ARAP(self.vertices, self.triangles, 2, bnd)
+        print("ARAP")
+        for i in range(3):
+            uv = arap.solve(bnd_uv, uv)
+
+        return np.zeros((0, 1), dtype=np.int32), np.zeros((0,2), dtype=np.float64), uv
     
     def orient_uvs(self, vertices):
         # Rotate vertices and calculate the needed area
@@ -131,6 +153,9 @@ class Flatboi:
             # generating harmonic boundary, boundary uvs, and uvs
             print("Using Harmonic Condition")
             bnd, bnd_uv, uv = self.harmonic_ic()
+        elif initial_condition == 'ordered':
+            print("Using Ordered Condition")
+            bnd, bnd_uv, uv = self.ordered_ic()
 
         # initializing SLIM with Symmetric Dirichlet Distortion Energy (isometric)
         slim = igl.SLIM(self.vertices, self.triangles, v_init=uv, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_SYMMETRIC_DIRICHLET, soft_penalty=0)
@@ -306,6 +331,7 @@ def main():
     parser = argparse.ArgumentParser(description='Add UV coordinates using the flatboi script for SLIM to a ThaumatoAnakalyptor papyrus surface mesh (.obj). output mesh has additional "_flatboi.obj" in name.')
     parser.add_argument('--path', type=str, help='Path of .obj Mesh', default=path)
     parser.add_argument('--iter', type=int, help='Max number of iterations.')
+    parser.add_argument('--ic', type=str, help='Initial condition for SLIM. Options: original, arap, harmonic', default='arap')
 
     # Take arguments back over
     args = parser.parse_args()
@@ -330,7 +356,7 @@ def main():
     print(f"Adding UV coordinates to mesh {path}")
 
     flatboi = Flatboi(path, 5)
-    harmonic_uvs, harmonic_energies = flatboi.slim(initial_condition='arap')
+    harmonic_uvs, harmonic_energies = flatboi.slim(initial_condition=args.ic)
     flatboi.save_img(harmonic_uvs)
     flatboi.save_obj(harmonic_uvs)
     print_array_to_file(harmonic_energies, energies_file)       
