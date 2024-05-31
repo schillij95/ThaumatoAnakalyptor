@@ -796,6 +796,7 @@ bool comp_lower_bound(const std::vector<float>& pt, float value) {
 std::pair<int, int> pointsAtWindingAngle(const std::vector<std::vector<float>>& points, float windingAngle, int last_start_index, int last_end_index, float maxAngleDiff = 30) {
     // Find the start and end indices of points within the maxAngleDiff range
     int startIndex = last_start_index;
+    int endIndex = last_end_index;
 
     for (int i = startIndex; i < points.size(); ++i) {
         if (points[i][3] >= windingAngle - maxAngleDiff) {
