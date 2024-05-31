@@ -1004,6 +1004,7 @@ void workerFunction(const std::vector<std::vector<float>>& points,
 std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<std::vector<float>>>, std::vector<std::vector<float>>, std::vector<float>>> rolledOrderedPointset(std::vector<std::vector<float>> umbilicus_points, std::vector<std::vector<float>> points, std::vector<std::vector<float>> normals, int numThreads, bool debug = false, float angleStep = 6, int z_spacing = 10, float max_eucledian_distance = 10) {
     auto [minWind, maxWind] = findMinMaxWindingAngles(points);
     auto [minZ, maxZ] = findMinMaxZ(points);
+    std::cout << "Number of threads: " << numThreads << " angle step: " << angleStep << " z spacing: " << z_spacing << " max eucledian distance: " << max_eucledian_distance << std::endl;
     std::cout << "Min and max winding angles: " << minWind << ", " << maxWind << std::endl;
     std::cout << "First point: " << points[0][0] << ", " << points[0][1] << ", " << points[0][2] << ", " << points[0][3] << " last point: " << points[points.size() - 1][0] << ", " << points[points.size() - 1][1] << ", " << points[points.size() - 1][2] << ", " << points[points.size() - 1][3] << std::endl;
 
