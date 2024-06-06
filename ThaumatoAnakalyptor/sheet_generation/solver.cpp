@@ -1117,6 +1117,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solve(
     NodeUsageCount node_usage_count; // Map to track node usage count with specific k values
     int walk_aggregation_count = 0;
     int total_walks = 0;
+    int nrWalks = walksPerThread * numThreads;
 
     // numm threads gens
     std::vector<std::mt19937> gen_;
@@ -1140,7 +1141,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solve(
             for (const auto& pair : message_count) {
                 std::cout << "\033[1;36m" << "  \"" << pair.first << "\": " << pair.second << "\033[0m" << std::endl;
             }
-            std::cout << "\033[1;32m" << "[ThaumatoAnakalyptor]: Starting " << nr_unchanged_walks << " random walk. Nr good nodes: " << nodes.size() << "\033[0m" << std::endl;
+            std::cout << "\033[1;32m" << "[ThaumatoAnakalyptor]: Starting " << total_walks * nrWalks << "th random walk. Nr good nodes: " << nodes.size() << "\033[0m" << std::endl;
         }
         if (nr_unchanged_walks > max_unchanged_walks && walk_aggregation_count != 0) { //  && (/* More checks*/)
             nr_unchanged_walks = 0;
@@ -1338,7 +1339,7 @@ AggregatedConnections solveUp(
             for (const auto& pair : message_count) {
                 std::cout << "\033[1;36m" << "  \"" << pair.first << "\": " << pair.second << "\033[0m" << std::endl;
             }
-            std::cout << "\033[1;32m" << "[ThaumatoAnakalyptor]: Starting " << nr_unchanged_walks << " random walk. Nr good nodes: " << nodes.size() << "\033[0m" << std::endl;
+            std::cout << "\033[1;32m" << "[ThaumatoAnakalyptor]: Starting " << total_walks * nrWalks << "th random walk of " << max_nr_walks * landmark_nodes.size() << " . Nr good nodes: " << nodes.size() << "\033[0m" << std::endl;
         }
 
         // pick nrWalks start nodes
@@ -1482,7 +1483,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
             for (const auto& pair : message_count) {
                 std::cout << "\033[1;36m" << "  \"" << pair.first << "\": " << pair.second << "\033[0m" << std::endl;
             }
-            std::cout << "\033[1;32m" << "[ThaumatoAnakalyptor]: Starting " << nr_unchanged_walks << " random walk. Nr good nodes: " << nodes.size() << "\033[0m" << std::endl;
+            std::cout << "\033[1;32m" << "[ThaumatoAnakalyptor]: Starting " << total_walks * nrWalks << "th random walk of " << nr_node_walks << " . Nr good nodes: " << nodes.size() << "\033[0m" << std::endl;
         }
         if (nr_unchanged_walks > max_unchanged_walks && walk_aggregation_count != 0) { //  && (/* More checks*/)
             nr_unchanged_walks = 0;
