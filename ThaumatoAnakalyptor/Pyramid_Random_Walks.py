@@ -1715,6 +1715,9 @@ class RandomWalkSolver:
         pyramid_index = 0
         pyramid_up_path = os.path.join(path, "pyramid_up.pkl")
         pyramid_up_initial_landmark_aggregated_connections_path = os.path.join(path, "pyramid_up_initial_landmark_aggregated_connections.pkl")
+        # create folder if not exists
+        os.makedirs(os.path.dirname(pyramid_up_path), exist_ok=True)
+        
         # pyramid up
         fresh_pyramid_up = True
         if fresh_pyramid_up:
