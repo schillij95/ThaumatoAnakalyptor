@@ -7,6 +7,7 @@ import time
 import threading
 import pickle
 from copy import deepcopy
+import random
 
 # Custom imports
 from .Random_Walks import load_graph, ScrollGraph
@@ -22,6 +23,8 @@ import pointcloud_processing
 from PIL import Image
 # This disables the decompression bomb protection in Pillow
 Image.MAX_IMAGE_PIXELS = None
+
+angle_vector_indices_dp = {}
 
 def load_graph(filename):
     with open(filename, 'rb') as file:
@@ -139,10 +142,17 @@ class WalkToSheet():
         return start_index, end_index
     
     def extract_all_same_vector(self, angle_vector, vector):
+        # Check if the angle_vector is already in the dictionary
+        if (tuple(vector) in angle_vector_indices_dp):
+            return angle_vector_indices_dp[tuple(vector)]
+        
         indices = []
         for i in range(len(angle_vector)):
             if np.allclose(angle_vector[i], vector):
                 indices.append(i)
+
+        # Add to dictionary
+        angle_vector_indices_dp[tuple(vector)] = indices
         return indices
     
     # Calculate initial means of each list, handle empty lists by setting means to None
@@ -171,7 +181,19 @@ class WalkToSheet():
                 dict_list.append(dict_ts)
             t_normals_dict_list.append(dict_list)
         
+        def print_none_vs_means(t_means):
+            count_fixed = 0
+            count_total = 0
+            for i in range(len(t_means)):
+                for u in range(len(t_means[i])):
+                    count_total += 1
+                    if t_means[i][u] is not None:
+                        count_fixed += 1
+
+            print(f"T means: Fixed {count_fixed} out of {count_total} t values.")
+
         t_means = self.calculate_means(adjacent_ts)
+        print_none_vs_means(t_means)
 
         # Function to refine means based on adjacent means
         def refine_means(t_means):
@@ -187,23 +209,7 @@ class WalkToSheet():
                     # Filter t values based on previous and next means
                     if not winding_direction:
                         prev_mean, next_mean = next_mean, prev_mean
-                    adjacent_ts[u][i] = [t for t in original_ts[u][i] if ((prev_mean is None or t > prev_mean) or (u == len(t_means) - 1) or (u > 0 and len(original_ts) == 0)) and ((next_mean is None or t < next_mean) or (u == 0) or (u < len(original_ts) - 1 and len(original_ts[u+1][i]) == 0))]
-
-            # Recalculate means after filtering
-            return self.calculate_means(adjacent_ts)
-        
-        # Function to refine means based on adjacent means
-        def final_refine_means(t_means):
-            for u in range(len(original_ts)):
-                for i in range(len(original_ts[u])):
-                    # Determine the valid next mean
-                    next_mean = next((t_means[j][i] for j in range(u-1, -1, -1) if t_means[j][i] is not None), None)
-                    # Determine the valid previous mean
-                    prev_mean = next((t_means[j][i] for j in range(u+1, len(t_means)) if t_means[j][i] is not None), None)
-                    # Filter t values based on previous and next means
-                    if not winding_direction:
-                        prev_mean, next_mean = next_mean, prev_mean
-                    adjacent_ts[u][i] = [t for t in original_ts[u][i] if ((prev_mean is not None and t > prev_mean) or (u == len(t_means) - 1) or (u > 0 and len(original_ts) == 0)) and ((next_mean is not None and t < next_mean) or (u == 0) or (u < len(original_ts) - 1 and len(original_ts[u+1][i]) == 0))]
+                    adjacent_ts[u][i] = [t for t in original_ts[u][i] if (prev_mean is None or t > prev_mean) and (next_mean is None or t < next_mean)] if ((prev_mean is not None) or (random.random() < 0.75)) and ((next_mean is not None) or (random.random() < 0.75)) else []
 
             # Recalculate means after filtering
             return self.calculate_means(adjacent_ts)
@@ -215,7 +221,6 @@ class WalkToSheet():
             t_means = refine_means(t_means)
             if t_means == previous_means:  # Stop if no change
                 break
-        t_means = final_refine_means(t_means)
 
         normals_means = []
         for i, ts in enumerate(adjacent_ts):
@@ -226,9 +231,12 @@ class WalkToSheet():
 
         # Check for all good t values
         z_len = len(t_means[0])
+        count_fixed = 0
+        count_total = 0
         for u in range(z_len):
             last_t = None
             for i in range(len(t_means)):
+                count_total += 1
                 if t_means[i][u] is not None:
                     if last_t is not None:
                         if winding_direction and t_means[i][u] >= last_t:
@@ -239,49 +247,76 @@ class WalkToSheet():
                             print(f"Something is wrong with t values: {t_means[i][u]} > {last_t}")
                             t_means[i][u] = None
                             continue
+                    count_fixed += 1
                     last_t = t_means[i][u]
 
+        print(f"Fixed {count_fixed} out of {count_total} t values.")
         return t_means, normals_means     
     
     def find_inner_outermost_winding_direction(self, t_means, angle_vector):
-        # Fill out all the None values in t_means and normals_means
-        # compute mean ts value of furthest out t values
-        mean_outermost_ts = 0.0
+        # Split t_means into outermost and innermost half
+        t_means_outermost_half = t_means[:len(t_means)//2]
+        t_means_innermost_half = t_means[len(t_means)//2:]
+
+        # Compute mean ts value of furthest out t values
+        mean_outermost_half = 0.0
         count_outermost = 0
-        mean_innermost_ts = 0.0
-        count_innermost = 0
-        start_outer = angle_vector[0]
-        for i in range(len(t_means)):
-            if (i != 0) and np.allclose(np.array(angle_vector[i]), np.array(start_outer)):
-                break
-            for u in range(len(t_means[i])):
-                if t_means[i][u] is not None:
-                    mean_outermost_ts += t_means[i][u]
+        for i in range(len(t_means_outermost_half)):
+            for u in range(len(t_means_outermost_half[i])):
+                if t_means_outermost_half[i][u] is not None:
+                    mean_outermost_half += t_means_outermost_half[i][u]
                     count_outermost += 1
-        start_inner = angle_vector[-1]
-        for i in range(len(t_means)-1, -1, -1):
-            if (i != len(t_means)-1) and np.allclose(np.array(angle_vector[i]), np.array(start_inner)):
-                break
-            for u in range(len(t_means[i])):
-                if t_means[i][u] is not None:
-                    mean_innermost_ts += t_means[i][u]
+        mean_outermost_half /= count_outermost
+
+        # Compute mean ts value of innermost t values
+        mean_innermost_half = 0.0
+        count_innermost = 0
+        for i in range(len(t_means_innermost_half)):
+            for u in range(len(t_means_innermost_half[i])):
+                if t_means_innermost_half[i][u] is not None:
+                    mean_innermost_half += t_means_innermost_half[i][u]
                     count_innermost += 1
-        if count_outermost > 0:
-            mean_outermost_ts /= count_outermost
-        else:
-            print("No outermost t values found.")
-        if count_innermost > 0:
-            mean_innermost_ts /= count_innermost
-        else:
-            print("No innermost t values found.")
+        mean_innermost_half /= count_innermost
 
         winding_direction = True
-        if mean_innermost_ts > mean_outermost_ts:
-            mean_innermost_ts, mean_outermost_ts = mean_outermost_ts, mean_innermost_ts
+        if mean_innermost_half > mean_outermost_half:
             winding_direction = False
             print("Winding direction is reversed.")
         else:
             print("Winding direction is normal.")
+
+        # compute mean ts value of furthest out t values
+        count = 0
+        mean_innermost_ts = 0.0
+        mean_outermost_ts = 0.0
+
+        computed_vectors_set = set()
+        for i in range(len(t_means)):
+            curve_angle_vector = angle_vector[i]
+            if not tuple(curve_angle_vector) in computed_vectors_set:
+                computed_vectors_set.add(tuple(curve_angle_vector))
+            else:
+                continue
+            # get all indices with the same angle vector
+            same_vector_indices = self.extract_all_same_vector(angle_vector, curve_angle_vector)
+
+            ts_angle = []
+            for j in same_vector_indices:
+                ts_angle += [t for t in t_means[j] if t is not None]
+            if len(ts_angle) == 0:
+                continue
+
+            count += 1
+            mean_innermost_ts += np.min(ts_angle)
+            mean_outermost_ts += np.max(ts_angle)
+        
+        # get mean values
+        if count == 0:
+            print("[ERROR (find_inner_outermost_winding_direction)]: No t values found.")
+            count += 1
+            mean_outermost_ts = 1
+        mean_innermost_ts /= count
+        mean_outermost_ts /= count
 
         print(f"Mean innermost: {mean_innermost_ts}, mean outermost: {mean_outermost_ts}")
         return mean_innermost_ts, mean_outermost_ts, winding_direction
@@ -321,16 +356,16 @@ class WalkToSheet():
                 next_ind = 0 if winding_direction else length_ts - 1
             # Filter based on previous mean
             elif prev_mean is None:
-                prev_mean = next_mean + mean_dist
+                prev_ind = length_ts - 1 if winding_direction else 0
+                prev_mean = next_mean + mean_dist * abs(next_ind - prev_ind) / length_ts
                 if prev_mean > 0.0:
                     prev_mean = 0.0
-                prev_ind = length_ts - 1 if winding_direction else 0
             # Filter based on next mean
             elif next_mean is None:
-                next_mean = prev_mean - mean_dist
+                next_ind = 0 if winding_direction else length_ts - 1
+                next_mean = prev_mean - mean_dist * abs(next_ind - prev_ind) / length_ts
                 if next_mean > 0.0:
                     next_mean = 0.0
-                next_ind = 0 if winding_direction else length_ts - 1
             
             return prev_mean, prev_ind, next_mean, next_ind
 
@@ -368,6 +403,7 @@ class WalkToSheet():
                         interpolated_t = (next_mean - prev_mean) / (next_ind - prev_ind) * (e - prev_ind) + prev_mean
                     else:
                         interpolated_t = next_mean
+                    interpolated_t = min(0.0, interpolated_t)
                     interpolated_ts[j][z] = interpolated_t
                     interpolated_normals[j][z] = normal
                     fixed_points[j][z] = False
@@ -526,7 +562,7 @@ class WalkToSheet():
 
         return t_total
     
-    def respect_non_overlapping(self, i, j, neighbours_dict, interpolated_ts, new_ts_d):
+    def respect_non_overlapping(self, i, j, neighbours_dict, interpolated_ts, new_interpolated_ts, new_ts_d):
         # respect the non-overlapping invariant of the ordered pointset
         def side_of(ts_, n):
             # calculate what side ts_ is wrt to n
@@ -534,6 +570,8 @@ class WalkToSheet():
         old_ts = interpolated_ts[i][j]
         l = neighbours_dict[(i, j)]["left"]
         r = neighbours_dict[(i, j)]["right"]
+        ln = self.value_from_key(l, new_interpolated_ts)
+        rn = self.value_from_key(r, new_interpolated_ts)
         l = self.value_from_key(l, interpolated_ts)
         r = self.value_from_key(r, interpolated_ts)
         if l is not None:
@@ -552,6 +590,22 @@ class WalkToSheet():
                 new_ts_d = r - old_ts
                 # only go 50% of the way
                 new_ts_d *= 0.5
+        if ln is not None:
+            side_old, invalid = side_of(old_ts, ln)
+            assert not invalid, f"old_ts: {old_ts}, ln: {ln}, side: {side_old}"
+            side_new, invalid = side_of(old_ts + new_ts_d, ln)
+            if side_old != side_new:
+                new_ts_d = ln - old_ts
+                # only go 50% of the way
+                new_ts_d *= 0.5
+        if rn is not None:
+            side_old, invalid = side_of(old_ts, rn)
+            assert not invalid, f"old_ts: {old_ts}, rn: {rn}, side: {side_old}"
+            side_new, invalid = side_of(old_ts + new_ts_d, rn)
+            if side_old != side_new:
+                new_ts_d = rn - old_ts
+                # only go 50% of the way
+                new_ts_d *= 0.5
         return new_ts_d
     
     def compute_interpolated_adjacent(self, neighbours_dict, interpolated_ts, fixed_points):
@@ -568,7 +622,7 @@ class WalkToSheet():
                     assert t <= 0.0, f"t is not less than 0: {t}"
                     d_t = t - interpolated_ts[i][j]
                     # the raw d_t might be breaking the non-overlapping invariant
-                    d_t = self.respect_non_overlapping(i, j, neighbours_dict, interpolated_ts, d_t)
+                    d_t = self.respect_non_overlapping(i, j, neighbours_dict, interpolated_ts, new_interpolated_ts, d_t)
                     error_val += abs(d_t)
                     new_interpolated_ts[i][j] = interpolated_ts[i][j] + 0.1 * d_t
         
@@ -641,7 +695,7 @@ class WalkToSheet():
         print(f"Min and max winding angles: {min_wind}, {max_wind}")
 
         # some debugging visualization of seperate pointcloud windings
-        produce_test_pointclouds_windings = False
+        produce_test_pointclouds_windings = True
         if produce_test_pointclouds_windings:
             # remove test folder
             test_folder = os.path.join(self.save_path, "test_winding_angles")
@@ -721,7 +775,7 @@ class WalkToSheet():
         for i in tqdm(range(10000), desc="Optimizing full pointset"):
             interpolated_ts, error_val = self.compute_interpolated_adjacent(neighbours_dict, interpolated_ts, fixed_points)
             print(f"Error value: {error_val}")
-            if last_error_val is not None and abs(last_error_val - error_val) < error_val_d:
+            if last_error_val is not None and ((abs(last_error_val - error_val) < error_val_d) or (last_error_val - error_val < 0)):
                 break
             last_error_val = error_val
 

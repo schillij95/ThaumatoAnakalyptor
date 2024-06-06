@@ -1174,4 +1174,5 @@ def find_starting_patch(sheet_points, path, subvolume_size=50, min_points=1000):
     # return volume id and patch id
     volume_id = np.array(patches_list[min_dist_arg]["ids"][0][:3]).astype(int)
     patch_id = int(patches_list[min_dist_arg]["ids"][0][3])
+    print(f"Starting Node Volume id: {volume_id}, Patch id: {patch_id}")
     return volume_id, patch_id

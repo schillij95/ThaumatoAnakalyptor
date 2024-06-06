@@ -62,6 +62,7 @@ public:
     int max_nr_walks;
     int max_unchanged_walks;
     bool continue_walks;
+    int max_same_block_jump_range;
     int max_steps;
     int max_tries; 
     int min_steps;
@@ -109,6 +110,7 @@ public:
         max_nr_walks = config["max_nr_walks"].as<int>();
         max_unchanged_walks = config["max_unchanged_walks"].as<int>();
         continue_walks = config["continue_walks"].as<bool>();
+        max_same_block_jump_range = config["max_same_block_jump_range"].as<int>();
         max_steps = config["max_steps"].as<int>();
         max_tries = config["max_tries"].as<int>();
         min_steps = config["min_steps"].as<int>();
@@ -155,6 +157,7 @@ public:
         std::cout << "max_nr_walks: " << max_nr_walks << std::endl;
         std::cout << "max_unchanged_walks: " << max_unchanged_walks << std::endl;
         std::cout << "continue_walks: " << continue_walks << std::endl;
+        std::cout << "max_same_block_jump_range: " << max_same_block_jump_range << std::endl;
         std::cout << "max_steps: " << max_steps << std::endl;
         std::cout << "max_tries: " << max_tries << std::endl;
         std::cout << "min_steps: " << min_steps << std::endl;
@@ -183,16 +186,34 @@ using K = int; // Or any appropriate type
 struct Node {
     VolumeID volume_id;           // Struct for VolumeID
     PatchID patch_id;             // Type for PatchID
-    std::shared_ptr<Node> next_nodes[6];          // Array of pointers to next nodes
-    int valid_indices;            // Single integer for 'valid_indices'
-    K k[6];                     // Array of 6 integers for 'k'
+    std::vector<std::shared_ptr<Node>> next_nodes;  // Vector of pointers to next nodes
+    std::vector<std::shared_ptr<Node>> same_block_next_nodes;  // Vector of pointers to next nodes
+    std::vector<K> k;                     // Array of 6 integers for 'k'
+    std::vector<K> same_block_k;                     // Array of 6 integers for 'k'
     float umbilicus_direction[3]; // Array of 3 floats for 'umbilicus_direction'
     float centroid[3];            // Array of 3 floats for 'centroid'
     float distance;               // Single float for 'distance'
-    int index;                 // Single integer for 'index' in 'nodes' vector
+    int index = -1;               // Single integer for 'index' in 'nodes' vector
+    bool is_landmark = false;    // Single boolean for 'is_landmark'
 };
 // Using shared pointers for Node management
 using NodePtr = std::shared_ptr<Node>;
+
+using AggregateKey = std::tuple<int, int, int>;
+
+struct KeyHash {
+    std::size_t operator()(const AggregateKey& key) const {
+        auto [x, y, z] = key;
+        std::size_t res = 17;
+        res = res * 31 + std::hash<int>()(x);
+        res = res * 31 + std::hash<int>()(y);
+        res = res * 31 + std::hash<int>()(z);
+        return res;
+    }
+};
+
+// This type represents the main data structure for storing aggregated connections.
+using AggregatedConnections = std::unordered_map<AggregateKey, int, KeyHash>;
 
 using VolumeDict = std::unordered_map<VolumeID, std::unordered_map<PatchID, std::pair<NodePtr, K>>, VolumeIDHash>;
 bool exists(const VolumeDict& dict, VolumeID volID, PatchID patchID) {
@@ -218,18 +239,18 @@ std::unordered_map<PatchID, std::pair<NodePtr, K>> getAllForVolume(const VolumeD
 using NodeUsageCount = std::unordered_map<NodePtr, std::unordered_map<K, int>>;
 
 
-std::pair<std::vector<NodePtr>, NodePtr> initializeNodes(
-    VolumeID volID,
-    PatchID patchID,
-    py::array_t<int> ids, 
-    py::array_t<int> nextNodes, 
-    py::array_t<int> validIndices,
-    py::array_t<int> kValues, 
-    py::array_t<float> umbilicusDirections,
-    py::array_t<float> centroids
+std::pair<std::vector<NodePtr>, std::vector<NodePtr>> initializeNodes(
+    std::vector<std::vector<int>> start_ids,
+    std::vector<std::vector<int>> ids, 
+    std::vector<std::vector<std::vector<int>>> nextNodes, 
+    std::vector<std::vector<int>> kValues, 
+    std::vector<std::vector<bool>> same_block,
+    std::vector<std::vector<float>> umbilicusDirections,
+    std::vector<std::vector<float>>  centroids
     )
 {
-    size_t n = ids.shape(0); // Assuming the first dimension of each array is 'n'
+    // Assuming the first dimension of each vector is 'n'
+    size_t n = ids.size(); 
     std::vector<NodePtr> nodes;
     nodes.reserve(n); // Reserve space for 'n' nodes
 
@@ -238,14 +259,14 @@ std::pair<std::vector<NodePtr>, NodePtr> initializeNodes(
     // First pass: Initialize nodes
     for (size_t i = 0; i < n; ++i) {
         auto node = std::make_shared<Node>();
-        node->volume_id = {ids.mutable_unchecked<2>()(i, 0), 
-                          ids.mutable_unchecked<2>()(i, 1), 
-                          ids.mutable_unchecked<2>()(i, 2)};
-        node->patch_id = ids.mutable_unchecked<2>()(i, 3);
-        node->valid_indices = validIndices.mutable_unchecked<1>()(i);
-        std::memcpy(node->k, kValues.mutable_unchecked<2>().data(i, 0), 6 * sizeof(int));
-        std::memcpy(node->umbilicus_direction, umbilicusDirections.mutable_unchecked<2>().data(i, 0), 3 * sizeof(float));
-        std::memcpy(node->centroid, centroids.mutable_unchecked<2>().data(i, 0), 3 * sizeof(float));
+        node->volume_id = {ids[i][0], ids[i][1], ids[i][2]};
+        node->patch_id = ids[i][3];
+        node->umbilicus_direction[0] = umbilicusDirections[i][0];
+        node->umbilicus_direction[1] = umbilicusDirections[i][1];
+        node->umbilicus_direction[2] = umbilicusDirections[i][2];
+        node->centroid[0] = centroids[i][0];
+        node->centroid[1] = centroids[i][1];
+        node->centroid[2] = centroids[i][2];
         // Calculate L2 norm for umbilicus_direction
         node->distance = std::sqrt(node->umbilicus_direction[0] * node->umbilicus_direction[0] + node->umbilicus_direction[1] * node->umbilicus_direction[1] + node->umbilicus_direction[2] * node->umbilicus_direction[2]);
         // Index is the index in the 'nodes' vector
@@ -255,55 +276,63 @@ std::pair<std::vector<NodePtr>, NodePtr> initializeNodes(
         volume_dict[node->volume_id][node->patch_id] = std::make_pair(node, -1);
 
         nodes.push_back(node);
-
-        // assert valid indices to be in range 0 to 6 and k values to be in range -1 to 1
-        assert(node->valid_indices >= 0 && node->valid_indices <= 6 && "Valid indices out of range");
-        for (int j = 0; j < node->valid_indices; ++j) {
-            assert(node->k[j] >= -1 && node->k[j] <= 1 && "K values out of range");
-        }
     }
     std::cout << "First pass done" << std::endl;
 
     // Second pass: Set next_nodes pointers
     for (size_t i = 0; i < n; ++i) {
-        for (int j = 0; j < nodes[i]->valid_indices; ++j) {
-            VolumeID nextVolID = {nextNodes.mutable_unchecked<3>()(i, j, 0),
-                                  nextNodes.mutable_unchecked<3>()(i, j, 1),
-                                  nextNodes.mutable_unchecked<3>()(i, j, 2)};
-            PatchID nextPatchID = nextNodes.mutable_unchecked<3>()(i, j, 3);
+        for (int j = 0; j < nextNodes[i].size(); ++j) {
+            VolumeID nextVolID = {nextNodes[i][j][0], nextNodes[i][j][1], nextNodes[i][j][2]};
+            PatchID nextPatchID = nextNodes[i][j][3];
 
             // Find the node with the corresponding VolumeID and PatchID
             if (exists(volume_dict, nextVolID, nextPatchID)) {
-                nodes[i]->next_nodes[j] = getNode(volume_dict, nextVolID, nextPatchID);
+                if (same_block[i][j]) {
+                    nodes[i]->same_block_next_nodes.push_back(getNode(volume_dict, nextVolID, nextPatchID));
+                    nodes[i]->same_block_k.push_back(kValues[i][j]);
+                } else {
+                    nodes[i]->next_nodes.push_back(getNode(volume_dict, nextVolID, nextPatchID));
+                    nodes[i]->k.push_back(kValues[i][j]);
+                }
             } else {
-                nodes[i]->next_nodes[j] = nullptr;
+                std::cout << "Node not found for next node" << std::endl;
+                nodes[i]->next_nodes.push_back(nullptr);
             }
-        }
-        for (int j = nodes[i]->valid_indices; j < 6; ++j) {
-            nodes[i]->next_nodes[j] = nullptr;
         }
     }
     std::cout << "Second pass done" << std::endl;
 
-    // Third pass: Filter out non-reciprocal next_nodes
-    for (size_t i = 0; i < n; ++i) {
-        for (int j = 0; j < nodes[i]->valid_indices; ++j) {
-            NodePtr nextNode = nodes[i]->next_nodes[j];
-            if (nextNode) {
-                bool reciprocal = std::any_of(std::begin(nextNode->next_nodes), std::end(nextNode->next_nodes),
-                                            [&nodes, i](const NodePtr n) {
-                                                return n != nullptr && n->volume_id == nodes[i]->volume_id && n->patch_id == nodes[i]->patch_id;
-                                            });
-                
-                if (!reciprocal) {
-                    nodes[i]->next_nodes[j] = nullptr;
+    if (false) {
+        // Third pass: Filter out non-reciprocal next_nodes
+        for (size_t i = 0; i < n; ++i) {
+            for (int j = 0; j < nodes[i]->next_nodes.size(); ++j) {
+                NodePtr nextNode = nodes[i]->next_nodes[j];
+                if (nextNode) {
+                    bool reciprocal = std::any_of(std::begin(nextNode->next_nodes), std::end(nextNode->next_nodes),
+                                                [&nodes, i](const NodePtr n) {
+                                                    return n != nullptr && n->volume_id == nodes[i]->volume_id && n->patch_id == nodes[i]->patch_id;
+                                                });
+                    
+                    if (!reciprocal) {
+                        nodes[i]->next_nodes[j] = nullptr;
+                    }
                 }
             }
         }
+        std::cout << "Third pass done" << std::endl;
     }
-    std::cout << "Third pass done" << std::endl;
-    NodePtr start_node = getNode(volume_dict, volID, patchID);
-    return std::make_pair(nodes, start_node);
+
+    std::vector<NodePtr> start_nodes;
+
+    for(const auto& id : start_ids) {
+        VolumeID volID = {id[0], id[1], id[2]};
+        PatchID patchID = id[3];
+        NodePtr start_node = getNode(volume_dict, volID, patchID);
+        start_nodes.push_back(start_node);
+    }
+
+    std::cout << "Initialization done" << std::endl;
+    return std::make_pair(nodes, start_nodes);
 }
 
 std::pair<py::array_t<int>, py::array_t<int>> process_result(std::vector<NodePtr>& final_nodes, std::vector<K>& final_ks)
@@ -460,60 +489,113 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::vector<size_t>> pick_start
     return {start_nodes, start_ks, start_indices};
 }
 
+std::tuple<std::vector<NodePtr>, std::vector<K>, std::vector<size_t>> pick_start_nodes_precomputed_pyramid_down(
+    std::uniform_int_distribution<>& distrib,
+    std::vector<NodePtr>& landmark_nodes,
+    std::vector<K>& landmark_ks, 
+    std::vector<NodePtr>& nodes, 
+    std::vector<K>& ks, 
+    std::vector<size_t>& valid_indices,
+    int nr_walks
+    )
+{
+    std::vector<NodePtr> start_nodes;
+    std::vector<K> start_ks;
+    std::vector<size_t> start_indices;
+
+    for (int i = 0; i < nr_walks; ++i) {
+        int p = distrib(gen) % 100;
+        if (p < 10) {
+            int rand_index = distrib(gen) % landmark_nodes.size();
+            NodePtr node = landmark_nodes[rand_index];
+            K k = landmark_ks[rand_index];
+
+            start_nodes.push_back(node);
+            start_ks.push_back(k);
+            start_indices.push_back(rand_index);
+        }
+        else {
+            size_t rand_index = valid_indices[dist_pick(gen)];
+
+            NodePtr node = nodes[rand_index];
+            K k = ks[rand_index];
+
+            if (node->index != rand_index) {
+                std::cout << "Bug in pick_start_nodes_precomputed" << std::endl;
+            }
+
+            start_nodes.push_back(node);
+            start_ks.push_back(k);
+            start_indices.push_back(rand_index);
+        }
+    }
+
+    return {start_nodes, start_ks, start_indices};
+}
+
 void precompute_pick(std::vector<NodePtr>& nodes, std::vector<long>& picked_nrs, std::vector<size_t>& valid_indices) {
     double mean_ = 0.0;
     double min_ = std::numeric_limits<double>::max();
     int count = 0;
     valid_indices.clear();
-    std::vector<size_t> valid_indices_temp;
     for (size_t i = 0; i < picked_nrs.size(); ++i) {
-        int neighbours = 0;
-        for (size_t j = 0; j < nodes[i]->valid_indices; ++j) {
-            if (nodes[i]->next_nodes[j] && nodes[i]->next_nodes[j]->index != -1) {
-                ++neighbours;
-            }
-        }
-        if (neighbours <= 3) {
-            if (neighbours <= 2) { 
-                valid_indices_temp.push_back(i); // possibly pick nodes with 3 or 4 neighbours
-            } else {
-                continue;
-            }
-            // Update mean and min statistics
-            mean_ += (double)picked_nrs[i];
-            count++;
-            if (picked_nrs[i] < min_) {
-                min_ = (double)picked_nrs[i];
-            }
+        // Update mean and min statistics
+        mean_ += (double)picked_nrs[i];
+        count++;
+        if (picked_nrs[i] < min_) {
+            min_ = (double)picked_nrs[i];
         }
     }
 
     mean_ = mean_ / (double)count;  
 
     double min_mean_abs = mean_ - min_;
-    double threshold = min_mean_abs;
+    double threshold = min_ + min_mean_abs * 0.25;
 
-    for (size_t i = 0; i < valid_indices_temp.size(); ++i) {
-        size_t index = valid_indices_temp[i];
-        if ((double)picked_nrs[index] <= threshold) {
-            valid_indices.push_back(index);
+    for (size_t i = 0; i < picked_nrs.size(); ++i) {
+        if ((double)picked_nrs[i] <= threshold) {
+            valid_indices.push_back(i);
         }
     }
     gen = std::mt19937(std::random_device{}());
     dist_pick = std::uniform_int_distribution<size_t>(0, valid_indices.size() - 1);
 }
 
-std::pair<NodePtr, K> pick_next_node(std::mt19937& gen_, std::uniform_int_distribution<>& distrib, const Node& node) {
+std::pair<NodePtr, K> pick_next_node(std::mt19937& gen_, std::uniform_int_distribution<>& distrib, const Node& node, int start_k_diff, int max_same_block_jump_range, bool enable_winding_switch = false) {
     // Check if there are no valid next nodes
-    if (node.valid_indices == -1) {
+    if (node.next_nodes.empty()) {
         return {nullptr, -10};
     }
 
-    // Return the randomly picked valid next node
-    int index = distrib(gen_)%node.valid_indices;
-    auto next_node = node.next_nodes[index];
-    auto k = node.k[index];
-    return {next_node, k};
+    int other_block_pick = (enable_winding_switch && !node.same_block_next_nodes.empty()) ? distrib(gen_) % 100 : 0;
+    if (other_block_pick < 80) {
+        // Return the randomly picked valid next node
+        int index = distrib(gen_)%node.next_nodes.size();
+        NodePtr next_node = node.next_nodes[index];
+        K k = node.k[index];
+        return {next_node, k};
+    }
+    else {
+        float p_dir = (1.0f * start_k_diff) / max_same_block_jump_range;
+        float p_minus = 0.5f + 0.5f * p_dir;
+        p_minus = std::min(1.0f, std::max(0.0f, p_minus));
+        float p_plus = 1.0f - p_minus;
+
+        // pick direction -1 or 1 with probabilities p_minus and p_plus
+        int direction = ((distrib(gen_) % 100) < (p_minus * 100)) ? -1 : 1;
+        assert(direction == -1 || direction == 1);
+
+        for (int i = 0; i < node.same_block_next_nodes.size(); ++i) {
+            // Check that the sign of k is the same as the direction
+            if (node.same_block_k[i] * direction > 0) {
+                NodePtr next_node = node.same_block_next_nodes[i];
+                K k = node.same_block_k[i];
+                return {next_node, k};
+            }
+        }
+        // No valid next node found
+        return {nullptr, -10};
+    }
 }
 
 std::pair<std::vector<VolumeID>, VolumeID> volumes_of_point(
@@ -623,6 +705,39 @@ bool check_overlapp_walk(
     return true;
 }
 
+bool check_inverse_walk(
+    const std::vector<NodePtr>& walk, 
+    const std::vector<K>& ks
+)
+{
+    for (int i = walk.size() - 1; i > 0; --i) {
+        NodePtr node = walk[i];
+        K k = ks[i];
+        NodePtr next_node = walk[i - 1];
+        K next_k = ks[i - 1];
+        K k_dif = next_k - k;
+        // Check if the next node is in the next_nodes or same_block_next_nodes of the current node
+        auto it = std::find(node->next_nodes.begin(), node->next_nodes.end(), next_node);
+        auto it_same_block = std::find(node->same_block_next_nodes.begin(), node->same_block_next_nodes.end(), next_node);
+        if (it == node->next_nodes.end() && it_same_block == node->same_block_next_nodes.end()) {
+            return false;
+        }
+        // Check if the k value is the same
+        if (it != node->next_nodes.end()) {
+            int index = std::distance(node->next_nodes.begin(), it);
+            if (node->k[index] != k_dif) {
+                return false;
+            }
+        } else {
+            int index = std::distance(node->same_block_next_nodes.begin(), it_same_block);
+            if (node->same_block_k[index] != k_dif) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 // std::tuple<std::vector<NodePtr>, std::vector<K>, std::string, bool, bool> random_walk(
 std::tuple<std::vector<NodePtr>, std::vector<K>, bool, bool> random_walk(
     std::mt19937& gen_,
@@ -633,9 +748,11 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, bool, bool> random_walk(
     const Eigen::Vector2f& sheet_z_range, 
     const Eigen::Vector2i& sheet_k_range,
     float max_umbilicus_difference,
+    int max_same_block_jump_range,
     int max_steps = 20, 
     int max_tries = 6, 
-    int min_steps = 5)
+    int min_steps = 5,
+    bool enable_winding_switch = false)
 {
     std::vector<NodePtr> walk = {start_node};
     std::vector<K> ks = {start_k};
@@ -659,7 +776,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, bool, bool> random_walk(
             }
             tries++;
 
-            auto res = pick_next_node(gen_, distrib, *walk.back());
+            auto res = pick_next_node(gen_, distrib, *walk.back(), current_k - start_k, max_same_block_jump_range, enable_winding_switch);
             node_ = res.first;
             k = res.second;
             // continue if nullptr
@@ -670,10 +787,10 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, bool, bool> random_walk(
                 // return {empty_walk, empty_ks, "Inverse loop closure failed", false, false};
                 return {empty_walk, empty_ks, false, false};
             }
-            if (k < -1 || k > 1) {
-                std::cout << "Invalid k value: " << k << std::endl;
-                continue;
-            }
+            // if (k < -1 || k > 1) {
+            //     std::cout << "Invalid k value: " << k << std::endl;
+            //     continue;
+            // }
 
             // std::cout << "Volume id: " << node_->volume_id.x << " " << node_->volume_id.y << " " << node_->volume_id.z << std::endl;
             if (node_->volume_id.y < sheet_z_range[0] || node_->volume_id.y > sheet_z_range[1]) {
@@ -733,7 +850,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, bool, bool> random_walk(
                     if (node_->patch_id == k_prime_pair.first->patch_id) {
                         if (steps >= min_steps) {
                             if (new_node_flag) {
-                                if (check_overlapp_walk(walk, ks, volume_dict, max_umbilicus_difference)) {
+                                if (check_inverse_walk(walk, ks) && check_overlapp_walk(walk, ks, volume_dict, max_umbilicus_difference)) {
                                     // return {walk, ks, "Loop closed successfully", true, true};
                                     return {walk, ks, true, true};
                                 }
@@ -759,13 +876,34 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, bool, bool> random_walk(
                 }
             }
         }
+
+        // Node is also start node
+        if (node_->volume_id == start_node->volume_id && node_->patch_id == start_node->patch_id && current_k == start_k) {
+            if (steps >= min_steps) {
+                if (new_node_flag) {
+                    if (check_inverse_walk(walk, ks) && check_overlapp_walk(walk, ks, volume_dict, max_umbilicus_difference)) {
+                    // if (check_inverse_walk(walk, ks)) { //  && check_overlapp_walk(walk, ks, volume_dict, max_umbilicus_difference) can be ommited since a "normal" random walk has the start node in the volume dict, but not if it is a pyramid random walk
+                        // return {walk, ks, "Loop closed successfully", true, true};
+                        return {walk, ks, true, true};
+                    }
+                    else {
+                        // return {empty_walk, empty_ks, "Loop has bad overlapp", false, false};
+                        return {empty_walk, empty_ks, false, false};
+                    }
+                }
+                else {
+                    // return {walk, ks, "Loop closed with no new nodes", true, false};
+                    return {walk, ks, true, false};
+                }
+            } 
+        }
     }
 
     // return {empty_walk, empty_ks, "Loop not closed in max_steps", false, false};
     return {empty_walk, empty_ks, false, false};
 }
 
-std::tuple<std::vector<NodePtr>, std::vector<K>, bool> walk_aggregation_func(
+std::tuple<int, bool> walk_aggregation_func(
     std::vector<NodePtr>& nodes_final,
     std::vector<K>& ks_final,
     std::vector<long>& picked_nrs,
@@ -797,7 +935,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, bool> walk_aggregation_func(
             }        
 
             if (!check_overlapp_node(node, k, volume_dict, max_umbilicus_difference)) {
-                return {aggregated_nodes, aggregated_ks, false};
+                return {0, false};
             }
 
             aggregated_nodes.push_back(node);
@@ -828,7 +966,41 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, bool> walk_aggregation_func(
         }
     }
 
-    return {aggregated_nodes, aggregated_ks, success};
+    return {aggregated_nodes.size(), success};
+}
+
+void walk_aggregate_connections(
+    const std::vector<NodePtr>& walk,
+    const std::vector<K>& ks,
+    AggregatedConnections &aggregated_connections
+    )
+{
+    NodePtr start_node = walk[0];
+    K start_k = ks[0];
+    int start_index = start_node->index;
+
+    assert(start_node->is_landmark && "First node in walk must be a landmark");
+    for (size_t i = 1; i < walk.size(); ++i) {
+        NodePtr end_node = walk[i];
+        K k = ks[i];
+        K k_inv = -k;
+        int end_index = end_node->index;
+        AggregateKey key = {start_index, end_index, k};
+        AggregateKey key_inv = {end_index, start_index, k_inv};
+        if (!(end_node->is_landmark)) {
+            continue;
+        }
+        assert(end_node->index >= 0 && "End node index must be non-negative");
+
+        // Disregard loopback volume edges
+        if (start_node == end_node) {
+            continue;
+        }
+
+        // Aggregate the connection
+        ++aggregated_connections[key];
+        ++aggregated_connections[key_inv];
+    }
 }
 
 void update_picked_nr(std::vector<NodePtr>& nodes, std::vector<long>& picked_nrs, int index, int value) {
@@ -858,9 +1030,11 @@ ThreadResult threadRandomWalk(
     const Eigen::Vector2f& sheet_z_range, 
     const Eigen::Vector2i& sheet_k_range,
     float max_umbilicus_difference,
+    int max_same_block_jump_range,
     int max_steps = 20, 
     int max_tries = 6, 
-    int min_steps = 5
+    int min_steps = 5,
+    bool enable_winding_switch = false
     )
 {
     std::mt19937 gen_ = std::mt19937(std::random_device{}());
@@ -874,7 +1048,7 @@ ThreadResult threadRandomWalk(
 
     for (int i = 0; i < nrWalks; ++i) {
         // auto [walk, walk_ks, message, success, new_node] = random_walk(gen_, start_nodes[i], start_ks[i], volume_dict, sheet_z_range, sheet_k_range, max_umbilicus_difference, max_steps, max_tries, min_steps);
-        auto [walk, walk_ks, success, new_node] = random_walk(gen_, distrib, start_nodes[i], start_ks[i], volume_dict, sheet_z_range, sheet_k_range, max_umbilicus_difference, max_steps, max_tries, min_steps);
+        auto [walk, walk_ks, success, new_node] = random_walk(gen_, distrib, start_nodes[i], start_ks[i], volume_dict, sheet_z_range, sheet_k_range, max_umbilicus_difference, max_same_block_jump_range, max_steps, max_tries, min_steps, enable_winding_switch);
         walks.push_back(walk);
         ks.push_back(walk_ks);
         // messages.push_back(message);
@@ -888,13 +1062,16 @@ ThreadResult threadRandomWalk(
 
 
 std::tuple<std::vector<NodePtr>, std::vector<K>> solve(
-    NodePtr start_node,
-    K start_k,
+    std::vector<NodePtr> start_nodes,
+    std::vector<K> start_ks,
     Config& config,
-    int walksPerThread = 1000,
-    int numThreads = 28
+    int numThreads = 28,
+    int walksPerThread = 1000
     ) 
 {
+    // TODO: adjust for multiple start nodes, only works for one so far:
+    NodePtr start_node = start_nodes[0];
+
     // Map to count the frequency of each message
     std::unordered_map<std::string, int> message_count;
 
@@ -907,26 +1084,33 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solve(
     int max_nr_walks = config.max_nr_walks;
     int max_unchanged_walks = config.max_unchanged_walks;
     bool continue_walks = config.continue_walks;
+    int max_same_block_jump_range = config.max_same_block_jump_range;
     int max_steps = config.max_steps;
     int max_tries = config.max_tries;
     int min_steps = config.min_steps;
     int min_steps_start = min_steps;
     int min_end_steps = config.min_end_steps;
+    bool enable_winding_switch = config.enableWindingSwitch;
 
     VolumeDict volume_dict;
     std::vector<NodePtr> nodes;
     std::vector<K> ks;
     std::vector<long> picked_nrs;
-    start_node->index = 0;
     std::vector<size_t> valid_indices;
 
     if (!continue_walks) {
-        nodes.push_back(start_node);
-        ks.push_back(start_k);
-        picked_nrs.push_back(0);
+        for (int i = 0; i < start_nodes.size(); ++i) {
+            NodePtr start_node = start_nodes[i];
+            K start_k = start_ks[i];
+            start_node->is_landmark = true;
+            start_node->index = i;
+            nodes.push_back(start_node);
+            ks.push_back(start_k);
+            picked_nrs.push_back(0);
+            volume_dict[start_node->volume_id][start_node->patch_id] = std::make_pair(start_node, start_k);
+        }
         precompute_pick(nodes, picked_nrs, valid_indices);
         // Add start_node to volume_dict
-        volume_dict[start_node->volume_id][start_node->patch_id] = std::make_pair(start_node, start_k);
     }
 
     int nr_unchanged_walks = 0;
@@ -948,7 +1132,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solve(
 
     while (true)
     {
-        std::cout << "\033[1;32m" << "[ThaumatoAnakalyptor]: Starting " << nr_unchanged_walks << " random walk. Nr good nodes: " << nodes.size() << "\033[0m" << std::endl;
+        // std::cout << "\033[1;32m" << "[ThaumatoAnakalyptor]: Starting " << nr_unchanged_walks << " random walk. Nr good nodes: " << nodes.size() << "\033[0m" << std::endl;
         // Display message counts at the end of solve function
         if (total_walks++ % 100 == 0)
         {
@@ -999,7 +1183,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solve(
             auto start_nodes = std::vector<NodePtr>(sns.begin() + i * walksPerThread, sns.begin() + (i + 1) * walksPerThread);
             auto start_ks = std::vector<K>(sks.begin() + i * walksPerThread, sks.begin() + (i + 1) * walksPerThread);
             // futures.push_back(std::async(std::launch::async, threadRandomWalk, std::ref(gen_[i]), walksPerThread, start_nodes, start_ks, volume_dict, sheet_z_range, sheet_k_range, max_umbilicus_difference, max_steps, max_tries, min_steps));
-            futures.push_back(std::async(std::launch::async, threadRandomWalk, walksPerThread, start_nodes, start_ks, volume_dict, sheet_z_range, sheet_k_range, max_umbilicus_difference, max_steps, max_tries, min_steps));
+            futures.push_back(std::async(std::launch::async, threadRandomWalk, walksPerThread, start_nodes, start_ks, volume_dict, sheet_z_range, sheet_k_range, max_umbilicus_difference, max_same_block_jump_range, max_steps, max_tries, min_steps, enable_winding_switch));
         }
 
         // auto [walk, walk_ks, success] = random_walk(sn, sk, volume_dict, sheet_z_range, sheet_k_range, max_umbilicus_difference, max_steps, max_tries, min_steps);
@@ -1056,7 +1240,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solve(
                 continue;
             }
 
-            auto [walk_aggregated, walk_ks_aggregated, success_aggregated] = walk_aggregation_func(
+            auto [walk_aggregated_size, success_aggregated] = walk_aggregation_func(
                 nodes, ks, picked_nrs, walk, walk_ks, volume_dict, node_usage_count, max_umbilicus_difference, walk_aggregation_threshold);
 
             if (!success_aggregated) {
@@ -1068,7 +1252,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solve(
             }
 
             nr_unchanged_walks = 0;
-            walk_aggregation_count += walk_aggregated.size();
+            walk_aggregation_count += walk_aggregated_size;
 
             
             // yellow color
@@ -1081,6 +1265,317 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solve(
     }
     return {nodes, ks};
 }
+
+AggregatedConnections solveUp(
+    std::vector<NodePtr> landmark_nodes,
+    Config& config,
+    int numThreads = 28,
+    int walksPerThread = 1000
+    ) 
+{
+    // Map to count the frequency of each message
+    std::unordered_map<std::string, int> message_count;
+    AggregatedConnections aggregated_connections;
+
+    // Extracting parameters from config
+    const Eigen::Vector2f& sheet_z_range = config.sheetZRange;
+    const Eigen::Vector2i& sheet_k_range = config.sheetKRange;
+    float max_umbilicus_difference = config.maxUmbilicusDifference;
+    int walk_aggregation_threshold = config.walkAggregationThreshold;
+    int walk_aggregation_max_current = config.walkAggregationMaxCurrent;
+    int max_nr_walks = config.max_nr_walks;
+    int max_unchanged_walks = config.max_unchanged_walks;
+    bool continue_walks = config.continue_walks;
+    int max_same_block_jump_range = config.max_same_block_jump_range;
+    int max_steps = config.max_steps;
+    int max_tries = config.max_tries;
+    int min_steps = config.min_steps;
+    int min_steps_start = min_steps;
+    int min_end_steps = config.min_end_steps;
+    bool enable_winding_switch = config.enableWindingSwitch;
+
+    VolumeDict volume_dict;
+    std::vector<NodePtr> nodes;
+    std::vector<K> ks;
+    std::vector<long> picked_nrs;
+    std::vector<size_t> valid_indices;
+
+    for (int i = 0; i < landmark_nodes.size(); ++i) {
+        NodePtr landmark_node = landmark_nodes[i];
+        landmark_node->is_landmark = true;
+        landmark_node->index = i;
+        nodes.push_back(landmark_node);
+        ks.push_back(0);
+        picked_nrs.push_back(0);
+    }
+    precompute_pick(nodes, picked_nrs, valid_indices);
+
+    int nr_unchanged_walks = 0;
+    NodeUsageCount node_usage_count; // Map to track node usage count with specific k values
+    int walk_aggregation_count = 0;
+    int total_walks = 0;
+    int nrWalks = walksPerThread * numThreads;
+
+    // numm threads gens
+    std::vector<std::mt19937> gen_;
+    // making initialization distribution between 0 and 1000000
+    std::uniform_int_distribution<> dist(0, 1000000);
+    
+    for (int i = 0; i < numThreads; ++i) {
+        // std::mt19937 gen_t_(std::random_device{}());
+        // fixed seed
+        std::mt19937 gen_t_(dist(gen));
+        gen_.push_back(gen_t_);
+    }
+
+    while (total_walks * nrWalks < max_nr_walks * landmark_nodes.size())
+    {
+        // std::cout << "\033[1;32m" << "[ThaumatoAnakalyptor]: Starting " << nr_unchanged_walks << " random walk. Nr good nodes: " << nodes.size() << "\033[0m" << std::endl;
+        // Display message counts at the end of solve function
+        if (total_walks++ % 100 == 0)
+        {
+            std::cout << "\033[1;36m" << "[ThaumatoAnakalyptor]: Random Walk Messages Summary:" << "\033[0m" << std::endl;
+            for (const auto& pair : message_count) {
+                std::cout << "\033[1;36m" << "  \"" << pair.first << "\": " << pair.second << "\033[0m" << std::endl;
+            }
+            std::cout << "\033[1;32m" << "[ThaumatoAnakalyptor]: Starting " << nr_unchanged_walks << " random walk. Nr good nodes: " << nodes.size() << "\033[0m" << std::endl;
+        }
+
+        // pick nrWalks start nodes
+        std::vector<NodePtr> sns;
+        std::vector<K> sks;
+        std::vector<size_t> indices_s;
+        std::tie(sns, sks, indices_s) = pick_start_nodes_precomputed(nodes, ks, valid_indices, nrWalks);
+
+        std::vector<std::future<ThreadResult>> futures;
+        for (int i = 0; i < numThreads; ++i) {
+            auto start_nodes = std::vector<NodePtr>(sns.begin() + i * walksPerThread, sns.begin() + (i + 1) * walksPerThread);
+            auto start_ks = std::vector<K>(sks.begin() + i * walksPerThread, sks.begin() + (i + 1) * walksPerThread);
+            // futures.push_back(std::async(std::launch::async, threadRandomWalk, std::ref(gen_[i]), walksPerThread, start_nodes, start_ks, volume_dict, sheet_z_range, sheet_k_range, max_umbilicus_difference, max_steps, max_tries, min_steps));
+            futures.push_back(std::async(std::launch::async, threadRandomWalk, walksPerThread, start_nodes, start_ks, volume_dict, sheet_z_range, sheet_k_range, max_umbilicus_difference, max_same_block_jump_range, max_steps, max_tries, min_steps, enable_winding_switch));
+        }
+
+        std::vector<std::vector<NodePtr>> walks_futures;
+        std::vector<std::vector<K>> walk_ks_futures;
+        // std::vector<std::string> messages_futures;
+        std::vector<bool> successes_futures;
+        std::vector<bool> new_nodes_futures;
+        for (auto& future : futures) {
+            // auto [walks_, walk_ks_, messages_, successes_, new_nodes_] = future.get();
+            auto [walks_, walk_ks_, successes_, new_nodes_] = future.get();
+            for (size_t i = 0; i < walks_.size(); ++i) {
+                walks_futures.push_back(walks_[i]);
+                walk_ks_futures.push_back(walk_ks_[i]);
+                // messages_futures.push_back(messages_[i]);
+                successes_futures.push_back(successes_[i]);
+                new_nodes_futures.push_back(new_nodes_[i]);
+            }
+        }
+
+        // Loop over all the walks by iterating trough them
+        for (size_t i = 0; i < walks_futures.size(); ++i) {
+            auto& walk = walks_futures[i];
+            auto& walk_ks = walk_ks_futures[i];
+            bool success = successes_futures[i];
+            bool new_node = new_nodes_futures[i];
+
+            // Post-processing after each walk
+            if (!success) {
+                nr_unchanged_walks++;
+                // Handle unsuccessful walk
+                continue;
+            }
+
+            if (!new_node) {
+                nr_unchanged_walks++;
+                continue;
+            }
+
+            walk_aggregate_connections(walk, walk_ks, aggregated_connections);
+
+            nr_unchanged_walks = 0;
+        }
+    }
+    return aggregated_connections;
+}
+
+std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
+    int graph_n,
+    std::vector<NodePtr> start_nodes,
+    std::vector<K> start_ks,
+    Config& config,
+    int nr_walks_per_node,
+    int numThreads = 28,
+    int walksPerThread = 1000
+    ) 
+{
+    // TODO: adjust for multiple start nodes, only works for one so far:
+    NodePtr start_node = start_nodes[0];
+
+    // Map to count the frequency of each message
+    std::unordered_map<std::string, int> message_count;
+
+    // Extracting parameters from config
+    const Eigen::Vector2f& sheet_z_range = config.sheetZRange;
+    const Eigen::Vector2i& sheet_k_range = config.sheetKRange;
+    float max_umbilicus_difference = config.maxUmbilicusDifference;
+    int walk_aggregation_threshold = config.walkAggregationThreshold;
+    int walk_aggregation_max_current = config.walkAggregationMaxCurrent;
+    int max_nr_walks = config.max_nr_walks;
+    int max_unchanged_walks = config.max_unchanged_walks;
+    bool continue_walks = config.continue_walks;
+    int max_same_block_jump_range = config.max_same_block_jump_range;
+    int max_steps = config.max_steps;
+    int max_tries = config.max_tries;
+    int min_steps = config.min_steps;
+    int min_steps_start = min_steps;
+    int min_end_steps = config.min_end_steps;
+    bool enable_winding_switch = config.enableWindingSwitch;
+
+    VolumeDict volume_dict;
+    std::vector<NodePtr> nodes;
+    std::vector<K> ks;
+    std::vector<long> picked_nrs;
+    std::vector<size_t> valid_indices;
+
+    if (!continue_walks) {
+        for (int i = 0; i < start_nodes.size(); ++i) {
+            NodePtr start_node = start_nodes[i];
+            K start_k = start_ks[i];
+            start_node->is_landmark = true;
+            start_node->index = i;
+            nodes.push_back(start_node);
+            ks.push_back(start_k);
+            picked_nrs.push_back(0);
+            volume_dict[start_node->volume_id][start_node->patch_id] = std::make_pair(start_node, start_k);
+        }
+        precompute_pick(nodes, picked_nrs, valid_indices);
+        // Add start_node to volume_dict
+    }
+
+    int nr_unchanged_walks = 0;
+    NodeUsageCount node_usage_count; // Map to track node usage count with specific k values
+    int walk_aggregation_count = 0;
+    int total_walks = 0;
+    int nrWalks = walksPerThread * numThreads;
+    int nr_node_walks = nr_walks_per_node * graph_n;
+
+    // numm threads gens
+    std::vector<std::mt19937> gen_;
+    // making initialization distribution between 0 and 1000000
+    std::uniform_int_distribution<> dist(0, 1000000);
+    
+    for (int i = 0; i < numThreads; ++i) {
+        // std::mt19937 gen_t_(std::random_device{}());
+        // fixed seed
+        std::mt19937 gen_t_(dist(gen));
+        gen_.push_back(gen_t_);
+    }
+
+    while ((total_walks * nrWalks < nr_node_walks) && (max_nr_walks > 0))
+    {
+        // std::cout << "\033[1;32m" << "[ThaumatoAnakalyptor]: Starting " << nr_unchanged_walks << " random walk. Nr good nodes: " << nodes.size() << "\033[0m" << std::endl;
+        // Display message counts at the end of solve function
+        if (total_walks++ % 100 == 0)
+        {
+            std::cout << "\033[1;36m" << "[ThaumatoAnakalyptor]: Random Walk Messages Summary:" << "\033[0m" << std::endl;
+            for (const auto& pair : message_count) {
+                std::cout << "\033[1;36m" << "  \"" << pair.first << "\": " << pair.second << "\033[0m" << std::endl;
+            }
+            std::cout << "\033[1;32m" << "[ThaumatoAnakalyptor]: Starting " << nr_unchanged_walks << " random walk. Nr good nodes: " << nodes.size() << "\033[0m" << std::endl;
+        }
+        if (nr_unchanged_walks > max_unchanged_walks && walk_aggregation_count != 0) { //  && (/* More checks*/)
+            nr_unchanged_walks = 0;
+            // set picked_nrs to 0
+            for (size_t i = 0; i < picked_nrs.size(); ++i) {
+                picked_nrs[i] = 0;
+            }
+            precompute_pick(nodes, picked_nrs, valid_indices);
+        }
+
+        // pick nrWalks start nodes
+        std::vector<NodePtr> sns;
+        std::vector<K> sks;
+        std::vector<size_t> indices_s;
+        int nrWalks = walksPerThread * numThreads;
+        std::tie(sns, sks, indices_s) = pick_start_nodes_precomputed_pyramid_down(dist, start_nodes, start_ks, nodes, ks, valid_indices, nrWalks);
+        for (size_t i = 0; i < indices_s.size(); ++i) {
+            update_picked_nr(nodes, picked_nrs, indices_s[i], 1);
+        }
+
+
+        std::vector<std::future<ThreadResult>> futures;
+        for (int i = 0; i < numThreads; ++i) {
+            auto start_nodes = std::vector<NodePtr>(sns.begin() + i * walksPerThread, sns.begin() + (i + 1) * walksPerThread);
+            auto start_ks = std::vector<K>(sks.begin() + i * walksPerThread, sks.begin() + (i + 1) * walksPerThread);
+            // futures.push_back(std::async(std::launch::async, threadRandomWalk, std::ref(gen_[i]), walksPerThread, start_nodes, start_ks, volume_dict, sheet_z_range, sheet_k_range, max_umbilicus_difference, max_steps, max_tries, min_steps));
+            futures.push_back(std::async(std::launch::async, threadRandomWalk, walksPerThread, start_nodes, start_ks, volume_dict, sheet_z_range, sheet_k_range, max_umbilicus_difference, max_same_block_jump_range, max_steps, max_tries, min_steps, enable_winding_switch));
+        }
+
+        std::vector<std::vector<NodePtr>> walks_futures;
+        std::vector<std::vector<K>> walk_ks_futures;
+        // std::vector<std::string> messages_futures;
+        std::vector<bool> successes_futures;
+        std::vector<bool> new_nodes_futures;
+        for (auto& future : futures) {
+            // auto [walks_, walk_ks_, messages_, successes_, new_nodes_] = future.get();
+            auto [walks_, walk_ks_, successes_, new_nodes_] = future.get();
+            for (size_t i = 0; i < walks_.size(); ++i) {
+                walks_futures.push_back(walks_[i]);
+                walk_ks_futures.push_back(walk_ks_[i]);
+                // messages_futures.push_back(messages_[i]);
+                successes_futures.push_back(successes_[i]);
+                new_nodes_futures.push_back(new_nodes_[i]);
+            }
+        }
+
+        // Loop over all the walks by iterating trough them
+        bool total_aggregation_success = false;
+        for (size_t i = 0; i < walks_futures.size(); ++i) {
+            auto& walk = walks_futures[i];
+            auto& walk_ks = walk_ks_futures[i];
+            bool success = successes_futures[i];
+            bool new_node = new_nodes_futures[i];
+
+            // Post-processing after each walk
+            if (!success) {
+                nr_unchanged_walks++;
+                // Handle unsuccessful walk
+                continue;
+            }
+
+            // update the picked_nr of each node in the walk -/+5 depending on the success
+            for (NodePtr node : walk) {
+                update_picked_nr(nodes, picked_nrs, node->index, new_node ? -5 : 5);
+            }
+
+            if (!new_node) {
+                nr_unchanged_walks++;
+                continue;
+            }
+
+            auto [walk_aggregated_size, success_aggregated] = walk_aggregation_func(
+                nodes, ks, picked_nrs, walk, walk_ks, volume_dict, node_usage_count, max_umbilicus_difference, walk_aggregation_threshold);
+
+            if (!success_aggregated) {
+                nr_unchanged_walks++;
+                continue;
+            }
+            else {
+                total_aggregation_success = true;
+            }
+
+            nr_unchanged_walks = 0;
+            walk_aggregation_count += walk_aggregated_size;
+        }
+        // Update valid_indices from picked_nrs
+        if (total_aggregation_success) {
+            precompute_pick(nodes, picked_nrs, valid_indices);
+        }
+    }
+    return {nodes, ks};
+}
+
 
 std::pair<std::vector<double>, std::vector<double>> process_array(py::array_t<double> input_array, int some_integer, bool some_boolean) {
     // Example processing (to be replaced with actual logic)
@@ -1133,12 +1628,12 @@ std::pair<py::array_t<int>, py::array_t<int>> solveRandomWalk(
     int vol3,
     int patchID,
     const std::string &overlappThresholdFile,
-    py::array_t<int> ids, 
-    py::array_t<int> nextNodes, 
-    py::array_t<int> validIndices,
-    py::array_t<int> kValues, 
-    py::array_t<float> umbilicusDirections,
-    py::array_t<float> centroids) 
+    std::vector<std::vector<int>> ids, 
+    std::vector<std::vector<std::vector<int>>> nextNodes, 
+    std::vector<std::vector<int>> kValues, 
+    std::vector<std::vector<bool>> same_block,
+    std::vector<std::vector<float>> umbilicusDirections,
+    std::vector<std::vector<float>>  centroids) 
 {
     std::cout << "Begin solveRandomWalk" << std::endl;
     std::cout << "Starting node: " << vol1 << " " << vol2 << " " << vol3 << " " << patchID << std::endl;
@@ -1151,15 +1646,112 @@ std::pair<py::array_t<int>, py::array_t<int>> solveRandomWalk(
 
     std::cout << "Config loaded" << std::endl;
 
-    auto init_res = initializeNodes(start_vol_id, start_patchID, ids, nextNodes, validIndices, kValues, umbilicusDirections, centroids);
+    std::vector<std::vector<int>> start_ids = {{vol1, vol2, vol3, patchID}};
+
+    auto init_res = initializeNodes(start_ids, ids, nextNodes, kValues, same_block, umbilicusDirections, centroids);
     std::vector<NodePtr> nodes = init_res.first;
-    NodePtr start_node = init_res.second;
+    std::vector<NodePtr> start_nodes = init_res.second;
 
     std::cout << "Nodes initialized" << std::endl;
 
-    K start_k = 0; // Modify as needed
+    std::vector<K> start_ks = {0};
 
-    auto [final_nodes, final_ks] = solve(start_node, start_k, config);
+    const size_t numThreads = (std::thread::hardware_concurrency() * 2) / 3;
+    auto [final_nodes, final_ks] = solve(start_nodes, start_ks, config, numThreads);
+
+    std::cout << "Solve done" << std::endl;
+
+    // Convert final_nodes and final_ks to a format suitable for Python
+    return process_result(final_nodes, final_ks);
+}
+
+AggregatedConnections solvePyramidRandomWalkUp(
+    std::vector<std::vector<int>> landmark_ids,
+    const std::string &overlappThresholdFile,
+    std::vector<std::vector<int>> ids, 
+    std::vector<std::vector<std::vector<int>>> nextNodes, 
+    std::vector<std::vector<int>> kValues, 
+    std::vector<std::vector<bool>> same_block,
+    std::vector<std::vector<float>> umbilicusDirections,
+    std::vector<std::vector<float>>  centroids,
+    int max_nr_walks,
+    int max_steps,
+    int max_tries,
+    int min_steps
+    ) 
+{
+    std::cout << "Begin solvePyramidRandomWalkUp" << std::endl;
+
+    Config config;
+    config.load(overlappThresholdFile);
+
+    // adjust config parameters
+    config.max_nr_walks = max_nr_walks;
+    config.max_steps = max_steps;
+    config.max_tries = max_tries;
+    config.min_steps = min_steps;
+
+    // config.print();
+
+    std::cout << "Config loaded" << std::endl;
+
+    auto init_res = initializeNodes(landmark_ids, ids, nextNodes, kValues, same_block, umbilicusDirections, centroids);
+    std::vector<NodePtr> nodes = init_res.first;
+    std::vector<NodePtr> start_nodes = init_res.second;
+
+    std::cout << "Nodes initialized" << std::endl;
+
+    const size_t numThreads = (std::thread::hardware_concurrency() * 2) / 3;
+    AggregatedConnections agg_con = solveUp(start_nodes, config, numThreads);
+
+    std::cout << "Solve done" << std::endl;
+
+    return agg_con;
+}
+
+std::pair<py::array_t<int>, py::array_t<int>> solvePyramidRandomWalkDown(
+    std::vector<std::vector<int>> landmark_ids,
+    std::vector<int> landmark_ks,
+    const std::string &overlappThresholdFile,
+    std::vector<std::vector<int>> ids, 
+    std::vector<std::vector<std::vector<int>>> nextNodes, 
+    std::vector<std::vector<int>> kValues, 
+    std::vector<std::vector<bool>> same_block,
+    std::vector<std::vector<float>> umbilicusDirections,
+    std::vector<std::vector<float>>  centroids,
+    int max_nr_walks,
+    int nr_walks_per_node,
+    int max_unchanged_walks,
+    int max_steps,
+    int max_tries,
+    int min_steps,
+    int min_end_steps
+    ) 
+{
+    std::cout << "Begin solvePyramidRandomWalkDown" << std::endl;
+
+    Config config;
+    config.load(overlappThresholdFile);
+
+    // adjust config parameters
+    config.max_nr_walks = max_nr_walks;
+    config.max_unchanged_walks = max_unchanged_walks;
+    config.max_steps = max_steps;
+    config.max_tries = max_tries;
+    config.min_steps = min_steps;
+
+    // config.print();
+
+    std::cout << "Config loaded" << std::endl;
+
+    auto init_res = initializeNodes(landmark_ids, ids, nextNodes, kValues, same_block, umbilicusDirections, centroids);
+    std::vector<NodePtr> nodes = init_res.first;
+    std::vector<NodePtr> landmark_nodes = init_res.second;
+
+    std::cout << "Nodes initialized" << std::endl;
+
+    const size_t numThreads = (std::thread::hardware_concurrency() * 2) / 3;
+    auto [final_nodes, final_ks] = solveDown(nodes.size(), landmark_nodes, landmark_ks, config, nr_walks_per_node, numThreads);
 
     std::cout << "Solve done" << std::endl;
 
@@ -2103,6 +2695,10 @@ std::pair<py::array_t<int>, double> build_graph_from_individual_patch_init(
 
 PYBIND11_MODULE(sheet_generation, m) {
     m.doc() = "pybind11 random walk solver for ThaumatoAnakalyptor"; // Optional module docstring
+
+    m.def("solve_pyramid_random_walk_up", &solvePyramidRandomWalkUp, "Function to solve the pyramid random walk up problem in C++");
+
+    m.def("solve_pyramid_random_walk_down", &solvePyramidRandomWalkDown, "Function to the pyramid random walk down problem in C++");
 
     m.def("solve_random_walk", &solveRandomWalk, "Function to solve random walk problem in C++");
 

@@ -18,10 +18,10 @@ from ezdxf.math import Vec3
 
 from .instances_to_sheets import select_points, get_vector_mean, alpha_angles, adjust_angles_zero, adjust_angles_offset, add_overlapp_entries_to_patches_list, assign_points_to_tiles, compute_overlap_for_pair, overlapp_score, fit_sheet, winding_switch_sheet_score_raw_precomputed_surface, find_starting_patch, save_main_sheet, update_main_sheet
 from .sheet_to_mesh import load_xyz_from_file, scale_points, umbilicus_xz_at_y
-# import sys
-### C++ speed up. not yet fully implemented
-# sys.path.append('sheet_generation/build')
-# import sheet_generation
+import sys
+### C++ speed up Random Walks
+sys.path.append('ThaumatoAnakalyptor/sheet_generation/build')
+import sheet_generation
 
 def unit_vector(vector):
     """ Returns the unit vector of the vector.  """
@@ -360,6 +360,8 @@ class Graph:
         self.compute_node_edges()
         
     def update_winding_angles(self, nodes, ks, update_winding_angles=False):
+        ks_min = np.min(ks)
+        ks = np.array(ks) - ks_min
         # Update winding angles
         for i, node in enumerate(nodes):
             node = tuple(node)
@@ -1146,6 +1148,55 @@ class RandomWalkSolver:
         # Define a wrapper function for umbilicus_xz_at_y
         self.umbilicus_func = lambda z: umbilicus_xz_at_y(umbilicus_data, z)
 
+    def translate_data_to_cpp_v2(self, graph, overlapp_threshold):
+        """
+        Prepares graph data, solver parameters, and overlap threshold for C++ processing.
+
+        :param graph: A graph object with nodes and edges.
+        :param overlapp_threshold: Dictionary of overlap threshold parameters.
+        :return: Data structures suitable for C++ processing.
+        """
+
+        nodes = [[int(n) for n in node] for node in graph.nodes]
+        next_nodes = []
+        k_values = []
+        same_block = []
+        umbilicusDirections = []
+        centroids = []
+        for node in tqdm(graph.nodes, desc="Translating data to C++"):
+            node_next_nodes = []
+            node_k_values = []
+            node_same_block = []
+            edges = graph.nodes[node]['edges']
+            for edge in edges:
+                flip_k = edge[0] != node
+                next_node = edge[0] if edge[0] != node else edge[1]
+                ks = graph.get_edge_ks(node, next_node)
+                # get k of ks with max certainty
+                k = max(ks, key=lambda k: graph.edges[edge][-k if flip_k else k]['certainty'])
+                k_edge = -k if flip_k else k
+                # continue if bad edge
+                if graph.edges[edge][k_edge]['bad_edge']:
+                    continue
+
+                node_next_nodes.append([int(n) for n in next_node])
+                node_k_values.append(int(k))
+                same_block_ = graph.edges[edge][k_edge]['same_block']
+                node_same_block.append(bool(same_block_))
+
+            next_nodes.append(node_next_nodes)
+            k_values.append(node_k_values)
+            same_block.append(node_same_block)
+            umbilicusDirections.append([float(c_vec) for c_vec in self.centroid_vector(self.graph.nodes[node])])
+            centroids.append([float(c) for c in graph.nodes[node]['centroid']])
+
+        # Prepare overlap threshold
+        overlapp_threshold_filename = 'overlapp_threshold.yaml'
+        with open(overlapp_threshold_filename, 'w') as file:
+            yaml.dump(overlapp_threshold, file)
+
+        return overlapp_threshold_filename, nodes, next_nodes, k_values, same_block, umbilicusDirections, centroids 
+
     def translate_data_to_cpp(self, recompute_translation=True):
         """
         Prepares graph data, solver parameters, and overlap threshold for C++ processing.
@@ -1245,15 +1296,15 @@ class RandomWalkSolver:
 
         return nodes, ks
 
-    def solve_cpp(self, path, starting_node, max_nr_walks=100, max_unchanged_walks=10000, max_steps=100, max_tries=6, min_steps=10, min_end_steps=4, continue_walks=False, nodes=None, ks=None):
-        ### C++ RW, not yet fully implemented on the cpp side
-        # try:
-        #     nodes_array, ks_array = sheet_generation.solve_random_walk(*starting_node, *self.translate_data_to_cpp(recompute_translation=False))
-        # except Exception as e:
-        #     print(f"Error: {e}")
-        #     raise e
-        # return nodes_array, ks_array
-        return None, None
+    def solve_cpp(self, starting_node):
+        ### C++ RW, should work
+        try:
+            nodes_array, ks_array = sheet_generation.solve_random_walk(*starting_node, *self.translate_data_to_cpp_v2(self.graph, self.graph.overlapp_threshold))
+        except Exception as e:
+            print(f"Error: {e}")
+            raise e
+        return nodes_array, ks_array
+        # return None, None
 
     def solve(self, path, starting_node, max_nr_walks=100, max_unchanged_walks=10000, max_steps=100, max_tries=6, min_steps=10, min_end_steps=4, continue_walks=False, nodes=None, ks=None, k_step_size=8):
         k_step_size_half = k_step_size // 2
@@ -1949,7 +2000,7 @@ class RandomWalkSolver:
         # self.graph.save_graph(path.replace("blocks", "graph_RW_solved") + ".pkl")
         print(f"\033[94m[ThaumatoAnakalyptor]:\033[0m Saved")
 
-def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_translation=False, stop_event=None):
+def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_translation=False, stop_event=None, toy_problem=False):
 
     umbilicus_path = os.path.dirname(path) + "/umbilicus.txt"
     start_block, patch_id = find_starting_patch([start_point], path)
@@ -1985,7 +2036,12 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
         
     solve_graph = True
     if solve_graph:
-        scroll_graph = load_graph(recompute_path)
+        if toy_problem:
+            scroll_graph = load_graph(save_path.replace("blocks", "subgraph") + ".pkl")
+        else:
+            scroll_graph = load_graph(recompute_path)
+        # scroll_graph = load_graph(recompute_path)
+        # scroll_graph = load_graph(save_path.replace("blocks", "subgraph") + ".pkl")
         if overlapp_threshold["continue_walks"]:
             nodes = np.load(save_path.replace("blocks", "graph_RW") + "_nodes.npy")
             ks = np.load(save_path.replace("blocks", "graph_RW") + "_ks.npy")
@@ -2000,7 +2056,9 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
 
         solver = RandomWalkSolver(scroll_graph, umbilicus_path)
         solver.save_overlapp_threshold()
-        nodes, ks = solver.solve_(path=save_path, starting_node=starting_node, max_nr_walks=overlapp_threshold["max_nr_walks"], max_unchanged_walks=overlapp_threshold["max_unchanged_walks"], max_steps=overlapp_threshold["max_steps"], max_tries=overlapp_threshold["max_tries"], min_steps=overlapp_threshold["min_steps"], min_end_steps=overlapp_threshold["min_end_steps"], continue_walks=overlapp_threshold["continue_walks"], nodes=nodes, ks=ks, stop_event=stop_event)
+        
+        # nodes, ks = solver.solve_(path=save_path, starting_node=starting_node, max_nr_walks=overlapp_threshold["max_nr_walks"], max_unchanged_walks=overlapp_threshold["max_unchanged_walks"], max_steps=overlapp_threshold["max_steps"], max_tries=overlapp_threshold["max_tries"], min_steps=overlapp_threshold["min_steps"], min_end_steps=overlapp_threshold["min_end_steps"], continue_walks=overlapp_threshold["continue_walks"], nodes=nodes, ks=ks, stop_event=stop_event)
+        nodes, ks = solver.solve_cpp(starting_node=starting_node)
         
         # Update the solved scroll graph with the nodes and ks. Remove unused nodes and update winding angles
         scroll_graph.remove_unused_nodes(used_nodes=nodes)
@@ -2022,6 +2080,8 @@ def random_walks():
     start_point=[1650, 3300, 5000] # seg 1
     start_point=[1450, 3500, 5000] # seg 2
     start_point=[1350, 3600, 5000] # seg 3
+    start_point=[2500, 2500, 2500] # subgraph scroll 3
+    
     continue_segmentation = 0
     overlapp_threshold = {"sample_ratio_score": 0.03, "display": False, "print_scores": True, "picked_scores_similarity": 0.7, "final_score_max": 1.5, "final_score_min": 0.0005, "score_threshold": 0.005, "fit_sheet": False, "cost_threshold": 17, "cost_percentile": 75, "cost_percentile_threshold": 14, 
                           "cost_sheet_distance_threshold": 4.0, "rounddown_best_score": 0.005,
@@ -2074,6 +2134,7 @@ def random_walks():
     parser.add_argument('--max_umbilicus_dif', type=float,help=f'Maximum difference in umbilicus distance between two patches to be considered valid. Default is {overlapp_threshold["max_umbilicus_difference"]}.', default=overlapp_threshold["max_umbilicus_difference"])
     parser.add_argument('--walk_aggregation_threshold', type=int,help=f'Number of random walks to aggregate before updating the graph. Default is {overlapp_threshold["walk_aggregation_threshold"]}.', default=int(overlapp_threshold["walk_aggregation_threshold"]))
     parser.add_argument('--walk_aggregation_max_current', type=int,help=f'Maximum number of random walks to aggregate before updating the graph. Default is {overlapp_threshold["walk_aggregation_max_current"]}.', default=int(overlapp_threshold["walk_aggregation_max_current"]))
+    parser.add_argument('--toy_problem', help='Create toy subgraph for development', action='store_true')
 
     # Take arguments back over
     args = parser.parse_args()
@@ -2117,7 +2178,7 @@ def random_walks():
 
 
     # Compute
-    compute(overlapp_threshold=overlapp_threshold, start_point=start_point, path=path, recompute=recompute, compute_cpp_translation=compute_cpp_translation)
+    compute(overlapp_threshold=overlapp_threshold, start_point=start_point, path=path, recompute=recompute, compute_cpp_translation=compute_cpp_translation, toy_problem=args.toy_problem)
 
 if __name__ == '__main__':
     random_walks()
