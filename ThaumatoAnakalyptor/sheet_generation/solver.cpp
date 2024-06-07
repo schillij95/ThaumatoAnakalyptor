@@ -496,7 +496,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::vector<size_t>> pick_start
 
     for (int i = 0; i < nr_walks; ++i) {
         int p = distrib(gen) % 100;
-        if (p < 10) {
+        if (p < 15) {
             int rand_index = distrib(gen) % landmark_nodes.size();
             NodePtr node = landmark_nodes[rand_index];
             K k = landmark_ks[rand_index];
@@ -1496,7 +1496,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
     int walksPerThread = 1000
     ) 
 {
-
+    std::cout << "\033[1;32m" << "[ThaumatoAnakalyptor]: Starting solveDown with " << graph_n << " nodes. And walks per node: " << nr_walks_per_node << "\033[0m" << std::endl;
 
     // TODO: adjust for multiple start nodes, only works for one so far:
     NodePtr start_node = start_nodes[0];
@@ -1568,7 +1568,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
     double duration4 = 0;
     int count_durations = 0;
 
-    while (((total_walks < 300) || (total_walks * nrWalks < nr_node_walks)) && (max_nr_walks > 0))
+    while (((total_walks < 1000) || (total_walks * nrWalks < nr_node_walks)) && (max_nr_walks > 0))
     {
         auto start = std::chrono::high_resolution_clock::now();
         // std::cout << "\033[1;32m" << "[ThaumatoAnakalyptor]: Starting " << nr_unchanged_walks << " random walk. Nr good nodes: " << nodes.size() << "\033[0m" << std::endl;

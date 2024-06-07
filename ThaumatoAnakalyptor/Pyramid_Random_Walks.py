@@ -1817,7 +1817,7 @@ class RandomWalkSolver:
             fixed_nodes, fixed_ks = self.solve_pyramid_down_cpp(graph, fixed_nodes, fixed_ks, path, max_nr_walks=max_nr_walks, nr_walks_per_node=nr_walks_per_node + small_addition, max_unchanged_walks=max_unchanged_walks/4000 * (len(graph.nodes)), max_steps=max_steps, max_tries=max_tries, min_steps=16, min_end_steps=16, stop_event=stop_event)
             self.save_solution(path, np.array(fixed_nodes), np.array(fixed_ks))
 
-        production_run = False
+        production_run = True
         if production_run:
             # last pass over it with solve cpp random walks
             self.solve_cpp(fixed_nodes, fixed_ks, 16, 4)
@@ -2108,7 +2108,7 @@ class RandomWalkSolver:
         landmark_ks = [int(k) for k in landmark_ks]
 
         overlapp_threshold = deepcopy(self.graph.overlapp_threshold)
-
+        overlapp_threshold["walk_aggregation_threshold"] = overlapp_threshold["walk_aggregation_threshold"] // 4
 
         nodes_array, ks_array = sheet_generation.solve_pyramid_random_walk_down(
             landmark_ids, landmark_ks, 
@@ -2616,7 +2616,7 @@ def random_walks():
                           "epsilon": 1e-5, "angle_tolerance": 85, "max_threads": 30,
                           "min_points_winding_switch": 1000, "min_winding_switch_sheet_distance": 3, "max_winding_switch_sheet_distance": 10, "winding_switch_sheet_score_factor": 1.5, "winding_direction": 1.0,
                           "enable_winding_switch": True, "max_same_block_jump_range": 3,
-                          "pyramid_up_nr_average": 1000, "nr_walks_per_node":2000,
+                          "pyramid_up_nr_average": 3000, "nr_walks_per_node":5000,
                           "enable_winding_switch_postprocessing": False,
                           "surrounding_patches_size": 3, "max_sheet_clip_distance": 60, "sheet_z_range": (-5000, 400000), "sheet_k_range": (-1000000, 2000000), "volume_min_certainty_total_percentage": 0.0, "max_umbilicus_difference": 30,
                           "walk_aggregation_threshold": 100, "walk_aggregation_max_current": -1,
@@ -2627,8 +2627,8 @@ def random_walks():
 
     max_nr_walks = 10000
     max_steps = 101
-    min_steps = 8
-    min_end_steps = 8
+    min_steps = 16
+    min_end_steps = 16
     max_tries = 6
     max_unchanged_walks = 30 * max_nr_walks
     recompute = 0
