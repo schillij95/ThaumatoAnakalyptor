@@ -1585,6 +1585,21 @@ class RandomWalkSolver:
 
         return nodes, ks
     
+    def solve_cpp(self, starting_nodes, starting_ks, min_steps=10, min_end_steps=4):
+        starting_nodes = [[int(n) for n in node] for node in starting_nodes]
+        starting_ks = [int(k) for k in starting_ks]
+        overlapp_threshold = deepcopy(self.graph.overlapp_threshold)
+        overlapp_threshold["min_steps"] = min_steps
+        overlapp_threshold["min_end_steps"] = min_end_steps
+        ### C++ RW, should work
+        try:
+            nodes_array, ks_array = sheet_generation.solve_random_walk(starting_nodes, starting_ks, *self.translate_data_to_cpp_v2(self.graph, overlapp_threshold))
+        except Exception as e:
+            print(f"Error: {e}")
+            raise e
+        return nodes_array, ks_array
+        # return None, None
+    
     def sample_landmark_nodes(self, graph, percentage=0.1):
         # randomly sample 1% of nodes in the graph as landmark nodes without duplicates
         nodes = list(graph.nodes.keys())
@@ -1649,7 +1664,7 @@ class RandomWalkSolver:
                 break
 
         # delete all nodes with too little certainty
-        certainty_min_threshold = 0.75
+        certainty_min_threshold = 0.33
         nodes = list(aggregated_connections.keys())
         for start_node in nodes:
             end_nodes = list(aggregated_connections[start_node].keys())
@@ -1658,15 +1673,19 @@ class RandomWalkSolver:
                 if certainty < certainty_min_threshold:
                     del aggregated_connections[start_node][end_node]
 
+        min_walks = 0
+        max_walks = 10
         # only take the top n edges for each node
         nodes = list(aggregated_connections.keys())
         for start_node in nodes:
             # sort end nodes by certainty total from largest certainty to lowest
             n_ = min(n, len(aggregated_connections[start_node]))
             end_nodes1 = sorted(aggregated_connections[start_node], key=lambda x: certainties_max[start_node][x]["certainty"], reverse=True)[:n_]
-            end_nodes2 = sorted(aggregated_connections[start_node], key=lambda x: certainties_max[start_node][x]["certainty"]/certainties_total[start_node][x], reverse=True)[:n_]
+            end_nodes2 = sorted(aggregated_connections[start_node], key=lambda x: (certainties_max[start_node][x]["certainty"]/certainties_total[start_node][x]), reverse=True)[:n_]
             end_nodes3 = sorted(aggregated_connections[start_node], key=lambda x: certainties_total[start_node][x], reverse=True)[:n_]
-            end_nodes = set(end_nodes1 + end_nodes2 + end_nodes3)
+            end_nodes4 = sorted(aggregated_connections[start_node], key=lambda x: (certainties_max[start_node][x]["certainty"]/certainties_total[start_node][x])*max(0.0, min(max_walks, certainties_max[start_node][x]["certainty"]) - min_walks) / (max_walks - min_walks), reverse=True)[:n_]
+            end_nodes = set(end_nodes1 + end_nodes2 + end_nodes3 + end_nodes4)
+            # end_nodes = set(end_nodes2 + end_nodes4)
             bad_end_nodes = list(set(set(aggregated_connections[start_node]) - end_nodes))
             for end_node in bad_end_nodes:
                 del aggregated_connections[start_node][end_node]
@@ -1687,8 +1706,6 @@ class RandomWalkSolver:
                 certainty = max_certainty / certainties_total[start_node][end_node]
                 if certainty < certainty_min_threshold:
                     continue
-                min_walks = 0
-                max_walks = 3
                 certainty = certainty * max(0.0, min(max_walks, max_certainty) - min_walks) / (max_walks - min_walks)
                 if certainty <= 0.0:
                     continue
@@ -1733,7 +1750,7 @@ class RandomWalkSolver:
         os.makedirs(os.path.dirname(pyramid_up_path), exist_ok=True)
 
         # pyramid up
-        fresh_pyramid_up = False
+        fresh_pyramid_up = True
         if fresh_pyramid_up:
             while True:
                 recompute_initial_landmark_aggregated_connections = True
@@ -1788,7 +1805,7 @@ class RandomWalkSolver:
         # pyramid down
         for i in tqdm(range(len(graphs)-1, -1, -1), desc="Pyramid Down"):
             # skip last 2 graph steps, because this graph has too much noise in its nodes. the sheets are allready found earlier in the pyramid
-            if i < 2:
+            if i < 1:
                 continue
             graph = graphs[i]
             print(f"Pyramid Down Index: {i}, nr nodes in graph: {len(graph.nodes)}")
@@ -1797,8 +1814,13 @@ class RandomWalkSolver:
                 small_addition = 2 * nr_walks_per_node + abs(i - (len(graphs) - 4))*nr_walks_per_node
             # compute pyramid down
             # fixed_nodes, fixed_ks = self.solve_pyramid_down(graph, fixed_nodes, fixed_ks, path, max_nr_walks=max_nr_walks, nr_walks_per_node=nr_walks_per_node + small_addition, max_unchanged_walks=max_unchanged_walks/4000 * (len(graph.nodes)), max_steps=max_steps, max_tries=max_tries, min_steps=min_steps, min_end_steps=min_end_steps, stop_event=stop_event)
-            fixed_nodes, fixed_ks = self.solve_pyramid_down_cpp(graph, fixed_nodes, fixed_ks, path, max_nr_walks=max_nr_walks, nr_walks_per_node=nr_walks_per_node + small_addition, max_unchanged_walks=max_unchanged_walks/4000 * (len(graph.nodes)), max_steps=max_steps, max_tries=max_tries, min_steps=min_steps, min_end_steps=min_end_steps, stop_event=stop_event)
+            fixed_nodes, fixed_ks = self.solve_pyramid_down_cpp(graph, fixed_nodes, fixed_ks, path, max_nr_walks=max_nr_walks, nr_walks_per_node=nr_walks_per_node + small_addition, max_unchanged_walks=max_unchanged_walks/4000 * (len(graph.nodes)), max_steps=max_steps, max_tries=max_tries, min_steps=16, min_end_steps=16, stop_event=stop_event)
             self.save_solution(path, np.array(fixed_nodes), np.array(fixed_ks))
+
+        production_run = False
+        if production_run:
+            # last pass over it with solve cpp random walks
+            self.solve_cpp(fixed_nodes, fixed_ks, 16, 4)
 
         return np.array(fixed_nodes), np.array(fixed_ks)
     
@@ -2594,7 +2616,7 @@ def random_walks():
                           "epsilon": 1e-5, "angle_tolerance": 85, "max_threads": 30,
                           "min_points_winding_switch": 1000, "min_winding_switch_sheet_distance": 3, "max_winding_switch_sheet_distance": 10, "winding_switch_sheet_score_factor": 1.5, "winding_direction": 1.0,
                           "enable_winding_switch": True, "max_same_block_jump_range": 3,
-                          "pyramid_up_nr_average": 1000, "nr_walks_per_node":1000,
+                          "pyramid_up_nr_average": 1000, "nr_walks_per_node":2000,
                           "enable_winding_switch_postprocessing": False,
                           "surrounding_patches_size": 3, "max_sheet_clip_distance": 60, "sheet_z_range": (-5000, 400000), "sheet_k_range": (-1000000, 2000000), "volume_min_certainty_total_percentage": 0.0, "max_umbilicus_difference": 30,
                           "walk_aggregation_threshold": 100, "walk_aggregation_max_current": -1,

@@ -559,7 +559,7 @@ inline std::pair<NodePtr, K> pick_next_node(std::mt19937& gen_, std::uniform_int
     }
 
     int other_block_pick = (enable_winding_switch && !node.same_block_next_nodes.empty()) ? distrib(gen_) % 100 : 0;
-    if (other_block_pick < 80) {
+    if (other_block_pick < 75) {
         // Return the randomly picked valid next node
         int index = distrib(gen_)%node.next_nodes.size();
         NodePtr next_node = node.next_nodes[index];
@@ -922,7 +922,14 @@ std::tuple<int, bool> walk_aggregation_func(
             // Check if the node is already in volume_dict
             bool isAlreadyAggregated = exists(std::cref(volume_dict), node->volume_id, node->patch_id);
             if (isAlreadyAggregated) {
-                continue;
+                // Check if k value is the same
+                K k_prime = getKPrime(std::cref(volume_dict), node->volume_id, node->patch_id);
+                if (k_prime == k) {
+                    continue;
+                }
+                else {
+                    return {0, false};
+                }
             }        
 
             if (!check_overlapp_node(node, k, std::cref(volume_dict), max_umbilicus_difference)) {
@@ -971,7 +978,10 @@ void walk_aggregate_connections(
     int start_index = start_node->index;
 
     assert(start_node->is_landmark && "First node in walk must be a landmark");
-    for (size_t i = 1; i < walk.size(); ++i) {
+
+    int nr_landmarks_direction1 = 0;
+    size_t i = 1;
+    for (; i < walk.size(); ++i) {
         NodePtr end_node = walk[i];
         K k = ks[i];
         K k_inv = -k;
@@ -991,6 +1001,37 @@ void walk_aggregate_connections(
         // Aggregate the connection
         ++aggregated_connections[key];
         ++aggregated_connections[key_inv];
+
+        if (nr_landmarks_direction1++ > 1) {
+            break;
+        }
+    }
+    // look from other direction
+    int nr_landmarks_direction2 = 0;
+    for (size_t u = walk.size() - 1; u > i; --u) {
+        NodePtr end_node = walk[u];
+        K k = ks[u];
+        K k_inv = -k;
+        int end_index = end_node->index;
+        AggregateKey key = {start_index, end_index, k};
+        AggregateKey key_inv = {end_index, start_index, k_inv};
+        if (!(end_node->is_landmark)) {
+            continue;
+        }
+        assert(end_node->index >= 0 && "End node index must be non-negative");
+
+        // Disregard loopback volume edges
+        if (start_node == end_node) {
+            continue;
+        }
+
+        // Aggregate the connection
+        ++aggregated_connections[key];
+        ++aggregated_connections[key_inv];
+
+        if (nr_landmarks_direction2++ > 1) {
+            break;
+        }
     }
 }
 
@@ -1112,8 +1153,8 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solve(
 
     // numm threads gens
     std::vector<std::mt19937> gen_;
-    // making initialization distribution between 0 and 1000000
-    std::uniform_int_distribution<> dist(0, 1000000);
+    // making initialization distribution between 0 and 100000000
+    std::uniform_int_distribution<> dist(0, 100000000);
     
     for (int i = 0; i < numThreads; ++i) {
         // std::mt19937 gen_t_(std::random_device{}());
@@ -1318,8 +1359,8 @@ AggregatedConnections solveUp(
 
     // numm threads gens
     std::vector<std::mt19937> gen_;
-    // making initialization distribution between 0 and 1000000
-    std::uniform_int_distribution<> dist(0, 1000000);
+    // making initialization distribution between 0 and 100000000
+    std::uniform_int_distribution<> dist(0, 100000000);
     
     for (int i = 0; i < numThreads; ++i) {
         // std::mt19937 gen_t_(std::random_device{}());
@@ -1510,8 +1551,8 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
 
     // numm threads gens
     std::vector<std::mt19937> gen_;
-    // making initialization distribution between 0 and 1000000
-    std::uniform_int_distribution<> dist(0, 1000000);
+    // making initialization distribution between 0 and 100000000
+    std::uniform_int_distribution<> dist(0, 100000000);
     
     for (int i = 0; i < numThreads; ++i) {
         // std::mt19937 gen_t_(std::random_device{}());
@@ -1527,7 +1568,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
     double duration4 = 0;
     int count_durations = 0;
 
-    while ((total_walks * nrWalks < nr_node_walks) && (max_nr_walks > 0))
+    while (((total_walks < 300) || (total_walks * nrWalks < nr_node_walks)) && (max_nr_walks > 0))
     {
         auto start = std::chrono::high_resolution_clock::now();
         // std::cout << "\033[1;32m" << "[ThaumatoAnakalyptor]: Starting " << nr_unchanged_walks << " random walk. Nr good nodes: " << nodes.size() << "\033[0m" << std::endl;
@@ -1716,10 +1757,8 @@ void loadOverlappThreshold(const std::string &filename) {
 }
 
 std::pair<py::array_t<int>, py::array_t<int>> solveRandomWalk(
-    int vol1,
-    int vol2,
-    int vol3,
-    int patchID,
+    std::vector<std::vector<int>> start_ids,
+    std::vector<int> start_ks,
     const std::string &overlappThresholdFile,
     std::vector<std::vector<int>> ids, 
     std::vector<std::vector<std::vector<int>>> nextNodes, 
@@ -1729,9 +1768,6 @@ std::pair<py::array_t<int>, py::array_t<int>> solveRandomWalk(
     std::vector<std::vector<float>>  centroids) 
 {
     std::cout << "Begin solveRandomWalk" << std::endl;
-    std::cout << "Starting node: " << vol1 << " " << vol2 << " " << vol3 << " " << patchID << std::endl;
-    VolumeID start_vol_id = {vol1, vol2, vol3};
-    PatchID start_patchID = patchID;
 
     Config config;
     config.load(overlappThresholdFile);
@@ -1739,15 +1775,11 @@ std::pair<py::array_t<int>, py::array_t<int>> solveRandomWalk(
 
     std::cout << "Config loaded" << std::endl;
 
-    std::vector<std::vector<int>> start_ids = {{vol1, vol2, vol3, patchID}};
-
     auto init_res = initializeNodes(start_ids, ids, nextNodes, kValues, same_block, umbilicusDirections, centroids);
     std::vector<NodePtr> nodes = init_res.first;
     std::vector<NodePtr> start_nodes = init_res.second;
 
     std::cout << "Nodes initialized" << std::endl;
-
-    std::vector<K> start_ks = {0};
 
     const size_t numThreads = std::max((int)(1), (int)((std::thread::hardware_concurrency() * 4) / 5));
     auto [final_nodes, final_ks] = solve(start_nodes, start_ks, config, numThreads);
