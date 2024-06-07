@@ -221,7 +221,7 @@ class Graph:
         self.nodes = {}  # Stores node beliefs and fixed status
 
     def add_node(self, node, centroid, winding_angle=None):
-        node = tuple(node)
+        node = tuple(int(node[i]) for i in range(4))
         self.nodes[node] = {'centroid': centroid, "winding_angle": winding_angle}
 
     def compute_node_edges(self, verbose=True):
@@ -242,6 +242,7 @@ class Graph:
         Remove nodes and their edges from the graph.
         """
         for node in tqdm(nodes, desc="Removing nodes"):
+            node = tuple(int(node[i]) for i in range(4))
             # Delete Node Edges
             node_edges = list(self.nodes[node]['edges'])
             for edge in node_edges:
@@ -268,7 +269,9 @@ class Graph:
             pass
         # Delete Node Edges
         node1 = edge[0]
+        node1 = tuple(int(node1[i]) for i in range(4))
         node2 = edge[1]
+        node2 = tuple(int(node2[i]) for i in range(4))
         self.nodes[node1]['edges'].remove(edge)
         self.nodes[node2]['edges'].remove(edge)
 
@@ -276,16 +279,16 @@ class Graph:
         """
         Check if an edge exists in the graph.
         """
-        node1 = tuple(node1)
-        node2 = tuple(node2)
+        node1 = tuple(int(node1[i]) for i in range(4))
+        node2 = tuple(int(node2[i]) for i in range(4))
         return (node1, node2) in self.edges or (node2, node1) in self.edges
 
     def add_edge(self, node1, node2, certainty, sheet_offset_k=0.0, same_block=False, bad_edge=False):
         assert certainty > 0.0, "Certainty must be greater than 0."
         certainty = np.clip(certainty, 0.0, None)
 
-        node1 = tuple(node1)
-        node2 = tuple(node2)
+        node1 = tuple(int(node1[i]) for i in range(4))
+        node2 = tuple(int(node2[i]) for i in range(4))
         # Ensure node1 < node2 for bidirectional nodes
         if node2 < node1:
             node1, node2 = node2, node1
@@ -299,8 +302,8 @@ class Graph:
         assert certainty > 0.0, "Certainty must be greater than 0."
         certainty = np.clip(certainty, 0.0, None)
 
-        node1 = tuple(node1)
-        node2 = tuple(node2)
+        node1 = tuple(int(node1[i]) for i in range(4))
+        node2 = tuple(int(node2[i]) for i in range(4))
         # Ensure node1 < node2 for bidirectional nodes
         if node2 < node1:
             node1, node2 = node2, node1
@@ -319,8 +322,8 @@ class Graph:
         self.edges[(node1, node2)][sheet_offset_k]['certainty'] += certainty
 
     def get_certainty(self, node1, node2, k):
-        node1 = tuple(node1)
-        node2 = tuple(node2)
+        node1 = tuple(int(node1[i]) for i in range(4))
+        node2 = tuple(int(node2[i]) for i in range(4))
         if node2 < node1:
             node1, node2 = node2, node1
             k = k * (-1.0)
@@ -332,11 +335,15 @@ class Graph:
         return None
     
     def get_edge(self, node1, node2):
+        node1 = tuple(int(node1[i]) for i in range(4))
+        node2 = tuple(int(node2[i]) for i in range(4))
         if node2 < node1:
             node1, node2 = node2, node1
         return (node1, node2)
         
-    def get_edge_ks(self, node1, node2):            
+    def get_edge_ks(self, node1, node2):
+        node1 = tuple(int(node1[i]) for i in range(4))
+        node2 = tuple(int(node2[i]) for i in range(4))           
         k_factor = 1.0
         # Maintain bidirectional invariant
         if node2 < node1:
@@ -352,7 +359,7 @@ class Graph:
             raise KeyError(f"No edge found from {node1} to {node2}")
     
     def remove_unused_nodes(self, used_nodes):
-        used_nodes = set([tuple(node) for node in used_nodes])
+        used_nodes = set([tuple(int(node[i]) for i in range(4)) for node in used_nodes])
         unused_nodes = []
         # Remove unused nodes
         for node in list(self.nodes.keys()):
@@ -366,7 +373,7 @@ class Graph:
         ks = np.array(ks) - ks_min
         # Update winding angles
         for i, node in enumerate(nodes):
-            node = tuple(node)
+            node = tuple(int(node[i]) for i in range(4))
             self.nodes[node]['assigned_k'] = ks[i]
             if update_winding_angles:
                 self.nodes[node]['winding_angle'] = - ks[i]*360 + self.nodes[node]['winding_angle']
@@ -382,6 +389,7 @@ class Graph:
         """
         Breadth-first search from start_node.
         """
+        start_node = tuple(int(start_node[i]) for i in range(4))
         visited = set()
         queue = [start_node]
         while queue:
@@ -397,6 +405,7 @@ class Graph:
         """
         Return the list of neighbours of a node. Using bfs
         """
+        node = tuple(int(node[i]) for i in range(4))
         visited = set()
         queue = [(node, 0)]
         while queue:
@@ -414,17 +423,19 @@ class Graph:
         """
         Update the neighbours count of the new nodes.
         """
-        to_update_set = set([tuple(n) for n in new_nodes])
+        to_update_set = set([tuple(int(n[i]) for i in range(4)) for n in new_nodes])
         # print(f"Updating neighbours count for {len(new_nodes)} new nodes...")
         for node in new_nodes:
+            node = tuple(int(node[i]) for i in range(4))
             neighbours_set = self.neighbours(tuple(node), bfs_depth)
             to_update_set = to_update_set.union(neighbours_set)
 
             self.nodes[tuple(node)]['neighbours_count'] = len(neighbours_set)
         
-        others_to_update = to_update_set.difference(set([tuple(n) for n in new_nodes]))
+        others_to_update = to_update_set.difference(set([tuple(int(n[i]) for i in range(4)) for n in new_nodes]))
         # print(f"Reupdating neighbours count for {len(others_to_update)} other nodes...")
         for node in others_to_update:
+            node = tuple(int(node[i]) for i in range(4))
             neighbours_set = self.neighbours(tuple(node), bfs_depth)
             self.nodes[tuple(node)]['neighbours_count'] = len(neighbours_set)
             # if len(neighbours_set) > 1:
@@ -433,6 +444,7 @@ class Graph:
         all_nodes_counts = []
         # print(f"Adding neighbours count to all {len(nodes)} nodes...")
         for node in nodes:
+            node = tuple(int(node[i]) for i in range(4))
             all_nodes_counts.append(self.nodes[tuple(node)]['neighbours_count'])
 
         if len(all_nodes_counts) > 0:
@@ -1169,28 +1181,30 @@ class RandomWalkSolver:
             node_next_nodes = []
             node_k_values = []
             node_same_block = []
-            edges = graph.nodes[node]['edges']
+            graph_node = graph.nodes[node]
+            edges = graph_node['edges']
             for edge in edges:
+                graph_edge = graph.edges[edge]
                 flip_k = edge[0] != node
                 next_node = edge[0] if edge[0] != node else edge[1]
                 ks = graph.get_edge_ks(node, next_node)
                 # get k of ks with max certainty
-                k = max(ks, key=lambda k: graph.edges[edge][-k if flip_k else k]['certainty'])
+                k = max(ks, key=lambda k: graph_edge[-k if flip_k else k]['certainty'])
                 k_edge = -k if flip_k else k
                 # continue if bad edge
-                if graph.edges[edge][k_edge]['bad_edge']:
+                if graph_edge[k_edge]['bad_edge']:
                     continue
 
                 node_next_nodes.append([int(n) for n in next_node])
                 node_k_values.append(int(k))
-                same_block_ = graph.edges[edge][k_edge]['same_block']
+                same_block_ = graph_edge[k_edge]['same_block']
                 node_same_block.append(bool(same_block_))
 
             next_nodes.append(node_next_nodes)
             k_values.append(node_k_values)
             same_block.append(node_same_block)
-            umbilicusDirections.append([float(c_vec) for c_vec in self.centroid_vector(self.graph.nodes[node])])
-            centroids.append([float(c) for c in graph.nodes[node]['centroid']])
+            umbilicusDirections.append([float(c_vec) for c_vec in self.centroid_vector(graph_node)])
+            centroids.append([float(c) for c in graph_node['centroid']])
 
         # Prepare overlap threshold
         overlapp_threshold_filename = 'overlapp_threshold.yaml'
@@ -1717,9 +1731,9 @@ class RandomWalkSolver:
         pyramid_up_initial_landmark_aggregated_connections_path = os.path.join(path, "pyramid_up_initial_landmark_aggregated_connections.pkl")
         # create folder if not exists
         os.makedirs(os.path.dirname(pyramid_up_path), exist_ok=True)
-        
+
         # pyramid up
-        fresh_pyramid_up = True
+        fresh_pyramid_up = False
         if fresh_pyramid_up:
             while True:
                 recompute_initial_landmark_aggregated_connections = True
@@ -2675,7 +2689,11 @@ def random_walks():
         save_path = os.path.dirname(path) + f"/{start_point[0]}_{start_point[1]}_{start_point[2]}/" + path.split("/")[-1]
         nodes = np.load(save_path.replace("blocks", "graph_RW") + "_nodes.npy")
         ks = np.load(save_path.replace("blocks", "graph_RW") + "_ks.npy")
-        scroll_graph = load_graph(save_path.replace("blocks", "subgraph") + ".pkl")
+        if args.toy_problem:
+            scroll_graph = load_graph(save_path.replace("blocks", "subgraph") + ".pkl")
+        else:
+            scroll_graph = load_graph(path.replace("blocks", "scroll_graph") + ".pkl")
+
          # Update the solved scroll graph with the nodes and ks. Remove unused nodes and update winding angles
         scroll_graph.remove_unused_nodes(used_nodes=nodes)
         scroll_graph.update_winding_angles(nodes, ks, update_winding_angles=True)
