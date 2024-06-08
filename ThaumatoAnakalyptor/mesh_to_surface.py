@@ -17,6 +17,7 @@ from torch.nn.functional import normalize
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import BasePredictionWriter
 from .rendering_utils.interpolate_image_3d import extract_from_image_4d
+from .finalize_mesh import surface_image_size
 from PIL import Image
 Image.MAX_IMAGE_PIXELS = None
 import tifffile
@@ -288,26 +289,6 @@ class MeshDataset(Dataset):
 
         self.adjust_triangle_sizes()
 
-    def surface_image_size(self, mesh):
-        """ Compute the size of a surface image for a one-to-one resolution ratio
-        with the scan. The uvs aspect ratio must be correct, i.e. not stretched.
-        """
-        A = mesh.get_surface_area()
-        uvs = np.asarray(mesh.triangle_uvs)
-        x_size_uv = np.max(uvs[:, 0]) - np.min(uvs[:, 0])
-        y_size_uv = np.max(uvs[:, 1]) - np.min(uvs[:, 1])
-        uvs = uvs.reshape(-1, 3, 2)
-        p1 = uvs[:, 0, :]
-        p2 = uvs[:, 1, :]
-        p3 = uvs[:, 2, :]
-        A_uv = np.sum(0.5 * np.abs(np.cross(p2 - p1, p3 - p1)))
-        s = np.sqrt(A/A_uv)
-        # TODO: Resolve the small discretization error introduced by ceil.
-        # We can account for it if we know how the rendering code handles it.
-        y_size = int(np.ceil(s*y_size_uv))
-        x_size = int(np.ceil(s*x_size_uv))
-        return y_size, x_size
-
     def parse_mtl_for_texture_filenames(self, mtl_filepath):
         texture_filenames = []
         with open(mtl_filepath, 'r') as file:
@@ -370,7 +351,7 @@ class MeshDataset(Dataset):
                 # Get dimensions
                 y_size, x_size = img.size
         else:
-            y_size, x_size = self.surface_image_size(self.mesh)
+            y_size, x_size = surface_image_size(self.mesh)
         print(f"Y-size: {y_size}, X-size: {x_size}", end="\n")
 
 
