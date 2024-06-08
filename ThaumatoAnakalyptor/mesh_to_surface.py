@@ -288,6 +288,26 @@ class MeshDataset(Dataset):
 
         self.adjust_triangle_sizes()
 
+    def surface_image_size(self, mesh):
+        """ Compute the size of a surface image for a one-to-one resolution ratio
+        with the scan. The uvs aspect ratio must be correct, i.e. not stretched.
+        """
+        A = mesh.get_surface_area()
+        uvs = np.asarray(mesh.triangle_uvs)
+        x_size_uv = np.max(uvs[:, 0]) - np.min(uvs[:, 0])
+        y_size_uv = np.max(uvs[:, 1]) - np.min(uvs[:, 1])
+        uvs = uvs.reshape(-1, 3, 2)
+        p1 = uvs[:, 0, :]
+        p2 = uvs[:, 1, :]
+        p3 = uvs[:, 2, :]
+        A_uv = np.sum(0.5 * np.abs(np.cross(p2 - p1, p3 - p1)))
+        s = np.sqrt(A/A_uv)
+        # TODO: Resolve the small discretization error introduced by ceil.
+        # We can account for it if we know how the rendering code handles it.
+        y_size = int(np.ceil(s*y_size_uv))
+        x_size = int(np.ceil(s*x_size_uv))
+        return y_size, x_size
+
     def parse_mtl_for_texture_filenames(self, mtl_filepath):
         texture_filenames = []
         with open(mtl_filepath, 'r') as file:
@@ -309,6 +329,10 @@ class MeshDataset(Dataset):
     def load_mesh(self, path):
         """Load the mesh from the given path and extract the vertices, normals, triangles, and UV coordinates."""
         # Get the working path and base name
+        print(f"Loading mesh from {path}", end="\n")
+        self.mesh = o3d.io.read_triangle_mesh(path)
+        print(f"Loaded mesh from {path}", end="\n")
+
         working_path = os.path.dirname(path)
         base_name = os.path.splitext(os.path.basename(path))[0]
 
@@ -345,12 +369,10 @@ class MeshDataset(Dataset):
             with Image.open(image_path) as img:
                 # Get dimensions
                 y_size, x_size = img.size
+        else:
+            y_size, x_size = self.surface_image_size(self.mesh)
         print(f"Y-size: {y_size}, X-size: {x_size}", end="\n")
 
-        print(f"Loading mesh from {path}", end="\n")
-        mesh = o3d.io.read_triangle_mesh(path)
-        self.mesh = mesh
-        print(f"Loaded mesh from {path}", end="\n")
 
         self.vertices = np.asarray(self.mesh.vertices)
         self.normals = np.asarray(self.mesh.vertex_normals)
