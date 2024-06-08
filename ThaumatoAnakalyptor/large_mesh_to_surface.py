@@ -19,10 +19,17 @@ if __name__ == "__main__":
     parser.add_argument('--display', action='store_true')
     parser.add_argument('--nr_workers', type=int, default=None)
     parser.add_argument('--prefetch_factor', type=int, default=2)
+    parser.add_argument('--start', type=int, default=0)
+    parser.add_argument('--end', type=int, default=None)
 
     args = parser.parse_known_args()[0]
     print(f"Known args: {args}")
     obj_paths = finalize_mesh_main(args.output_folder, args.input_mesh, 1.0, args.cut_size, False)
+    if args.end is not None:
+        obj_paths = obj_paths[args.start:args.end]
+    else:
+        start = min(args.start, len(obj_paths))
+        obj_paths = obj_paths[start:]
     for obj_path in tqdm(obj_paths, desc='Texturing meshes'):
         print(f"Texturing {obj_path}")
         ppm_and_texture(obj_path, gpus=args.gpus, grid_cell_path=args.grid_cell, output_path=None, r=args.r, format=args.format, display=args.display, nr_workers=args.nr_workers, prefetch_factor=args.prefetch_factor)

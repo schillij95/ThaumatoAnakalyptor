@@ -127,7 +127,7 @@ def cut_mesh_size(mesh, texture_size, min_x, cut_size):
     triangles_mask = uvs_mask_.reshape(-1, 3)
     print(f"Sum of triangles mask: {np.sum(triangles_mask)}, with shape {triangles_mask.shape}")
     # Select vertices and triangles within the x range
-    triangles_mask = np.all(triangles_mask, axis=1)
+    triangles_mask = np.any(triangles_mask, axis=1)
     uvs_mask = triangles_mask.repeat(3).reshape(-1)
 
     selected_uvs = uv_scaled[uvs_mask]

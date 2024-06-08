@@ -902,7 +902,7 @@ std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<std::vector<
 
         std::vector<float> valid_ts;
         std::vector<std::vector<float>> valid_normals;
-        int max_number_closest_points = 10;
+        int max_number_closest_points = 20;
         int current_number_closest_points = 0;
 
         for (int j = 0; j < distances.size(); ++j) {
@@ -984,7 +984,151 @@ std::pair<float, float> findMinMaxZ(const std::vector<std::vector<float>>& point
     return {minZ, maxZ};
 }
 
-void workerFunction(const std::vector<std::vector<float>>& points,
+class RolledPointsetProcessor {
+public:
+    RolledPointsetProcessor(bool verbose)
+        : verbose(verbose) {}
+
+    void print_progress() {
+        if (!verbose) {
+            return;
+        }
+        progress++;
+        // print on one line
+        std::cout << "Progress: " << progress << "/" << problem_size << "\r";
+        std::cout.flush();
+    }
+
+    std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<std::vector<float>>>, std::vector<std::vector<float>>, std::vector<float>>> create_ordered_pointset(
+        py::array_t<float> original_points,
+        py::array_t<float> original_normals,
+        py::array_t<float> umbilicus_points,
+        float angleStep = 6, int z_spacing = 10, float max_eucledian_distance = 10
+        )
+    {
+        // Check the input dimensions and types are as expected
+        if (original_points.ndim() != 2 || original_normals.ndim() != 2) {
+            throw std::runtime_error("Expected two-dimensional array for points and normals.");
+        }
+
+        if (original_points.shape(1) != 4 || original_normals.shape(1) != 3) {
+            throw std::runtime_error("Expected each point to have four and each normal to have three components.");
+        }
+
+        // Access the data
+        auto points_buf = original_points.unchecked<2>(); // Accessing the data without bounds checking for performance
+        auto normals_buf = original_normals.unchecked<2>();
+        auto umbilicus_points_buf = umbilicus_points.unchecked<2>();
+
+        // create a vector of vectors to hold the processed points
+        std::vector<std::vector<float>> processed_points;
+        processed_points.reserve(original_points.shape(0)); // reserve space for all points to improve performance
+
+        // create a vector of vectors to hold the processed normals
+        std::vector<std::vector<float>> processed_normals;
+        processed_normals.reserve(original_normals.shape(0)); // reserve space for all normals to improve performance
+
+        // create a vector of vectors to hold the umbilicus points
+        std::vector<std::vector<float>> umbilicus_points_vector;
+        umbilicus_points_vector.reserve(umbilicus_points.shape(0)); // reserve space for all umbilicus points to improve performance
+
+        // Process points: just a placeholder for actual operations
+        for (int i = 0; i < original_points.shape(0); ++i) {
+            std::vector<float> point = {
+                points_buf(i, 0), // x coordinate
+                points_buf(i, 1), // y coordinate
+                points_buf(i, 2),  // z coordinate
+                points_buf(i, 3),  // winding angle
+            };
+            processed_points.push_back(point);
+
+            std::vector<float> normal = {
+                normals_buf(i, 0), // x component
+                normals_buf(i, 1), // y component
+                normals_buf(i, 2), // z component
+            };
+            processed_normals.push_back(normal);
+        }
+
+        // Process umbilicus points
+        for (int i = 0; i < umbilicus_points.shape(0); ++i) {
+            std::vector<float> umbilicus_point = {
+                umbilicus_points_buf(i, 0), // x coordinate
+                umbilicus_points_buf(i, 1), // y coordinate
+                umbilicus_points_buf(i, 2),  // z coordinate
+            };
+            umbilicus_points_vector.push_back(umbilicus_point);
+        }
+
+        auto result = this->rolledOrderedPointset(umbilicus_points_vector, processed_points, processed_normals, static_cast<int>(std::thread::hardware_concurrency()), true, angleStep, z_spacing, max_eucledian_distance);
+
+        return std::move(result);
+    }
+
+private:
+    std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<std::vector<float>>>, std::vector<std::vector<float>>, std::vector<float>>> rolledOrderedPointset(
+            std::vector<std::vector<float>> umbilicus_points,
+            std::vector<std::vector<float>> points,
+            std::vector<std::vector<float>> normals,
+            int numThreads, bool debug = false, float angleStep = 6, int z_spacing = 10, float max_eucledian_distance = 10
+        ) 
+    {
+        auto [minWind, maxWind] = findMinMaxWindingAngles(points);
+        auto [minZ, maxZ] = findMinMaxZ(points);
+        if (verbose) {
+            std::cout << "Number of threads: " << numThreads << " angle step: " << angleStep << " z spacing: " << z_spacing << " max eucledian distance: " << max_eucledian_distance << std::endl;
+            std::cout << "Min and max winding angles: " << minWind << ", " << maxWind << std::endl;
+            std::cout << "First point: " << points[0][0] << ", " << points[0][1] << ", " << points[0][2] << ", " << points[0][3] << " last point: " << points[points.size() - 1][0] << ", " << points[points.size() - 1][1] << ", " << points[points.size() - 1][2] << ", " << points[points.size() - 1][3] << std::endl;
+        }
+
+        // Calculate z positions based on spacing
+        std::vector<float> zPositions;
+        for (float z = minZ; z <= maxZ; z += z_spacing) {
+            zPositions.push_back(z);
+        }
+
+        // Calculate total number of angles to process
+        int totalAngles = std::ceil((maxWind - minWind) / angleStep);
+
+        // Set up progress tracking
+        problem_size = totalAngles;
+
+        std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<std::vector<float>>>, std::vector<std::vector<float>>, std::vector<float>>> results(totalAngles);
+
+        std::vector<std::thread> threads;
+        int anglesPerThread = totalAngles / numThreads;
+        int anglesLeft = totalAngles % numThreads;
+        int resultIndex = 0;
+        float angleStart = minWind;
+        // Launch threads
+        for (int i = 0; i < numThreads; ++i) {
+            int angles_this_thread = anglesPerThread + (i < anglesLeft ? 1 : 0);
+            if (angles_this_thread == 0) {
+                continue;
+            }
+            float angleEnd = angleStart + angles_this_thread * angleStep;
+            if (i == numThreads - 1 || angleEnd > maxWind) {
+                angleEnd = maxWind;
+            }
+            int startIndex = resultIndex;  // Assign the starting index for results for each thread
+            // threads.push_back(std::thread(workerFunction, std::cref(points), std::cref(normals), std::cref(umbilicus_points), std::cref(zPositions), angleStart, angleEnd, angleStep, max_eucledian_distance, std::ref(results), startIndex)); // non-class variant
+            threads.push_back(std::thread([this, &points, &normals, &umbilicus_points, &zPositions, angleStart, angleEnd, angleStep, max_eucledian_distance, &results, startIndex]() {
+                this->workerFunction(points, normals, umbilicus_points, zPositions, angleStart, angleEnd, angleStep, max_eucledian_distance, results, startIndex);
+            }));
+            angleStart = angleEnd;
+            resultIndex += angles_this_thread;  // Increment the start index for the next thread
+        }
+
+        // Join threads
+        for (auto& thread : threads) {
+            thread.join();
+        }
+
+        // Results are now populated in order in the 'results' vector
+        return std::move(results);
+    }
+
+    void workerFunction(const std::vector<std::vector<float>>& points,
                     const std::vector<std::vector<float>>& normals,
                     const std::vector<std::vector<float>>& umbilicus_points,
                     const std::vector<float>& z_positions,
@@ -993,130 +1137,51 @@ void workerFunction(const std::vector<std::vector<float>>& points,
                     float angleStep,
                     float maxEucledianDistance,
                     std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<std::vector<float>>>, std::vector<std::vector<float>>, std::vector<float>>>& results,
-                    int startIndex) {
-    // Find the start and end indices of points within the specified winding angle range
-    auto [startAngleIndex, endAngleIndex] = pointsAtWindingAngle(points, angleStart + ((angleEnd - angleStart) / 2.0), 0, 0, (angleEnd - angleStart) / 2.0);
+                    int startIndex
+        )
+    {
+        // Find the start and end indices of points within the specified winding angle range
+        auto [startAngleIndex, endAngleIndex] = pointsAtWindingAngle(points, angleStart + ((angleEnd - angleStart) / 2.0), 0, 0, (angleEnd - angleStart) / 2.0);
 
-    int index = startIndex;
-    int totalAngles = std::ceil((angleEnd - angleStart) / angleStep);
-    for (float angle = angleStart; angle < angleEnd; angle += angleStep) {
-        auto [result, last_angle_start_index_, last_angle_end_index_] = processWindingAngle(umbilicus_points, points, normals, z_positions, angle, startAngleIndex, endAngleIndex, maxEucledianDistance);
-        startAngleIndex = last_angle_start_index_;
-        endAngleIndex = last_angle_end_index_;
-        std::cout << index - startIndex + 1 << " / " << totalAngles << std::endl;
-        results[index++] = result;
-    }
-}
-
-std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<std::vector<float>>>, std::vector<std::vector<float>>, std::vector<float>>> rolledOrderedPointset(std::vector<std::vector<float>> umbilicus_points, std::vector<std::vector<float>> points, std::vector<std::vector<float>> normals, int numThreads, bool debug = false, float angleStep = 6, int z_spacing = 10, float max_eucledian_distance = 10) {
-    auto [minWind, maxWind] = findMinMaxWindingAngles(points);
-    auto [minZ, maxZ] = findMinMaxZ(points);
-    std::cout << "Number of threads: " << numThreads << " angle step: " << angleStep << " z spacing: " << z_spacing << " max eucledian distance: " << max_eucledian_distance << std::endl;
-    std::cout << "Min and max winding angles: " << minWind << ", " << maxWind << std::endl;
-    std::cout << "First point: " << points[0][0] << ", " << points[0][1] << ", " << points[0][2] << ", " << points[0][3] << " last point: " << points[points.size() - 1][0] << ", " << points[points.size() - 1][1] << ", " << points[points.size() - 1][2] << ", " << points[points.size() - 1][3] << std::endl;
-
-    // Calculate z positions based on spacing
-    std::vector<float> zPositions;
-    for (float z = minZ; z <= maxZ; z += z_spacing) {
-        zPositions.push_back(z);
-    }
-
-    // Calculate total number of angles to process
-    int totalAngles = std::ceil((maxWind - minWind) / angleStep);
-    std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<std::vector<float>>>, std::vector<std::vector<float>>, std::vector<float>>> results(totalAngles);
-
-    std::vector<std::thread> threads;
-    int anglesPerThread = totalAngles / numThreads;
-    int anglesLeft = totalAngles % numThreads;
-    int resultIndex = 0;
-    float angleStart = minWind;
-    // Launch threads
-    for (int i = 0; i < numThreads; ++i) {
-        int angles_this_thread = anglesPerThread + (i < anglesLeft ? 1 : 0);
-        if (angles_this_thread == 0) {
-            continue;
+        int index = startIndex;
+        int totalAngles = std::ceil((angleEnd - angleStart) / angleStep);
+        for (float angle = angleStart; angle < angleEnd; angle += angleStep) {
+            auto [result, last_angle_start_index_, last_angle_end_index_] = processWindingAngle(umbilicus_points, points, normals, z_positions, angle, startAngleIndex, endAngleIndex, maxEucledianDistance);
+            startAngleIndex = last_angle_start_index_;
+            endAngleIndex = last_angle_end_index_;
+            // std::cout << index - startIndex + 1 << " / " << totalAngles << std::endl;
+            results[index++] = result;
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                print_progress();
+            }
         }
-        float angleEnd = angleStart + angles_this_thread * angleStep;
-        if (i == numThreads - 1 || angleEnd > maxWind) {
-            angleEnd = maxWind;
-        }
-        int startIndex = resultIndex;  // Assign the starting index for results for each thread
-        threads.push_back(std::thread(workerFunction, std::cref(points), std::cref(normals), std::cref(umbilicus_points), std::cref(zPositions), angleStart, angleEnd, angleStep, max_eucledian_distance, std::ref(results), startIndex));
-        angleStart = angleEnd;
-        resultIndex += angles_this_thread;  // Increment the start index for the next thread
     }
 
-    // Join threads
-    for (auto& thread : threads) {
-        thread.join();
-    }
+    mutable std::mutex mutex_;
+    int progress = 0;
+    int problem_size = -1;
+    bool verbose;
+};
 
-    // Results are now populated in order in the 'results' vector
-    if (debug) {
-        std::cout << "Processed results count: " << results.size() << std::endl;
+
+std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<std::vector<float>>>, std::vector<std::vector<float>>, std::vector<float>>> create_ordered_pointset(
+    py::array_t<float> original_points,
+    py::array_t<float> original_normals,
+    py::array_t<float> umbilicus_points,
+    float angleStep, int z_spacing, float max_eucledian_distance, bool verbose
+    )
+{
+    RolledPointsetProcessor processor(verbose);
+    if (verbose) {
+        std::cout << "Creating ordered pointset" << std::endl;
     }
-    return results;
+    return std::move(processor.create_ordered_pointset(original_points, original_normals, umbilicus_points, angleStep, z_spacing, max_eucledian_distance));
+    if (verbose) {
+        std::cout << "Finished creating ordered pointset" << std::endl;
+    }
 }
 
-std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<std::vector<float>>>, std::vector<std::vector<float>>, std::vector<float>>> create_ordered_pointset(py::array_t<float> original_points, py::array_t<float> original_normals, py::array_t<float> umbilicus_points) {
-    // Check the input dimensions and types are as expected
-    if (original_points.ndim() != 2 || original_normals.ndim() != 2) {
-        throw std::runtime_error("Expected two-dimensional array for points and normals.");
-    }
-
-    if (original_points.shape(1) != 4 || original_normals.shape(1) != 3) {
-        throw std::runtime_error("Expected each point to have four and each normal to have three components.");
-    }
-
-    // Access the data
-    auto points_buf = original_points.unchecked<2>(); // Accessing the data without bounds checking for performance
-    auto normals_buf = original_normals.unchecked<2>();
-    auto umbilicus_points_buf = umbilicus_points.unchecked<2>();
-
-    // create a vector of vectors to hold the processed points
-    std::vector<std::vector<float>> processed_points;
-    processed_points.reserve(original_points.shape(0)); // reserve space for all points to improve performance
-
-    // create a vector of vectors to hold the processed normals
-    std::vector<std::vector<float>> processed_normals;
-    processed_normals.reserve(original_normals.shape(0)); // reserve space for all normals to improve performance
-
-    // create a vector of vectors to hold the umbilicus points
-    std::vector<std::vector<float>> umbilicus_points_vector;
-    umbilicus_points_vector.reserve(umbilicus_points.shape(0)); // reserve space for all umbilicus points to improve performance
-
-    // Process points: just a placeholder for actual operations
-    for (int i = 0; i < original_points.shape(0); ++i) {
-        std::vector<float> point = {
-            points_buf(i, 0), // x coordinate
-            points_buf(i, 1), // y coordinate
-            points_buf(i, 2),  // z coordinate
-            points_buf(i, 3),  // winding angle
-        };
-        processed_points.push_back(point);
-
-        std::vector<float> normal = {
-            normals_buf(i, 0), // x component
-            normals_buf(i, 1), // y component
-            normals_buf(i, 2), // z component
-        };
-        processed_normals.push_back(normal);
-    }
-
-    // Process umbilicus points
-    for (int i = 0; i < umbilicus_points.shape(0); ++i) {
-        std::vector<float> umbilicus_point = {
-            umbilicus_points_buf(i, 0), // x coordinate
-            umbilicus_points_buf(i, 1), // y coordinate
-            umbilicus_points_buf(i, 2),  // z coordinate
-        };
-        umbilicus_points_vector.push_back(umbilicus_point);
-    }
-
-    auto result = rolledOrderedPointset(umbilicus_points_vector, processed_points, processed_normals, static_cast<int>(std::thread::hardware_concurrency()), true, 6, 10, 10);
-
-    return result;
-}
 
 PYBIND11_MODULE(pointcloud_processing, m) {
     m.doc() = "pybind11 module for parallel point cloud processing";
@@ -1125,5 +1190,13 @@ PYBIND11_MODULE(pointcloud_processing, m) {
 
     m.def("upsample_pointclouds", &upsample_pointclouds, "Function to load point clouds and return points, normals, and colors.");
 
-    m.def("create_ordered_pointset", &create_ordered_pointset, "Function to create an ordered point set from a point cloud.");
+    m.def("create_ordered_pointset", &create_ordered_pointset, 
+          "Function to create an ordered point set from a point cloud.",
+          py::arg("original_points"),
+          py::arg("original_normals"),
+          py::arg("umbilicus_points"),
+          py::arg("angleStep") = 6,
+          py::arg("z_spacing") = 10,
+          py::arg("max_eucledian_distance") = 10,
+          py::arg("verbose") = true);
 }
