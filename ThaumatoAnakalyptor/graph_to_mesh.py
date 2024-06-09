@@ -902,7 +902,7 @@ class WalkToSheet():
         # Set to false to load precomputed partial results during development
         fresh_start = True
         if fresh_start:
-            result = pointcloud_processing.create_ordered_pointset(points, normals, self.graph.umbilicus_data, angleStep=angle_step, z_spacing=z_spacing) # named parameters for mesh detail level: float angleStep, int z_spacing, float max_eucledian_distance, bool verbose
+            result = pointcloud_processing.create_ordered_pointset(points, normals, self.graph.umbilicus_data, angleStep=float(angle_step), z_spacing=int(z_spacing)) # named parameters for mesh detail level: float angleStep, int z_spacing, float max_eucledian_distance, bool verbose
             # save result as pkl
             result_pkl_path = os.path.join(self.save_path, "ordered_pointset.pkl")
             with open(result_pkl_path, 'wb') as f:
