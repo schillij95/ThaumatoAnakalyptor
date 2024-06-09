@@ -484,9 +484,9 @@ class WalkToSheet():
                             neighbours_dict[dict_key]["front_back"].append((j+l, k))
         return neighbours_dict
     
-    def optimize_adjacent(self, interpolated_ts, neighbours_dict, fixed_points):
+    def optimize_adjacent(self, interpolated_ts, neighbours_dict, fixed_points, learning_rate=0.1):
         # Optimize the full pointset for smooth surface with best guesses for interpolated t values
-        error_val_d = 0.005
+        error_val_d = 0.01
         iterations = 3
         for i in range(iterations):
             print(f"Iteration {i+1}/{iterations}")
@@ -494,8 +494,8 @@ class WalkToSheet():
             nr_fixed = np.sum(fixed_points)
             nr_floating = nr_vertices - nr_fixed
             last_error_val = None
-            for i in tqdm(range(10000), desc="Optimizing full pointset"):
-                interpolated_ts, error_val = self.compute_interpolated_adjacent(neighbours_dict, interpolated_ts, fixed_points)
+            for i in tqdm(range(10000), desc="Optimizing full pointset"): # 10000
+                interpolated_ts, error_val = self.compute_interpolated_adjacent(neighbours_dict, interpolated_ts, fixed_points, learning_rate=learning_rate)
                 error_val = error_val / nr_floating
                 print(f"Error value per floating vertex: {error_val:.5f}")
                 if last_error_val is not None and ((abs(last_error_val - error_val) < error_val_d) or (last_error_val - error_val < 0)):
@@ -652,7 +652,7 @@ class WalkToSheet():
                 new_ts_d *= 0.5
         return new_ts_d
     
-    def compute_interpolated_adjacent(self, neighbours_dict, interpolated_ts, fixed_points):
+    def compute_interpolated_adjacent(self, neighbours_dict, interpolated_ts, fixed_points, learning_rate=0.1):
         r, l, m_r, m_l, m_ts = self.calculate_ms(interpolated_ts, neighbours_dict)
         error_val = 0.0
 
@@ -668,7 +668,7 @@ class WalkToSheet():
                     # the raw d_t might be breaking the non-overlapping invariant
                     d_t = self.respect_non_overlapping(i, j, neighbours_dict, interpolated_ts, new_interpolated_ts, d_t)
                     error_val += abs(d_t)
-                    new_interpolated_ts[i][j] = interpolated_ts[i][j] + 0.1 * d_t
+                    new_interpolated_ts[i][j] = interpolated_ts[i][j] + learning_rate * d_t
         
         return new_interpolated_ts, error_val
     
@@ -699,7 +699,7 @@ class WalkToSheet():
                 if fixed_points[i][j] and errors[i][j] > error_threshold:
                     fixed_points[i][j] = False
 
-    def interpolate_ordered_pointset(self, ordered_pointset, ordered_normals, ordered_umbilicus_points, angle_vector, winding_direction):
+    def interpolate_ordered_pointset(self, ordered_pointset, ordered_normals, angle_vector, winding_direction):
         computed_vectors_set = set()
         result_ts = []
         result_normals = []
@@ -731,6 +731,107 @@ class WalkToSheet():
 
         return result_ts, result_normals
     
+    def clip_valid_windings(self, result_ts, result_normals, angle_vector, angle_step, valid_p_winding=0.1, valid_p_z=0.1):
+        # Clip away invalid windings at the beginning and end of the ordered pointset
+        steps_per_winding = 360 / angle_step
+        nr_windings = int(np.ceil(len(result_ts)/steps_per_winding))
+
+        valid_start_indx = 0
+        for i in range(nr_windings):
+            start_index = int(i * steps_per_winding)
+            end_index = int(min((i+1) * steps_per_winding, len(result_ts)))
+            winding_ts = [result_ts[j] for j in range(start_index, end_index)]
+            winding_normals = [result_normals[j] for j in range(start_index, end_index)]
+            # check if winding is valid
+            valid_winding = self.check_valid_winding(winding_ts, winding_normals, valid_p_winding, valid_p_z)
+            if not valid_winding:
+                valid_start_indx = i+1
+            else:
+                break
+        print(f"Found valid start index: {valid_start_indx}")
+        
+        valid_end_indx = len(result_ts)
+        for i in range(nr_windings-1, valid_start_indx, -1):
+            start_index = int(i * steps_per_winding)
+            end_index = int(min((i+1) * steps_per_winding, len(result_ts)))
+            # skip last winding if it is too short
+            if end_index - start_index < steps_per_winding / 2:
+                continue
+            winding_ts = [result_ts[j] for j in range(start_index, end_index)]
+            winding_normals = [result_normals[j] for j in range(start_index, end_index)]
+            # check if winding is valid
+            valid_winding = self.check_valid_winding(winding_ts, winding_normals, valid_p_winding, valid_p_z)
+            if not valid_winding:
+                valid_end_indx = i
+            else:
+                break
+
+        print(f"Clipped windings from {valid_start_indx} to {valid_end_indx}. Total length: {nr_windings}.")
+        # Translate indices from winding to pointset indices
+        valid_start_indx = int(valid_start_indx * steps_per_winding)
+        valid_end_indx = int(valid_end_indx * steps_per_winding)
+
+        # Clip the valid windings
+        valid_ts = result_ts[valid_start_indx:valid_end_indx]
+        valid_normals = result_normals[valid_start_indx:valid_end_indx]
+        angle_vector = angle_vector[valid_start_indx:valid_end_indx]
+        # reset same vector indices
+        global angle_vector_indices_dp
+        angle_vector_indices_dp = {}
+
+        return valid_ts, valid_normals, angle_vector
+    
+    def valid_z_values_indices(self, result_ts, valid_p_z=0.1):
+        # Clip away invalid z values
+        assert len(result_ts) > 0, "No t values found."
+        
+        z_height = len(result_ts[0])
+
+        valid_bottom_index = 0
+        # Check for all good z values
+        for u in range(z_height):
+            valid_bottom_count = 0
+            valid_bottom_index = u
+            for i in range(len(result_ts)):
+                if result_ts[i][u] is not None:
+                    valid_bottom_count += 1
+            if valid_bottom_count / len(result_ts) > valid_p_z:
+                break
+
+        valid_top_index = z_height-1
+        # Check for all good z values
+        for u in range(z_height-1, valid_bottom_index, -1):
+            valid_top_count = 0
+            valid_top_index = u
+            for i in range(len(result_ts)):
+                if result_ts[i][u] is not None:
+                    valid_top_count += 1
+            if valid_top_count / len(result_ts) > valid_p_z:
+                break
+            
+        print(f"Clipped z values from {valid_bottom_index} to {valid_top_index}. Total length: {z_height}.")
+        return valid_bottom_index, valid_top_index
+    
+    def check_valid_winding(self, winding_ts, winding_normals, valid_p_winding=0.25, valid_p_z=0.25):
+        # if more than valid_p_z percent of the t values in a step are None, the winding step is invalid
+        # if more than valid_p_winding percent of the winding steps are invalid, the winding is invalid
+        valid_winding = False
+        count_valid_steps = 0
+        for i in range(len(winding_ts)):
+            count_invalid_z = 0
+            for j in range(len(winding_ts[i])):
+                if winding_ts[i][j] is None:
+                    count_invalid_z += 1
+            p_valid_z = 1 - count_invalid_z / len(winding_ts[i])
+            # print(f"Valid z values: {p_valid_z}")
+            if p_valid_z > valid_p_z:
+                count_valid_steps += 1
+        p_valid_steps = count_valid_steps / len(winding_ts)
+        # print(f"Valid winding steps: {p_valid_steps}")
+        if p_valid_steps > valid_p_winding:
+            valid_winding = True
+        return valid_winding
+
     def ordered_pointset_to_pointcloud_save(self, ordered_pointset, ordered_normals, ordered_umbilicus_points, angle_vector):
         pointset = []
 
@@ -757,7 +858,7 @@ class WalkToSheet():
         test_pointset_ply_path = os.path.join(test_folder, f"ordered_pointset_test_cpp.ply")
         self.pointcloud_from_ordered_pointset(pointset, os.path.join(self.save_path, test_pointset_ply_path))
            
-    def rolled_ordered_pointset(self, points, normals, debug=False):
+    def rolled_ordered_pointset(self, points, normals, debug=False, angle_step=1, z_spacing=5):
         # get winding angles
         winding_angles = points[:, 3]
 
@@ -801,7 +902,7 @@ class WalkToSheet():
         # Set to false to load precomputed partial results during development
         fresh_start = True
         if fresh_start:
-            result = pointcloud_processing.create_ordered_pointset(points, normals, self.graph.umbilicus_data) # named parameters for mesh detail level: float angleStep, int z_spacing, float max_eucledian_distance, bool verbose
+            result = pointcloud_processing.create_ordered_pointset(points, normals, self.graph.umbilicus_data, angleStep=angle_step, z_spacing=z_spacing) # named parameters for mesh detail level: float angleStep, int z_spacing, float max_eucledian_distance, bool verbose
             # save result as pkl
             result_pkl_path = os.path.join(self.save_path, "ordered_pointset.pkl")
             with open(result_pkl_path, 'wb') as f:
@@ -822,7 +923,7 @@ class WalkToSheet():
         # Set to false to load precomputed partial results during development
         fresh_start2 = True
         if fresh_start2:
-            result_ts, result_normals = self.interpolate_ordered_pointset(ordered_pointset, ordered_normals, ordered_umbilicus_points, angle_vector, winding_direction)
+            result_ts, result_normals = self.interpolate_ordered_pointset(ordered_pointset, ordered_normals, angle_vector, winding_direction)
             interpolated_ts, interpolated_normals = result_ts, result_normals
             # save result as pkl
             result_pkl_path = os.path.join(self.save_path, "results_ts_normals.pkl")
@@ -833,14 +934,22 @@ class WalkToSheet():
             with open(result_pkl_path, 'rb') as f:
                 (result_ts, result_normals) = pickle.load(f)
 
+        valid_ts, valid_normals, angle_vector = self.clip_valid_windings(result_ts, result_normals, angle_vector, angle_step)
+        valid_bottom_index, valid_top_index = self.valid_z_values_indices(valid_ts, valid_p_z=0.4)
+
         # interpolate initial full pointset. After this step there exists an "ordered pointset" prototype without any None values
-        interpolated_ts, interpolated_normals, fixed_points = self.initial_full_pointset(result_ts, result_normals, angle_vector, mean_innermost_ts, mean_outermost_ts, winding_direction)
+        interpolated_ts, interpolated_normals, fixed_points = self.initial_full_pointset(valid_ts, valid_normals, angle_vector, mean_innermost_ts, mean_outermost_ts, winding_direction)
 
         # Calculate for each point in the ordered pointset its neighbouring indices (3d in a 2d list). on same sheet, top bottom, front back, adjacent sheets neighbours: left right
         neighbours_dict = self.deduct_ordered_pointset_neighbours(interpolated_ts, angle_vector, winding_direction)
 
         # Optimize the full pointset for smooth surface with best guesses for interpolated t values
-        interpolated_ts = self.optimize_adjacent(interpolated_ts, neighbours_dict, fixed_points)
+        interpolated_ts = self.optimize_adjacent(interpolated_ts, neighbours_dict, fixed_points, learning_rate=0.2)
+
+        # Clip away invalid z values
+        interpolated_ts = [interpolated_ts[i][valid_bottom_index:valid_top_index] for i in range(len(interpolated_ts))]
+        interpolated_normals = [interpolated_normals[i][valid_bottom_index:valid_top_index] for i in range(len(interpolated_normals))]
+        ordered_umbilicus_points = [ordered_umbilicus_points[i][valid_bottom_index:valid_top_index] for i in range(len(ordered_umbilicus_points))]
 
         # go from interpolated t values to ordered pointset (3D points)
         interpolated_points = self.ordered_pointset_to_3D(interpolated_ts, ordered_umbilicus_points, angle_vector)
@@ -1008,7 +1117,7 @@ class WalkToSheet():
 
     def unroll(self, debug=False):
         # Set to false to load precomputed partial results during development
-        start_fresh = True
+        start_fresh = False
         if start_fresh: 
             # Set to false to load precomputed partial results during development
             start_fresh_build_points = True
