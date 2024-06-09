@@ -999,7 +999,7 @@ public:
         std::cout.flush();
     }
 
-    std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<std::vector<float>>>, std::vector<std::vector<float>>, std::vector<float>>> create_ordered_pointset(
+    std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<std::vector<float>>>, std::vector<std::vector<float>>, std::vector<float>>> create_ordered_pointset_processor(
         py::array_t<float> original_points,
         py::array_t<float> original_normals,
         py::array_t<float> umbilicus_points,
@@ -1176,7 +1176,7 @@ std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<
     if (verbose) {
         std::cout << "Creating ordered pointset" << std::endl;
     }
-    return std::move(processor.create_ordered_pointset(original_points, original_normals, umbilicus_points, angleStep, z_spacing, max_eucledian_distance));
+    return std::move(processor.create_ordered_pointset_processor(original_points, original_normals, umbilicus_points, angleStep, z_spacing, max_eucledian_distance));
     if (verbose) {
         std::cout << "Finished creating ordered pointset" << std::endl;
     }
