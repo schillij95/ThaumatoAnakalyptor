@@ -513,7 +513,7 @@ class WalkToSheet():
 
         return interpolated_ts
     
-    def optimize_adjacent_cpp(self, interpolated_ts, neighbours_dict, fixed_points, learning_rate=0.1, iterations=3, error_val_d=0.01, verbose=True):
+    def optimize_adjacent_cpp(self, interpolated_ts, neighbours_dict, fixed_points, learning_rate=0.1, iterations=3, error_val_d=0.01, unfix_factor=3.0, verbose=True):
         # translate neighbours_dict to list[list[list[list[int]]]] (i, j, [front, back, top, bottom, left, right], [i_n, j_n])
         neighbours_list = []
         for i in range(len(interpolated_ts)):
@@ -571,6 +571,7 @@ class WalkToSheet():
                                     learning_rate=learning_rate, 
                                     iterations=iterations,
                                     error_val_d=error_val_d,
+                                    unfix_factor=unfix_factor,
                                     verbose=verbose
                                     )
         
