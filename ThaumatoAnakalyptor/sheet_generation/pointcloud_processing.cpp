@@ -1191,6 +1191,7 @@ public:
         float learning_rate = 0.1,
         int iterations = 3,
         float error_val_d = 0.01,
+        float unfix_factor = 3.0,
         bool verbose = false)
         :   input_ordered_pointset(input_ordered_pointset), 
             new_interpolated_ts(input_ordered_pointset), 
@@ -1559,7 +1560,7 @@ private:
         }
 
         float error_mean_fixed = count_fixed > 0 ? sum_errors / count_fixed : 0.0;
-        float error_threshold = 1.1 * error_mean_fixed;
+        float error_threshold = unfix_factor * error_mean_fixed;
 
         // Unfix points exceeding the error threshold
         for (size_t i = 0; i < fixed_points.size(); i++) {
@@ -1581,6 +1582,7 @@ private:
     int progress = 0;
     int problem_size = -1;
     float error_val_d = 0.01;  // Delta for error value convergence
+    float unfix_factor = 3.0;
     bool verbose;
 };
 
@@ -1591,10 +1593,11 @@ std::vector<std::vector<float>> optimize_ordered_pointset(
     float learning_rate = 0.1,
     int iterations = 3,
     float error_val_d = 0.01,  // Delta for error value convergence
+    float unfix_factor = 3.0,
     bool verbose = true
     )
 {
-    OrderedPointsetOptimizer optimizer(input_ordered_pointset, fixed_points, neighbours_indices, learning_rate, iterations, error_val_d, verbose);
+    OrderedPointsetOptimizer optimizer(input_ordered_pointset, fixed_points, neighbours_indices, learning_rate, iterations, error_val_d, unfix_factor, verbose);
     if (verbose) {
         std::cout << "Optimizing ordered pointset" << std::endl;
     }
@@ -1627,5 +1630,6 @@ PYBIND11_MODULE(pointcloud_processing, m) {
             py::arg("learning_rate") = 0.1,
             py::arg("iterations") = 3,
             py::arg("error_val_d") = 0.01,
+            py::arg("unfix_factor") = 3.0,
             py::arg("verbose") = true);
 }

@@ -1020,7 +1020,7 @@ class WalkToSheet():
             # Optimize the full pointset for smooth surface with best guesses for interpolated t values
             # interpolated_ts = self.optimize_adjacent(interpolated_ts, neighbours_dict, fixed_points, learning_rate=0.2)
             interpolated_ts = self.optimize_adjacent_cpp(interpolated_ts, neighbours_dict, fixed_points, 
-                                                        learning_rate=0.2, iterations=5, error_val_d=0.005, 
+                                                        learning_rate=0.2, iterations=5, error_val_d=0.005, unfix_factor=3.0,
                                                         verbose=True)
 
             # Clip away invalid z values
@@ -1194,22 +1194,35 @@ class WalkToSheet():
             uv_image.save(filename[:-4] + ".png")
 
     def flatten(self, mesh_path):
-        mesh_output_path = mesh_path.replace(".obj", "_flat.obj")
+        mesh_output_path = mesh_path.replace(".obj", "_flatboi.obj")
         flatboi = Flatboi(mesh_path, 5, output_obj=mesh_output_path)
-        # harmonic_uvs, harmonic_energies = flatboi.slim(initial_condition='harmonic')
-        harmonic_uvs, harmonic_energies = flatboi.slim(initial_condition='ordered')
-        
+        fresh_start = False
+        if fresh_start:
+            # harmonic_uvs, harmonic_energies = flatboi.slim(initial_condition='harmonic')
+            harmonic_uvs, harmonic_energies = flatboi.slim(initial_condition='ordered')
+            # Get the directory of the input file
+            input_directory = os.path.dirname(mesh_output_path)
+            # Filename for the energies file
+            energies_file = os.path.join(input_directory, 'energies_flatboi.txt')
+            print_array_to_file(harmonic_energies, energies_file)       
+
+            # save harmonic_uvs as pkl
+            harmonic_uvs_path = os.path.join(self.save_path, "harmonic_uvs.pkl")
+            with open(harmonic_uvs_path, 'wb') as f:
+                pickle.dump(harmonic_uvs, f)
+        else:
+            harmonic_uvs_path = os.path.join(self.save_path, "harmonic_uvs.pkl")
+            with open(harmonic_uvs_path, 'rb') as f:
+                harmonic_uvs = pickle.load(f)
+
         # Save Flattened mesh
         flatboi.save_img(harmonic_uvs)
         flatboi.save_obj(harmonic_uvs)
-        # Get the directory of the input file
-        input_directory = os.path.dirname(mesh_output_path)
-        # Filename for the energies file
-        energies_file = os.path.join(input_directory, 'energies_flatboi.txt')
-        print_array_to_file(harmonic_energies, energies_file)       
         flatboi.save_mtl()
 
     def unroll(self, debug=False):
+        mesh_path = os.path.join(self.save_path, "mesh.obj")
+
         # Set to false to load precomputed partial results during development
         start_fresh = False
         if start_fresh: 
@@ -1255,7 +1268,6 @@ class WalkToSheet():
 
         mesh, uv_image = self.mesh_from_ordered_pointset(ordered_pointsets)
 
-        mesh_path = os.path.join(self.save_path, "mesh.obj")
         self.save_mesh(mesh, uv_image, mesh_path)
 
         # Flatten mesh

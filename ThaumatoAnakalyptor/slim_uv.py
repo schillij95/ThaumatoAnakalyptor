@@ -35,7 +35,7 @@ class Flatboi:
     def read_mesh(self):
         self.mesh = o3d.io.read_triangle_mesh(self.input_obj)
         self.vertices = np.asarray(self.mesh.vertices, dtype=np.float64) / self.stretch_factor
-        self.triangles = np.asarray(self.mesh.triangles, dtype=np.int32)
+        self.triangles = np.asarray(self.mesh.triangles, dtype=np.int64)
         self.original_uvs = np.asarray(self.mesh.triangle_uvs, dtype=np.float64)
 
     def filter_mesh(self):
@@ -217,43 +217,53 @@ class Flatboi:
             bnd, bnd_uv, uv = self.ordered_ic()
 
         self.vertices = self.vertices.astype(np.float64)
-        self.triangles = self.triangles.astype(np.int32)
+        self.triangles = self.triangles.astype(np.int64)
         uv = uv.astype(np.float64)
-        bnd = bnd.astype(np.int32)
+        bnd = bnd.astype(np.int64)
         bnd_uv = bnd_uv.astype(np.float64)
+
+        energies = []
 
         # initializing SLIM with Symmetric Dirichlet Distortion Energy (isometric)
         print("Symmetric Dirichlet Distortion Energy")
         slim = igl.SLIM(self.vertices, self.triangles, v_init=uv, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_SYMMETRIC_DIRICHLET, soft_penalty=0)
-        slim_uvs, energies = self.slim_optimization(slim)
+        slim_uvs, energies_ = self.slim_optimization(slim)
+        energies.extend(list(energies_))
 
         print("Log ARAP Energy")
         slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_LOG_ARAP, soft_penalty=0)
-        slim_uvs, energies = self.slim_optimization(slim)
+        slim_uvs, energies_ = self.slim_optimization(slim)
+        energies.extend(list(energies_))
 
         print("Conformal Energy")
         slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_SYMMETRIC_DIRICHLET, soft_penalty=0)
-        slim_uvs, energies = self.slim_optimization(slim)
+        slim_uvs, energies_ = self.slim_optimization(slim)
+        energies.extend(list(energies_))
 
         print("Conformal Energy")
         slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_CONFORMAL, soft_penalty=0)
-        slim_uvs, energies = self.slim_optimization(slim)
+        slim_uvs, energies_ = self.slim_optimization(slim)
+        energies.extend(list(energies_))
 
         print("Log ARAP Energy")
         slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_LOG_ARAP, soft_penalty=0)
-        slim_uvs, energies = self.slim_optimization(slim)
+        slim_uvs, energies_ = self.slim_optimization(slim)
+        energies.extend(list(energies_))
 
         print("ARAP Energy")
         slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_ARAP, soft_penalty=0)
-        slim_uvs, energies = self.slim_optimization(slim)
+        slim_uvs, energies_ = self.slim_optimization(slim)
+        energies.extend(list(energies_))
 
         print("Symmetric Dirichlet Distortion Energy")
         slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_SYMMETRIC_DIRICHLET, soft_penalty=0)
-        slim_uvs, energies = self.slim_optimization(slim)
+        slim_uvs, energies_ = self.slim_optimization(slim)
+        energies.extend(list(energies_))
 
         print("Exponential Symmetric Dirichlet Distortion Energy")
         slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_EXP_SYMMETRIC_DIRICHLET, soft_penalty=0)
-        slim_uvs, energies = self.slim_optimization(slim)
+        slim_uvs, energies_ = self.slim_optimization(slim)
+        energies.extend(list(energies_))
 
         l2, linf, area_error = self.stretch_metrics(slim.vertices())
         print(f"Stretch metrics L2: {l2:.5f}, Linf: {linf:.5f}, Area Error: {area_error:.5f}", end="\n")
@@ -261,7 +271,7 @@ class Flatboi:
         # rescale slim uvs
         slim_uvs = slim_uvs * self.stretch_factor
 
-        return slim_uvs, energies
+        return slim_uvs, np.array(energies)
     
     @staticmethod
     def normalize(uv):
@@ -271,9 +281,9 @@ class Flatboi:
         return new_uv
 
     def save_img(self, uv):
-        input_directory = os.path.dirname(self.output_obj)
+        output_directory = os.path.dirname(self.output_obj)
         base_file_name, _ = os.path.splitext(os.path.basename(self.output_obj))
-        image_path = os.path.join(input_directory, f"{base_file_name}_0.png")
+        image_path = os.path.join(output_directory, f"{base_file_name}_0.png")
         min_x, min_y = np.min(uv, axis=0)
         shifted_coords = uv - np.array([min_x, min_y])
         max_x, max_y = np.max(shifted_coords, axis=0)
@@ -286,10 +296,10 @@ class Flatboi:
         Image.fromarray(white_image, mode='L').save(image_path)
 
     def save_mtl(self):
-        input_directory = os.path.dirname(self.output_obj)
+        output_directory = os.path.dirname(self.output_obj)
         base_file_name, _ = os.path.splitext(os.path.basename(self.output_obj))
         
-        new_file_path = os.path.join(input_directory, f"{base_file_name}.mtl")
+        new_file_path = os.path.join(output_directory, f"{base_file_name}.mtl")
         content = f"""# Material file generated by ThaumatoAnakalyptor
         newmtl default
         Ka 1.0 1.0 1.0
@@ -304,15 +314,16 @@ class Flatboi:
             file.write(content)
 
     def save_obj(self, uv):
-        input_directory = os.path.dirname(self.output_obj)
+        output_directory = os.path.dirname(self.output_obj)
         base_file_name, _ = os.path.splitext(os.path.basename(self.output_obj))
-        obj_path = os.path.join(input_directory, f"{base_file_name}.obj")
+        obj_path = os.path.join(output_directory, f"{base_file_name}.obj")
         normalized_uv = self.normalize(uv)
         slim_uvs = np.zeros((self.triangles.shape[0],3,2), dtype=np.float64)
         for t in range(self.triangles.shape[0]):
             for v in range(self.triangles.shape[1]):
                 slim_uvs[t,v,:] = normalized_uv[self.triangles[t,v]]
         slim_uvs = slim_uvs.reshape(-1,2)
+        self.mesh.triangles = o3d.utility.Vector3iVector(np.array(self.triangles).astype(np.int32))
         self.mesh.triangle_uvs = o3d.utility.Vector2dVector(slim_uvs)
         o3d.io.write_triangle_mesh(obj_path, self.mesh)
 
