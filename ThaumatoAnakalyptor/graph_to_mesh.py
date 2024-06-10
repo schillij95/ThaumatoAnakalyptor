@@ -1021,7 +1021,7 @@ class WalkToSheet():
             # Optimize the full pointset for smooth surface with best guesses for interpolated t values
             # interpolated_ts = self.optimize_adjacent(interpolated_ts, neighbours_dict, fixed_points, learning_rate=0.2)
             interpolated_ts = self.optimize_adjacent_cpp(interpolated_ts, neighbours_dict, fixed_points, 
-                                                        learning_rate=0.2, iterations=5, error_val_d=0.005, unfix_factor=3.0,
+                                                        learning_rate=0.2, iterations=3, error_val_d=0.005, unfix_factor=2.5,
                                                         verbose=True)
 
             # Clip away invalid z values

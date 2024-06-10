@@ -38,7 +38,7 @@ class Flatboi:
         self.triangles = np.asarray(self.mesh.triangles, dtype=np.int64)
         self.original_uvs = np.asarray(self.mesh.triangle_uvs, dtype=np.float64)
 
-    def filter_mesh(self):
+    def filter_mesh(self, area_cutoff=0.0000001):
         def triangle_area(v1, v2, v3):
             return 0.5 * np.linalg.norm(np.cross(v2 - v1, v3 - v1))
         # Filtering out any triangles with 0 area
@@ -47,9 +47,9 @@ class Flatboi:
         self.original_uvs = np.array(self.original_uvs).reshape((-1, 3, 2))
         assert len(self.triangles) == len(self.original_uvs), f"Number of triangles and uvs do not match. {len(self.triangles)} != {len(self.original_uvs)}"
         # Filter original uvs
-        self.original_uvs = np.array([self.original_uvs[i] for i in range(len(self.triangles)) if abs(triangle_area(self.vertices[self.triangles[i][0]], self.vertices[self.triangles[i][1]], self.vertices[self.triangles[i][2]])) > 0.0001])
+        self.original_uvs = np.array([self.original_uvs[i] for i in range(len(self.triangles)) if abs(triangle_area(self.vertices[self.triangles[i][0]], self.vertices[self.triangles[i][1]], self.vertices[self.triangles[i][2]])) > area_cutoff])
         # Filter triangles
-        self.triangles = np.array([t for t in self.triangles if abs(triangle_area(self.vertices[t[0]], self.vertices[t[1]], self.vertices[t[2]])) > 0.0001])
+        self.triangles = np.array([t for t in self.triangles if abs(triangle_area(self.vertices[t[0]], self.vertices[t[1]], self.vertices[t[2]])) > area_cutoff])
         print(f"Filtered out {len_before - len(self.triangles)} triangles with 0 area of total {len_before} triangles.")
         assert len(self.triangles) == len(self.original_uvs), f"Number of triangles and uvs do not match. {len(self.triangles)} != {len(self.original_uvs)}"
         self.original_uvs = np.array(self.original_uvs).reshape((-1, 2))
@@ -165,14 +165,16 @@ class Flatboi:
         slim_uvs = np.stack((u_return, v_return), axis=-1)
         return slim_uvs
     
-    def slim_optimization(self, slim):
-        energies = np.zeros(self.max_iter+1, dtype=np.float64)
+    def slim_optimization(self, slim, iterations=None):
+        if iterations is None:
+            iterations = self.max_iter
+        energies = np.zeros(iterations+1, dtype=np.float64)
         energies[0] = slim.energy()
 
         threshold = 1e-5
         converged = False
         iteration = 0
-        while (not converged) and (iteration < self.max_iter):
+        while (not converged) and (iteration < iterations):
             print(iteration)
             temp_energy = slim.energy()
             slim.solve(1)
@@ -222,6 +224,8 @@ class Flatboi:
         bnd = bnd.astype(np.int64)
         bnd_uv = bnd_uv.astype(np.float64)
 
+        uv = self.orient_uvs(uv) # Enables the UVs to be oriented correctly for the slim optimization
+
         energies = []
 
         # initializing SLIM with Symmetric Dirichlet Distortion Energy (isometric)
@@ -235,7 +239,7 @@ class Flatboi:
         slim_uvs, energies_ = self.slim_optimization(slim)
         energies.extend(list(energies_))
 
-        print("Conformal Energy")
+        print("Symmetric Dirichlet Distortion Energy")
         slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_SYMMETRIC_DIRICHLET, soft_penalty=0)
         slim_uvs, energies_ = self.slim_optimization(slim)
         energies.extend(list(energies_))
