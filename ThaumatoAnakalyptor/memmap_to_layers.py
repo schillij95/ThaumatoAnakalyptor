@@ -1,8 +1,8 @@
 ## Giorgio Angelotti - 2024
 ## Based on ppm_to_layers by Julian Schilliger
 
-from rendering_utils.interpolate_image_3d import extract_from_image_3d, insert_into_image_3d
-from grid_to_pointcloud import load_grid
+from .rendering_utils.interpolate_image_3d import extract_from_image_3d, insert_into_image_3d
+from .grid_to_pointcloud import load_grid
 import argparse
 from tqdm import tqdm
 import os
@@ -142,6 +142,11 @@ def load_and_process_grid_volume(cubes, cube, data, args, path_template, axis_sw
 def main(args):
     working_path = os.path.dirname(args.ppm_path)
     path_template = args.grid_volume_path + "/cell_yxz_{:03}_{:03}_{:03}.tif"
+    layers_path = args.output_dir
+
+    # Create the output layers directory if it doesn't exist.
+    if not os.path.isdir(layers_path):
+        os.mkdir(layers_path)
 
     base_name = os.path.splitext(os.path.basename(args.ppm_path))[0]
 
@@ -174,8 +179,6 @@ def main(args):
     global layers
     layers = torch.zeros((2*args.r + 1, im_shape[1], im_shape[0]), dtype=torch.float64, device='cpu')
 
-    layers_path = working_path + "/layers/"
-
     print(f"All parameters: {args}, im_shape: {im_shape}, layers_path: {layers_path}, path_template: {path_template}")
     axis_swap_trans = [2, 1, 0]
 
@@ -207,7 +210,7 @@ def main(args):
         layer = layers[i].cpu().numpy().astype(np.uint16)
         # save layer with leading 0's for 2*r layers
         layer_nr = str(i).zfill(nr_zeros)
-        layer_path = layers_path + f"{layer_nr}.tif"
+        layer_path = layers_path + f"/{layer_nr}.tif"
         tifffile.imwrite(layer_path, layer)
 
 if __name__ == '__main__':
@@ -218,7 +221,8 @@ if __name__ == '__main__':
     # a simple laptop
     parser = argparse.ArgumentParser()
     parser.add_argument('ppm_path', type=str)
-    parser.add_argument('grid_volume_path', type=str)
+    parser.add_argument('grid_volume_path', type=str)   
+    parser.add_argument('--output_dir', type=str, default=None, help="The output \"layers\" directory path. By default it is created in the same directory as the ppm.")
     parser.add_argument('--r', type=int, default=32)
     parser.add_argument('--cube_size', type=int, default=500)
     parser.add_argument('--rendering_size', type=int, default=400)
@@ -226,5 +230,8 @@ if __name__ == '__main__':
     parser.add_argument('--max_workers', type=int, default=multiprocessing.cpu_count()//2)
     parser.add_argument('--gpus', type=int, default=1)
     args = parser.parse_args()
+
+    if args.output_dir is None:
+        args.output_dir = os.path.dirname(args.ppm_path) + "/layers"
 
     main(args)

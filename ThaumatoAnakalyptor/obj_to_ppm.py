@@ -1,6 +1,6 @@
 ### Giorgio Angelotti - 2024
 
-from rendering_utils.torch_ppm import points_in_triangles_batched
+from .rendering_utils.torch_ppm import points_in_triangles_batched
 import open3d as o3d
 import argparse
 import gc
