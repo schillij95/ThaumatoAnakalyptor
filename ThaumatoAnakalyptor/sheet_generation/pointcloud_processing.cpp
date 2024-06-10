@@ -1182,6 +1182,425 @@ std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<
     }
 }
 
+class OrderedPointsetOptimizer {
+public:
+    OrderedPointsetOptimizer(
+        std::vector<std::vector<float>> input_ordered_pointset,
+        std::vector<std::vector<bool>> fixed_points,
+        std::vector<std::vector<std::vector<std::vector<int>>>> neighbours_indices,
+        float learning_rate = 0.1,
+        int iterations = 3,
+        float error_val_d = 0.01,
+        bool verbose = false)
+        :   input_ordered_pointset(input_ordered_pointset), 
+            new_interpolated_ts(input_ordered_pointset), 
+            fixed_points(fixed_points), 
+            neighbours_indices(neighbours_indices), 
+            learning_rate(learning_rate),
+            iterations(iterations),
+            error_val_d(error_val_d),
+            verbose(verbose) {}
+
+    void print_progress() {
+        if (!verbose) {
+            return;
+        }
+        progress++;
+        // print on one line
+        std::cout << "Progress: " << progress << "/" << problem_size << "\r";
+        std::cout.flush();
+    }
+
+    std::vector<std::vector<float>> optimize_ordered_pointset_processor() {
+        for (int iter = 0; iter < iterations; ++iter) {
+            std::cout << "Iteration: " << (iter + 1) << "/" << iterations << std::endl;
+
+            // Calculate the total number of vertices and fixed points
+            int nr_vertices = 0;
+            int nr_fixed = 0;
+            float last_error_val = std::numeric_limits<float>::max();
+
+            // Calculate the total number of vertices and fixed points
+            for (const auto& row : fixed_points) {
+                nr_vertices += row.size();
+                nr_fixed += std::count(row.begin(), row.end(), true);
+            }
+            int nr_floating = nr_vertices - nr_fixed;
+
+            for (int opt_iter = 0; opt_iter < 10000; ++opt_iter) { // Maximum of 10000 optimization steps
+                float error_val = compute_interpolated_adjacent();
+
+                error_val /= nr_floating; // Normalize error by the number of floating vertices
+                std::cout << "Error value per floating vertex: " << std::setprecision(5) << error_val << std::endl;
+
+                // Check for convergence or if the error increased
+                if ((std::abs(last_error_val - error_val) < error_val_d) || (last_error_val - error_val < 0)) {
+                    break;
+                }
+                last_error_val = error_val;
+            }
+
+            // Detect and unfix wrong fixed adjacent if necessary
+            detect_and_unfix_wrong_fixed_adjacent();
+        }
+
+        return new_interpolated_ts;
+    }
+
+private:
+    std::pair<float, bool> get_front(int i, int j) {
+        int f_i = neighbours_indices[i][j][0][0];
+        int f_j = neighbours_indices[i][j][0][1];
+        if (f_i == -1 || f_j == -1) {
+            return {1, false};
+        }
+        float ts_f = input_ordered_pointset[f_i][f_j];
+        bool fixed_f = fixed_points[f_i][f_j];
+        return {ts_f, fixed_f};
+    }
+
+    std::pair<float, bool> get_back(int i, int j) {
+        int b_i = neighbours_indices[i][j][1][0];
+        int b_j = neighbours_indices[i][j][1][1];
+        if (b_i == -1 || b_j == -1) {
+            return {1, false};
+        }
+        float ts_b = input_ordered_pointset[b_i][b_j];
+        bool fixed_b = fixed_points[b_i][b_j];
+        return {ts_b, fixed_b};
+    }
+
+    std::pair<float, bool> get_top(int i, int j) {
+        int t_i = neighbours_indices[i][j][2][0];
+        int t_j = neighbours_indices[i][j][2][1];
+        if (t_i == -1 || t_j == -1) {
+            return {1, false};
+        }
+        float ts_t = input_ordered_pointset[t_i][t_j];
+        bool fixed_t = fixed_points[t_i][t_j];
+        return {ts_t, fixed_t};
+    }
+
+    std::pair<float, bool> get_bottom(int i, int j) {
+        int bo_i = neighbours_indices[i][j][3][0];
+        int bo_j = neighbours_indices[i][j][3][1];
+        if (bo_i == -1 || bo_j == -1) {
+            return {1, false};
+        }
+        float ts_bo = input_ordered_pointset[bo_i][bo_j];
+        bool fixed_bo = fixed_points[bo_i][bo_j];
+        return {ts_bo, fixed_bo};
+    }
+
+    std::pair<float, bool> get_left(int i, int j) {
+        int l_i = neighbours_indices[i][j][4][0];
+        int l_j = neighbours_indices[i][j][4][1];
+        if (l_i == -1 || l_j == -1) {
+            return {1, false};
+        }
+        float ts_l = input_ordered_pointset[l_i][l_j];
+        bool fixed_l = fixed_points[l_i][l_j];
+        return {ts_l, fixed_l};
+    }
+
+    std::pair<float, bool> get_right(int i, int j) {
+        int r_i = neighbours_indices[i][j][5][0];
+        int r_j = neighbours_indices[i][j][5][1];
+        if (r_i == -1 || r_j == -1) {
+            return {1, false};
+        }
+        float ts_r = input_ordered_pointset[r_i][r_j];
+        bool fixed_r = fixed_points[r_i][r_j];
+        return {ts_r, fixed_r};
+    }
+
+    std::pair<float, bool> get_left_new(int i, int j) {
+        int l_i = neighbours_indices[i][j][4][0];
+        int l_j = neighbours_indices[i][j][4][1];
+        if (l_i == -1 || l_j == -1) {
+            return {1, false};
+        }
+        float ts_l = new_interpolated_ts[l_i][l_j];
+        bool fixed_l = fixed_points[l_i][l_j];
+        return {ts_l, fixed_l};
+    }
+
+    std::pair<float, bool> get_right_new(int i, int j) {
+        int r_i = neighbours_indices[i][j][5][0];
+        int r_j = neighbours_indices[i][j][5][1];
+        if (r_i == -1 || r_j == -1) {
+            return {1, false};
+        }
+        float ts_r = new_interpolated_ts[r_i][r_j];
+        bool fixed_r = fixed_points[r_i][r_j];
+        return {ts_r, fixed_r};
+    }
+
+    float solve_for_t_individual(float r, float l, float m_r, bool valid_mr, float m_l, bool valid_ml, float m_ts, bool valid_mts, float a = 1.0) {
+        float t_ts = m_ts;
+        float t_total = t_ts;
+        float count_total = a;
+        if (r != 1 && valid_mr) {
+            float t_r = r - m_r;
+            t_total += t_r;
+            count_total += 1.0;
+        }
+        if (l != 1 && valid_ml) {
+            float t_l = l - m_l;
+            t_total += t_l;
+            count_total += 1.0;
+        }
+        t_total /= count_total;
+
+        if (t_total > 0.0) {
+            t_total = 0.0;
+        }
+
+        return t_total;
+    }
+
+    std::pair<bool, bool> side_of(float ts_, float n) {
+        return {ts_ > n, ts_ == n};
+    }
+
+    float respect_non_overlapping(int i, int j, float new_ts_d) {
+        float old_ts = input_ordered_pointset[i][j];
+
+        auto [ts_l, fixed_l] = get_left(i, j);  // old left
+        auto [ts_r, fixed_r] = get_right(i, j); // old right
+        auto [ts_ln, fixed_ln] = get_left_new(i, j);  // new left
+        auto [ts_rn, fixed_rn] = get_right_new(i, j); // new right
+
+        // Check left boundary
+        if (ts_l != 1) {
+            auto [side_old_l, invalid_l] = side_of(old_ts, ts_l);
+            assert(!invalid_l);
+            auto [side_new_l, invalid_new_l] = side_of(old_ts + new_ts_d, ts_l);
+            if (side_old_l != side_new_l) {
+                new_ts_d = (ts_l - old_ts) * 0.5;
+            }
+        }
+
+        // Check right boundary
+        if (ts_r != 1) {
+            auto [side_old_r, invalid_r] = side_of(old_ts, ts_r);
+            assert(!invalid_r);
+            auto [side_new_r, invalid_new_r] = side_of(old_ts + new_ts_d, ts_r);
+            if (side_old_r != side_new_r) {
+                new_ts_d = (ts_r - old_ts) * 0.5;
+            }
+        }
+
+        // Check new left boundary
+        if (ts_ln != 1) {
+            auto [side_old_ln, invalid_ln] = side_of(old_ts, ts_ln);
+            assert(!invalid_ln);
+            auto [side_new_ln, invalid_new_ln] = side_of(old_ts + new_ts_d, ts_ln);
+            if (side_old_ln != side_new_ln) {
+                new_ts_d = (ts_ln - old_ts) * 0.5;
+            }
+        }
+
+        // Check new right boundary
+        if (ts_rn != 1) {
+            auto [side_old_rn, invalid_rn] = side_of(old_ts, ts_rn);
+            assert(!invalid_rn);
+            auto [side_new_rn, invalid_new_rn] = side_of(old_ts + new_ts_d, ts_rn);
+            if (side_old_rn != side_new_rn) {
+                new_ts_d = (ts_rn - old_ts) * 0.5;
+            }
+        }
+
+        return new_ts_d;
+    }
+
+    std::tuple<float, float, float, bool, float, bool, float, bool> calculate_neighbors_values(int i, int j) {
+        std::pair<int, int> dict_key = {i, j};
+        std::vector<std::vector<int>> same_sheet_neighbors;
+
+        // Populate neighbors
+        auto [f, fixed_f] = get_front(i, j);
+        if (f != 1) {
+            int f_i = neighbours_indices[i][j][0][0];
+            int f_j = neighbours_indices[i][j][0][1];
+            same_sheet_neighbors.push_back({f_i, f_j});
+        }
+        auto [b, fixed_b] = get_back(i, j);
+        if (b != 1) {
+            int b_i = neighbours_indices[i][j][1][0];
+            int b_j = neighbours_indices[i][j][1][1];
+            same_sheet_neighbors.push_back({b_i, b_j});
+        }
+        auto [t, fixed_t] = get_top(i, j);
+        if (t != 1) {
+            int t_i = neighbours_indices[i][j][2][0];
+            int t_j = neighbours_indices[i][j][2][1];
+            same_sheet_neighbors.push_back({t_i, t_j});
+        }
+        auto [bo, fixed_bo] = get_bottom(i, j);
+        if (bo != 1) {
+            int bo_i = neighbours_indices[i][j][3][0];
+            int bo_j = neighbours_indices[i][j][3][1];
+            same_sheet_neighbors.push_back({bo_i, bo_j});
+        }
+
+        float l = get_left(i, j).first;
+        float r = get_right(i, j).first;
+        float m_r = 0.0;
+        float m_l = 0.0;
+        float m_ts = 0.0;
+
+        int count_r = 0, count_l = 0;
+
+        // Assuming 'neighbors' includes the indices for the front-back and top-bottom neighbors
+        for (auto& n : same_sheet_neighbors) {
+            float ts_n = input_ordered_pointset[n[0]][n[1]];
+            assert(ts_n <= 0.0);
+            
+            m_ts += ts_n;
+
+            auto [l_n, fixed_l_n] = get_left(n[0], n[1]);
+            if (l_n != 1) {
+                m_l += (l_n - ts_n);
+                count_l++;
+            }
+            auto [r_n, fixed_r_n] = get_right(n[0], n[1]);
+            if (r_n != 1) {
+                m_r += (r_n - ts_n);
+                count_r++;
+            }
+            
+        }
+
+        m_ts = !same_sheet_neighbors.empty() ? m_ts / same_sheet_neighbors.size() : 0;
+        bool valid_mts = same_sheet_neighbors.size() > 0;
+        m_r = count_r > 0 ? m_r / count_r : 0;
+        bool valid_mr = count_r > 0;
+        m_l = count_l > 0 ? m_l / count_l : 0;
+        bool valid_ml = count_l > 0;
+
+        return {r, l, m_r, valid_mr, m_l, valid_ml, m_ts, valid_mts};
+    }
+
+    float compute_interpolated_adjacent() {
+        float error_val = 0.0;
+        new_interpolated_ts = input_ordered_pointset; // Copy the original ts
+
+        // Calculate neighbour values for each vertex
+        std::vector<std::vector<std::tuple<float, float, float, bool, float, bool, float, bool>>> neighbour_values;
+        for (size_t i = 0; i < input_ordered_pointset.size(); i++) {
+            std::vector<std::tuple<float, float, float, bool, float, bool, float, bool>> row;
+            for (size_t j = 0; j < input_ordered_pointset[i].size(); j++) {
+                if (fixed_points[i][j]) { // optimization only for fixed points
+                    row.push_back({1, 1, 0, false, 0, false, 0, false});
+                    continue;
+                }
+                auto [r, l, m_r, valid_mr, m_l, valid_ml, m_ts, valid_mts] = calculate_neighbors_values(i, j);
+                row.push_back({r, l, m_r, valid_mr, m_l, valid_ml, m_ts, valid_mts});
+            }
+            neighbour_values.push_back(row);
+        }
+
+        for (size_t i = 0; i < input_ordered_pointset.size(); i++) {
+            for (size_t j = 0; j < input_ordered_pointset[i].size(); j++) {
+                if (!fixed_points[i][j]) {
+                    // Fetch the necessary neighbor values
+                    auto [r, l, m_r, valid_mr, m_l, valid_ml, m_ts, valid_mts] = neighbour_values[i][j];
+
+                    // Now solve for t_individual using dynamically computed m values
+                    float t = solve_for_t_individual(r, l, m_r, valid_mr, m_l, valid_ml, m_ts, valid_mts, 1.0);
+                    assert(t <= 0.0);
+                    float d_t = t - input_ordered_pointset[i][j];
+                    
+                    // Adjust d_t respecting the non-overlapping constraints
+                    d_t = respect_non_overlapping(i, j, d_t);
+                    
+                    error_val += std::abs(d_t);
+                    new_interpolated_ts[i][j] = input_ordered_pointset[i][j] + learning_rate * d_t; // Apply learning rate
+                }
+            }
+        }
+
+        // Copy the new interpolated ts to the input ordered pointset
+        input_ordered_pointset = new_interpolated_ts;
+
+        return error_val;
+    }
+
+    std::vector<std::vector<float>> compute_interpolated_adjacent_errors() {
+        std::vector<std::vector<float>> errors(input_ordered_pointset.size(), std::vector<float>(input_ordered_pointset[0].size(), 0.0f));
+
+        for (size_t i = 0; i < input_ordered_pointset.size(); i++) {
+            for (size_t j = 0; j < input_ordered_pointset[i].size(); j++) {
+                auto [r, l, m_r, valid_mr, m_l, valid_ml, m_ts, valid_mts] = calculate_neighbors_values(i, j);
+                float t = solve_for_t_individual(r, l, m_r, valid_mr, m_l, valid_ml, m_ts, valid_mts, 1.0);
+                assert(t <= 0.0);
+                float d_t = t - input_ordered_pointset[i][j];
+                d_t = respect_non_overlapping(i, j, d_t);
+                errors[i][j] = std::abs(d_t);
+            }
+        }
+        return errors;
+    }
+
+    void detect_and_unfix_wrong_fixed_adjacent() {
+        auto errors = compute_interpolated_adjacent_errors();
+        float sum_errors = 0.0;
+        int count_fixed = 0;
+
+        // Calculate mean error of fixed points
+        for (size_t i = 0; i < fixed_points.size(); i++) {
+            for (size_t j = 0; j < fixed_points[i].size(); j++) {
+                if (fixed_points[i][j]) {
+                    sum_errors += errors[i][j];
+                    count_fixed++;
+                }
+            }
+        }
+
+        float error_mean_fixed = count_fixed > 0 ? sum_errors / count_fixed : 0.0;
+        float error_threshold = 1.1 * error_mean_fixed;
+
+        // Unfix points exceeding the error threshold
+        for (size_t i = 0; i < fixed_points.size(); i++) {
+            for (size_t j = 0; j < fixed_points[i].size(); j++) {
+                if (fixed_points[i][j] && (errors[i][j] > error_threshold)) {
+                    fixed_points[i][j] = false;
+                }
+            }
+        }
+    }
+
+    std::vector<std::vector<float>> input_ordered_pointset;
+    std::vector<std::vector<float>> new_interpolated_ts;
+    std::vector<std::vector<bool>> fixed_points;
+    std::vector<std::vector<std::vector<std::vector<int>>>> neighbours_indices;
+    float learning_rate = 0.1;
+    int iterations = 3;
+    mutable std::mutex mutex_;
+    int progress = 0;
+    int problem_size = -1;
+    float error_val_d = 0.01;  // Delta for error value convergence
+    bool verbose;
+};
+
+std::vector<std::vector<float>> optimize_ordered_pointset(
+    std::vector<std::vector<float>> input_ordered_pointset, 
+    std::vector<std::vector<bool>> fixed_points, 
+    std::vector<std::vector<std::vector<std::vector<int>>>> neighbours_indices,
+    float learning_rate = 0.1,
+    int iterations = 3,
+    float error_val_d = 0.01,  // Delta for error value convergence
+    bool verbose = true
+    )
+{
+    OrderedPointsetOptimizer optimizer(input_ordered_pointset, fixed_points, neighbours_indices, learning_rate, iterations, error_val_d, verbose);
+    if (verbose) {
+        std::cout << "Optimizing ordered pointset" << std::endl;
+    }
+    return std::move(optimizer.optimize_ordered_pointset_processor());
+}
+
 
 PYBIND11_MODULE(pointcloud_processing, m) {
     m.doc() = "pybind11 module for parallel point cloud processing";
@@ -1199,4 +1618,14 @@ PYBIND11_MODULE(pointcloud_processing, m) {
           py::arg("z_spacing") = 10,
           py::arg("max_eucledian_distance") = 10,
           py::arg("verbose") = true);
+
+    m.def("optimize_adjacent", &optimize_ordered_pointset, 
+            "Function to optimize an ordered pointset.",
+            py::arg("input_ordered_pointset"),
+            py::arg("fixed_points"),
+            py::arg("neighbours_indices"),
+            py::arg("learning_rate") = 0.1,
+            py::arg("iterations") = 3,
+            py::arg("error_val_d") = 0.01,
+            py::arg("verbose") = true);
 }

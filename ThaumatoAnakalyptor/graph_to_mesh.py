@@ -11,6 +11,7 @@ import random
 
 # Custom imports
 from .Random_Walks import load_graph, ScrollGraph
+from .mesh_to_uv import compute as compute_uv
 from .slim_uv import Flatboi, print_array_to_file
 
 # import colormap from matplotlib
@@ -454,14 +455,17 @@ class WalkToSheet():
                     assert ordered_pointset[j][k] is not None, f"Point at {j}, {k} is None"
                     dict_key = (j, k)
                     if dict_key not in neighbours_dict:
-                        neighbours_dict[dict_key] = {"front_back": [], "top_bottom": [], "left": None, "right": None}
+                        neighbours_dict[dict_key] = {"front": None, "back": None, "top": None, "bottom": None, "left": None, "right": None}
                     # append top and bottom neighbours
                     for l in range(-1, 2):
                         if l == 0:
                             continue
                         if k + l >= 0 and k + l < len(ordered_pointset[j]):
                             assert ordered_pointset[j][k+l] is not None, f"Point at {j}, {k+l} is None"
-                            neighbours_dict[dict_key]["top_bottom"].append((j, k+l))
+                            if l == -1:
+                                neighbours_dict[dict_key]["top"] = (j, k+l)
+                            else:
+                                neighbours_dict[dict_key]["bottom"] = (j, k+l)
                     # append left and right neighbours
                     for l in range(-1, 2):
                         if l == 0:
@@ -481,7 +485,10 @@ class WalkToSheet():
                             continue
                         if j + l >= 0 and j + l < len(ordered_pointset):
                             assert ordered_pointset[j+l][k] is not None, f"Point at {j+l}, {k} is None"
-                            neighbours_dict[dict_key]["front_back"].append((j+l, k))
+                            if l == -1:
+                                neighbours_dict[dict_key]["front"] = (j+l, k)
+                            else:
+                                neighbours_dict[dict_key]["back"] = (j+l, k)
         return neighbours_dict
     
     def optimize_adjacent(self, interpolated_ts, neighbours_dict, fixed_points, learning_rate=0.1):
@@ -505,6 +512,70 @@ class WalkToSheet():
             self.detect_and_unfix_wrong_fixed_adjacent(neighbours_dict, interpolated_ts, fixed_points)
 
         return interpolated_ts
+    
+    def optimize_adjacent_cpp(self, interpolated_ts, neighbours_dict, fixed_points, learning_rate=0.1, iterations=3, error_val_d=0.01, verbose=True):
+        # translate neighbours_dict to list[list[list[list[int]]]] (i, j, [front, back, top, bottom, left, right], [i_n, j_n])
+        neighbours_list = []
+        for i in range(len(interpolated_ts)):
+            neighbours_list.append([])
+            for j in range(len(interpolated_ts[i])):
+                neighbours_list[i].append([])
+                dict_key = (i, j)
+                neighbours = neighbours_dict[dict_key]
+                # append front and back neighbours
+                if neighbours["front"] is not None:
+                    neighbours_list[i][j].append([int(neighbours["front"][0]), int(neighbours["front"][1])])
+                else:
+                    neighbours_list[i][j].append([int(-1), int(-1)])
+                if neighbours["back"] is not None:
+                    neighbours_list[i][j].append([int(neighbours["back"][0]), int(neighbours["back"][1])])
+                else:
+                    neighbours_list[i][j].append([int(-1), int(-1)])
+                # same for top and bottom neighbours, left and right neighbours
+                if neighbours["top"] is not None:
+                    neighbours_list[i][j].append([int(neighbours["top"][0]), int(neighbours["top"][1])])
+                else:
+                    neighbours_list[i][j].append([int(-1), int(-1)])
+                if neighbours["bottom"] is not None:
+                    neighbours_list[i][j].append([int(neighbours["bottom"][0]), int(neighbours["bottom"][1])])
+                else:
+                    neighbours_list[i][j].append([int(-1), int(-1)])
+                if neighbours["left"] is not None:
+                    neighbours_list[i][j].append([int(neighbours["left"][0]), int(neighbours["left"][1])])
+                else:
+                    neighbours_list[i][j].append([int(-1), int(-1)])
+                if neighbours["right"] is not None:
+                    neighbours_list[i][j].append([int(neighbours["right"][0]), int(neighbours["right"][1])])
+                else:
+                    neighbours_list[i][j].append([int(-1), int(-1)])
+        
+        # convert interpolated_ts to list[list[float]]
+        interpolated_ts_list = []
+        for i in range(len(interpolated_ts)):
+            interpolated_ts_list.append([])
+            for j in range(len(interpolated_ts[i])):
+                interpolated_ts_list[i].append(float(interpolated_ts[i][j]))
+        
+        # convert fixed_points to list[list[bool]]
+        fixed_points_list = []
+        for i in range(len(fixed_points)):
+            fixed_points_list.append([])
+            for j in range(len(fixed_points[i])):
+                fixed_points_list[i].append(bool(fixed_points[i][j]))
+        
+        # call C++ function
+        interpolated_ts_list = pointcloud_processing.optimize_adjacent(
+                                    interpolated_ts_list, 
+                                    fixed_points_list, 
+                                    neighbours_list, 
+                                    learning_rate=learning_rate, 
+                                    iterations=iterations,
+                                    error_val_d=error_val_d,
+                                    verbose=verbose
+                                    )
+        
+        return interpolated_ts_list
+                
     
     def ordered_pointset_to_3D(self, interpolated_ts, ordered_umbilicus_points, angle_vector):
         # go from interpolated t values to ordered pointset (3D points)
@@ -546,9 +617,10 @@ class WalkToSheet():
                 assert l[i][k] is None or l[i][k] <= 0.0, f"l[i][k] is not less than 0: {l[i][k]}"
                 r[i][k] = self.value_from_key(r[i][k], ordered_pointset)
                 assert r[i][k] is None or r[i][k] <= 0.0, f"r[i][k] is not less than 0: {r[i][k]}"
-                fb = neighbours["front_back"]
-                tb = neighbours["top_bottom"]
+                fb = [neighbours["front"], neighbours["back"]]
+                tb = [neighbours["top"], neighbours["bottom"]]
                 same_sheet_neighbours = fb + tb
+                same_sheet_neighbours = [n for n in same_sheet_neighbours if n is not None] # filter out None values
                 m_r_ = 0.0
                 m_l_ = 0.0
                 m_ts_ = 0.0
@@ -900,7 +972,7 @@ class WalkToSheet():
         
         print("Using Cpp rolled_ordered_pointset")
         # Set to false to load precomputed partial results during development
-        fresh_start = True
+        fresh_start = False
         if fresh_start:
             result = pointcloud_processing.create_ordered_pointset(points, normals, self.graph.umbilicus_data, angleStep=float(angle_step), z_spacing=int(z_spacing)) # named parameters for mesh detail level: float angleStep, int z_spacing, float max_eucledian_distance, bool verbose
             # save result as pkl
@@ -921,7 +993,7 @@ class WalkToSheet():
         mean_innermost_ts, mean_outermost_ts, winding_direction = self.find_inner_outermost_winding_direction(t_means, angle_vector)
 
         # Set to false to load precomputed partial results during development
-        fresh_start2 = True
+        fresh_start2 = False
         if fresh_start2:
             result_ts, result_normals = self.interpolate_ordered_pointset(ordered_pointset, ordered_normals, angle_vector, winding_direction)
             interpolated_ts, interpolated_normals = result_ts, result_normals
@@ -934,35 +1006,49 @@ class WalkToSheet():
             with open(result_pkl_path, 'rb') as f:
                 (result_ts, result_normals) = pickle.load(f)
 
-        valid_ts, valid_normals, angle_vector = self.clip_valid_windings(result_ts, result_normals, angle_vector, angle_step)
-        valid_bottom_index, valid_top_index = self.valid_z_values_indices(valid_ts, valid_p_z=0.4)
+        fresh_start3 = True
+        if fresh_start3:
+            valid_ts, valid_normals, angle_vector = self.clip_valid_windings(result_ts, result_normals, angle_vector, angle_step)
+            valid_bottom_index, valid_top_index = self.valid_z_values_indices(valid_ts, valid_p_z=0.1)
 
-        # interpolate initial full pointset. After this step there exists an "ordered pointset" prototype without any None values
-        interpolated_ts, interpolated_normals, fixed_points = self.initial_full_pointset(valid_ts, valid_normals, angle_vector, mean_innermost_ts, mean_outermost_ts, winding_direction)
+            # interpolate initial full pointset. After this step there exists an "ordered pointset" prototype without any None values
+            interpolated_ts, interpolated_normals, fixed_points = self.initial_full_pointset(valid_ts, valid_normals, angle_vector, mean_innermost_ts, mean_outermost_ts, winding_direction)
 
-        # Calculate for each point in the ordered pointset its neighbouring indices (3d in a 2d list). on same sheet, top bottom, front back, adjacent sheets neighbours: left right
-        neighbours_dict = self.deduct_ordered_pointset_neighbours(interpolated_ts, angle_vector, winding_direction)
+            # Calculate for each point in the ordered pointset its neighbouring indices (3d in a 2d list). on same sheet, top bottom, front back, adjacent sheets neighbours: left right
+            neighbours_dict = self.deduct_ordered_pointset_neighbours(interpolated_ts, angle_vector, winding_direction)
 
-        # Optimize the full pointset for smooth surface with best guesses for interpolated t values
-        interpolated_ts = self.optimize_adjacent(interpolated_ts, neighbours_dict, fixed_points, learning_rate=0.2)
+            # Optimize the full pointset for smooth surface with best guesses for interpolated t values
+            # interpolated_ts = self.optimize_adjacent(interpolated_ts, neighbours_dict, fixed_points, learning_rate=0.2)
+            interpolated_ts = self.optimize_adjacent_cpp(interpolated_ts, neighbours_dict, fixed_points, 
+                                                        learning_rate=0.2, iterations=5, error_val_d=0.005, 
+                                                        verbose=True)
 
-        # Clip away invalid z values
-        interpolated_ts = [interpolated_ts[i][valid_bottom_index:valid_top_index] for i in range(len(interpolated_ts))]
-        interpolated_normals = [interpolated_normals[i][valid_bottom_index:valid_top_index] for i in range(len(interpolated_normals))]
-        ordered_umbilicus_points = [ordered_umbilicus_points[i][valid_bottom_index:valid_top_index] for i in range(len(ordered_umbilicus_points))]
+            # Clip away invalid z values
+            interpolated_ts = [interpolated_ts[i][valid_bottom_index:valid_top_index] for i in range(len(interpolated_ts))]
+            interpolated_normals = [interpolated_normals[i][valid_bottom_index:valid_top_index] for i in range(len(interpolated_normals))]
+            ordered_umbilicus_points = [ordered_umbilicus_points[i][valid_bottom_index:valid_top_index] for i in range(len(ordered_umbilicus_points))]
 
-        # go from interpolated t values to ordered pointset (3D points)
-        interpolated_points = self.ordered_pointset_to_3D(interpolated_ts, ordered_umbilicus_points, angle_vector)
+            # go from interpolated t values to ordered pointset (3D points)
+            interpolated_points = self.ordered_pointset_to_3D(interpolated_ts, ordered_umbilicus_points, angle_vector)
 
-        print("Finished Cpp rolled_ordered_pointset")
+            print("Finished Cpp rolled_ordered_pointset")
 
-        # Creating ordered pointset output format
-        ordered_pointsets_final = []
-        for i in range(len(interpolated_points)):
-            ordered_pointsets_final.append((np.array(interpolated_points[i]), np.array(interpolated_normals[i])))
+            # Creating ordered pointset output format
+            ordered_pointsets_final = []
+            for i in range(len(interpolated_points)):
+                ordered_pointsets_final.append((np.array(interpolated_points[i]), np.array(interpolated_normals[i])))
 
-        # Debug output
-        self.ordered_pointset_to_pointcloud_save(interpolated_ts, interpolated_normals, ordered_umbilicus_points, angle_vector)
+            # Debug output
+            self.ordered_pointset_to_pointcloud_save(interpolated_ts, interpolated_normals, ordered_umbilicus_points, angle_vector)
+
+            # Save the ordered_pointsets_final
+            ordered_pointsets_final_pkl_path = os.path.join(self.save_path, "ordered_pointsets_final.pkl")
+            with open(ordered_pointsets_final_pkl_path, 'wb') as f:
+                pickle.dump(ordered_pointsets_final, f)
+        else:
+            ordered_pointsets_final_pkl_path = os.path.join(self.save_path, "ordered_pointsets_final.pkl")
+            with open(ordered_pointsets_final_pkl_path, 'rb') as f:
+                ordered_pointsets_final = pickle.load(f)            
 
         return ordered_pointsets_final
     
@@ -1074,7 +1160,11 @@ class WalkToSheet():
         mesh.vertices = o3d.utility.Vector3dVector(vertices)
         mesh.vertex_normals = o3d.utility.Vector3dVector(normals)
         mesh.triangles = o3d.utility.Vector3iVector(triangles)
-        mesh.triangle_uvs = o3d.utility.Vector2dVector(np.array(tringles_uv).reshape((-1, 2)))
+        triangle_uvs = np.array(tringles_uv).reshape((-1, 2))
+        # assert triangle uvs are not nan or inf
+        assert not np.any(np.isnan(triangle_uvs)), "Triangle UVs contain NaN values"
+        assert not np.any(np.isinf(triangle_uvs)), "Triangle UVs contain Inf values"
+        mesh.triangle_uvs = o3d.utility.Vector2dVector(triangle_uvs)
         # compute triangle normals and normals
         mesh = mesh.compute_triangle_normals()
         mesh = mesh.compute_vertex_normals()
@@ -1104,12 +1194,16 @@ class WalkToSheet():
             uv_image.save(filename[:-4] + ".png")
 
     def flatten(self, mesh_path):
-        flatboi = Flatboi(mesh_path, 5)
+        mesh_output_path = mesh_path.replace(".obj", "_flat.obj")
+        flatboi = Flatboi(mesh_path, 5, output_obj=mesh_output_path)
+        # harmonic_uvs, harmonic_energies = flatboi.slim(initial_condition='harmonic')
         harmonic_uvs, harmonic_energies = flatboi.slim(initial_condition='ordered')
+        
+        # Save Flattened mesh
         flatboi.save_img(harmonic_uvs)
         flatboi.save_obj(harmonic_uvs)
         # Get the directory of the input file
-        input_directory = os.path.dirname(mesh_path)
+        input_directory = os.path.dirname(mesh_output_path)
         # Filename for the energies file
         energies_file = os.path.join(input_directory, 'energies_flatboi.txt')
         print_array_to_file(harmonic_energies, energies_file)       
@@ -1180,7 +1274,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     graph_path = os.path.join(os.path.dirname(args.path), args.graph)
-    graph = load_graph(graph_path)
+    # graph = load_graph(graph_path)
+    graph = None
     reference_path = graph_path.replace("evolved_graph", "subgraph")
     start_point = args.start_point
     scale_factor = args.scale_factor
