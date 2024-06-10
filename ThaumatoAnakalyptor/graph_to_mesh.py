@@ -994,7 +994,7 @@ class WalkToSheet():
         mean_innermost_ts, mean_outermost_ts, winding_direction = self.find_inner_outermost_winding_direction(t_means, angle_vector)
 
         # Set to false to load precomputed partial results during development
-        fresh_start2 = False
+        fresh_start2 = True
         if fresh_start2:
             result_ts, result_normals = self.interpolate_ordered_pointset(ordered_pointset, ordered_normals, angle_vector, winding_direction)
             interpolated_ts, interpolated_normals = result_ts, result_normals
@@ -1197,7 +1197,7 @@ class WalkToSheet():
     def flatten(self, mesh_path):
         mesh_output_path = mesh_path.replace(".obj", "_flatboi.obj")
         flatboi = Flatboi(mesh_path, 5, output_obj=mesh_output_path)
-        fresh_start = False
+        fresh_start = True
         if fresh_start:
             # harmonic_uvs, harmonic_energies = flatboi.slim(initial_condition='harmonic')
             harmonic_uvs, harmonic_energies = flatboi.slim(initial_condition='ordered')
