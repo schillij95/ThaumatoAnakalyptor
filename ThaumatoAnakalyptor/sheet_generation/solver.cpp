@@ -12,10 +12,12 @@
 #include <future>
 #include <thread>
 #include <chrono>
+#include <queue>
 
 // Global random number generator - initialized once for performance
 std::mt19937 gen(std::random_device{}());
 std::uniform_int_distribution<size_t> dist_pick;
+std::discrete_distribution<size_t> dist_frontier;
 // std::mt19937 gen(31415629);
 
 namespace py = pybind11;
@@ -196,6 +198,7 @@ struct Node {
     float distance;               // Single float for 'distance'
     int index = -1;               // Single integer for 'index' in 'nodes' vector
     bool is_landmark = false;    // Single boolean for 'is_landmark'
+    int frontier_nr = 0;         // Single integer for 'frontier_nr'. describes how many unreached nodes are in the frontier of the node
 };
 // Using shared pointers for Node management
 using NodePtr = std::shared_ptr<Node>;
@@ -239,6 +242,53 @@ inline std::unordered_map<PatchID, std::pair<NodePtr, K>> getAllForVolume(const 
 
 using NodeUsageCount = std::unordered_map<NodePtr, std::unordered_map<K, int>>;
 
+std::pair<std::unordered_set<NodePtr>, int> frontier_bfs(NodePtr node, int max_depth = 3) {
+    // Run bfs on the node
+    std::queue<std::pair<NodePtr, int>> q;
+    q.push({node, 0});
+    // visited set
+    std::unordered_set<NodePtr> visited;
+    int nr_unassigned = 0;
+    while (!q.empty()) {
+        // Get the current node and depth
+        auto [current_node, depth] = q.front();
+        q.pop();
+        // If the node is already visited, skip
+        if (visited.find(current_node) != visited.end()) {
+            continue;
+        }
+        // Mark the node as visited
+        visited.insert(current_node);
+        // If the node is unassigned, increment the count
+        if (current_node->index == -1) {
+            nr_unassigned++;
+        }
+        int next_depth = depth + 1;
+        // If the depth is greater than max_depth, skip
+        if (next_depth > max_depth) {
+            continue;
+        }
+        // Add all the next nodes to the queue
+        for (const auto& next_node : current_node->next_nodes) {
+            if (next_node) {
+                q.push({next_node, next_depth});
+            }
+        }
+    } 
+    return {visited, nr_unassigned};
+}
+
+void decrement_frontiers(NodePtr node, int max_depth = 3) {
+    // Run bfs on the node
+    auto [visited, nr_unassigned] = frontier_bfs(node, max_depth);
+    // Decrement the frontier_nr for all the visited nodes
+    for (const auto& visited_node : visited) {
+        visited_node->frontier_nr--;
+        if (visited_node->frontier_nr < 0) {
+            std::cout << "Frontier nr is negative" << std::endl;
+        }
+    }
+}
 
 std::pair<std::vector<NodePtr>, std::vector<NodePtr>> initializeNodes(
     std::vector<std::vector<int>> start_ids,
@@ -323,12 +373,20 @@ std::pair<std::vector<NodePtr>, std::vector<NodePtr>> initializeNodes(
         std::cout << "Third pass done" << std::endl;
     }
 
+    // Calculate the frontier nr for each node
+    for (NodePtr node : nodes) {
+        auto [visited_nodes, nr_unassigned] = frontier_bfs(node);
+        node->frontier_nr = nr_unassigned;
+    }
+    std::cout << "Fourth pass done" << std::endl;
+
     std::vector<NodePtr> start_nodes;
 
     for(const auto& id : start_ids) {
         VolumeID volID = {id[0], id[1], id[2]};
         PatchID patchID = id[3];
         NodePtr start_node = getNode(std::cref(volume_dict), volID, patchID);
+        decrement_frontiers(start_node);
         start_nodes.push_back(start_node);
     }
 
@@ -459,7 +517,8 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::vector<size_t>> pick_start
     start_indices.reserve(nr_walks);
 
     for (int i = 0; i < nr_walks; ++i) {
-        size_t rand_index = valid_indices[dist_pick(gen)];
+        // size_t rand_index = valid_indices[dist_pick(gen)];
+        size_t rand_index = dist_frontier(gen);
 
         NodePtr node = nodes[rand_index];
         K k = ks[rand_index];
@@ -506,7 +565,8 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::vector<size_t>> pick_start
             start_indices.push_back(rand_index);
         }
         else {
-            size_t rand_index = valid_indices[dist_pick(gen)];
+            // size_t rand_index = valid_indices[dist_pick(gen)];
+            size_t rand_index = dist_frontier(gen);
 
             NodePtr node = nodes[rand_index];
             K k = ks[rand_index];
@@ -542,6 +602,7 @@ void precompute_pick(const std::vector<long>& picked_nrs, std::vector<size_t>& v
 
     double min_mean_abs = mean_ - min_;
     double threshold = min_ + min_mean_abs * 0.25;
+    // std::cout << "Mean: " << mean_ << " Min: " << min_ << " Threshold: " << threshold << std::endl;
 
     for (size_t i = 0; i < picked_nrs.size(); ++i) {
         if ((double)picked_nrs[i] <= threshold) {
@@ -550,6 +611,38 @@ void precompute_pick(const std::vector<long>& picked_nrs, std::vector<size_t>& v
     }
     gen = std::mt19937(std::random_device{}());
     dist_pick = std::uniform_int_distribution<size_t>(0, valid_indices.size() - 1);
+}
+
+void precompute_pick_frontier(const std::vector<NodePtr> nodes) {
+    std::vector<int> frontier_nrs;
+    frontier_nrs.reserve(nodes.size());
+    float frontier_mean = 0.0f;
+    int frontier_min = std::numeric_limits<int>::max();
+    int frontier_max = std::numeric_limits<int>::min();
+    for (const auto& node : nodes) {
+        frontier_nrs.push_back(node->frontier_nr);
+        frontier_mean += node->frontier_nr;
+        if (node->frontier_nr < frontier_min) {
+            frontier_min = node->frontier_nr;
+        }
+        if (node->frontier_nr > frontier_max) {
+            frontier_max = node->frontier_nr;
+        }
+    }
+
+    frontier_mean /= nodes.size();
+    float frontier_threshold_min_mean = frontier_min + (frontier_mean - frontier_min) * 0.25f;
+    float frontier_threshold_max_mean = frontier_max - (frontier_max - frontier_mean) * 0.25f;
+
+    for (size_t i = 0; i < nodes.size(); ++i) {
+        frontier_nrs[i] -= frontier_mean;
+        if (frontier_nrs[i] < 0) {
+            frontier_nrs[i] = 0;
+        }
+    }
+
+    gen = std::mt19937(std::random_device{}());
+    dist_frontier = std::discrete_distribution<size_t>(frontier_nrs.begin(), frontier_nrs.end());
 }
 
 inline std::pair<NodePtr, K> pick_next_node(std::mt19937& gen_, std::uniform_int_distribution<>& distrib, const Node& node, int start_k_diff, int max_same_block_jump_range, bool enable_winding_switch = false) {
@@ -948,6 +1041,8 @@ std::tuple<int, bool> walk_aggregation_func(
 
         // Update volume_dict with the newly aggregated node
         volume_dict[node->volume_id][node->patch_id] = std::make_pair(node, k);
+        // Decrement the frontier nr of the node
+        decrement_frontiers(node);
     }
 
     bool success = !aggregated_nodes.empty();
@@ -1043,6 +1138,9 @@ inline void update_picked_nr(const std::vector<NodePtr>& nodes, std::vector<long
     if (picked_nrs[index] < 0) {
         picked_nrs[index] = 0;
     }
+    if (picked_nrs[index] > 100) {
+        picked_nrs[index] = 100;
+    }
     assert (nodes[index]->index == index);
 }
 
@@ -1111,7 +1209,8 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solve(
     const Eigen::Vector2f& sheet_z_range = config.sheetZRange;
     const Eigen::Vector2i& sheet_k_range = config.sheetKRange;
     float max_umbilicus_difference = config.maxUmbilicusDifference;
-    int walk_aggregation_threshold = config.walkAggregationThreshold;
+    int walk_aggregation_threshold_start = config.walkAggregationThreshold;
+    int walk_aggregation_threshold = walk_aggregation_threshold_start;
     int walk_aggregation_max_current = config.walkAggregationMaxCurrent;
     int max_nr_walks = config.max_nr_walks;
     int max_unchanged_walks = config.max_unchanged_walks;
@@ -1141,7 +1240,8 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solve(
             picked_nrs.push_back(0);
             volume_dict[start_node->volume_id][start_node->patch_id] = std::make_pair(start_node, start_k);
         }
-        precompute_pick(std::cref(picked_nrs), valid_indices);
+        // precompute_pick(std::cref(picked_nrs), valid_indices);
+        precompute_pick_frontier(std::cref(nodes));
         // Add start_node to volume_dict
     }
 
@@ -1150,6 +1250,12 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solve(
     int walk_aggregation_count = 0;
     int total_walks = 0;
     int nrWalks = walksPerThread * numThreads;
+    // Run a minimum nr of random walks before adaptively changing the parameters.
+    // Ensures to warm up the nr picked and with that the starting node sampling logic
+    // Ensures to warmup the aggregation logic
+    int warmup_nr_walks = 2500000 + 2 * walk_aggregation_threshold_start * min_steps_start * nodes.size();
+    // Yellow print
+    std::cout << "\033[1;33m" << "[ThaumatoAnakalyptor]: Starting " << warmup_nr_walks << " warmup random walks. Nr good nodes: " << nodes.size() << "\033[0m" << std::endl;
 
     // numm threads gens
     std::vector<std::mt19937> gen_;
@@ -1163,8 +1269,10 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solve(
         gen_.push_back(gen_t_);
     }
 
+    int current_nr_walks = 0;
     while (true)
     {
+        current_nr_walks += nrWalks;
         // std::cout << "\033[1;32m" << "[ThaumatoAnakalyptor]: Starting " << nr_unchanged_walks << " random walk. Nr good nodes: " << nodes.size() << "\033[0m" << std::endl;
         // Display message counts at the end of solve function
         if (total_walks++ % 100 == 0)
@@ -1175,13 +1283,15 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solve(
             }
             std::cout << "\033[1;32m" << "[ThaumatoAnakalyptor]: Starting " << total_walks * nrWalks << "th random walk. Nr good nodes: " << nodes.size() << "\033[0m" << std::endl;
         }
-        if (nr_unchanged_walks > max_unchanged_walks && walk_aggregation_count != 0) { //  && (/* More checks*/)
+        if (nr_unchanged_walks > max_unchanged_walks && walk_aggregation_count != 0 && warmup_nr_walks < current_nr_walks) { //  && (/* More checks*/)
+            // Reset the unchanged walks counter
             nr_unchanged_walks = 0;
-            // set picked_nrs to 0
-            for (size_t i = 0; i < picked_nrs.size(); ++i) {
-                picked_nrs[i] = 0;
-            }
-            precompute_pick(std::cref(picked_nrs), valid_indices);
+            // // set picked_nrs to 0
+            // for (size_t i = 0; i < picked_nrs.size(); ++i) {
+            //     picked_nrs[i] = 0;
+            // }
+            // precompute_pick(std::cref(picked_nrs), valid_indices);
+            precompute_pick_frontier(std::cref(nodes));
 
             // implement min_steps size logic
             if (min_steps > min_end_steps) {
@@ -1206,9 +1316,9 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solve(
         std::vector<size_t> indices_s;
         int nrWalks = walksPerThread * numThreads;
         std::tie(sns, sks, indices_s) = pick_start_nodes_precomputed(std::cref(nodes), std::cref(ks), std::cref(valid_indices), nrWalks);
-        for (size_t i = 0; i < indices_s.size(); ++i) {
-            update_picked_nr(std::cref(nodes), picked_nrs, indices_s[i], 1);
-        }
+        // for (size_t i = 0; i < indices_s.size(); ++i) {
+        //     update_picked_nr(std::cref(nodes), picked_nrs, indices_s[i], 1);
+        // }
 
 
         std::vector<std::future<ThreadResult>> futures(numThreads);
@@ -1271,10 +1381,10 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solve(
                 continue;
             }
 
-            // update the picked_nr of each node in the walk -/+5 depending on the success
-            for (NodePtr node : walk) {
-                update_picked_nr(std::cref(nodes), picked_nrs, node->index, new_node ? -5 : 5);
-            }
+            // // update the picked_nr of each node in the walk -/+5 depending on the success
+            // for (NodePtr node : walk) {
+            //     update_picked_nr(std::cref(nodes), picked_nrs, node->index, new_node ? -10 : 1);
+            // }
 
             if (!new_node) {
                 nr_unchanged_walks++;
@@ -1301,7 +1411,8 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solve(
         }
         // Update valid_indices from picked_nrs
         if (total_aggregation_success) {
-            precompute_pick(std::cref(picked_nrs), valid_indices);
+            // precompute_pick(std::cref(picked_nrs), valid_indices);
+            precompute_pick_frontier(std::cref(nodes));
         }
     }
     return {nodes, ks};
@@ -1670,14 +1781,14 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
                 continue;
             }
 
-            // update the picked_nr of each node in the walk -/+5 depending on the success
-            for (NodePtr node : walk) {
-                update_picked_nr(std::cref(nodes), picked_nrs, node->index, new_node ? -5 : 5);
-            }
-
             if (!new_node) {
                 nr_unchanged_walks++;
                 continue;
+            }
+
+            // update the picked_nr of each node in the walk -/+5 depending on the success
+            for (NodePtr node : walk) {
+                update_picked_nr(std::cref(nodes), picked_nrs, node->index, new_node ? -5 : 0);
             }
 
             auto [walk_aggregated_size, success_aggregated] = walk_aggregation_func(

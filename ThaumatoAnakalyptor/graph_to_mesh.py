@@ -142,9 +142,26 @@ class WalkToSheet():
             return angle_vector_indices_dp[tuple(vector)]
         
         indices = []
-        for i in range(len(angle_vector)):
+        i = 0
+        first_found = None
+        index_dif = None
+        while i < len(angle_vector):
             if np.allclose(angle_vector[i], vector):
+                if first_found is None:
+                    first_found = i
+                elif index_dif is None:
+                    index_dif = i - first_found
                 indices.append(i)
+            else:
+                assert index_dif is None, f"Index difference is not consistent!"
+            if index_dif is None:
+                i += 1
+            else:
+                i += index_dif                  
+                    
+        # for i in range(len(angle_vector)):
+        #     if np.allclose(angle_vector[i], vector):
+        #         indices.append(i)
 
         # Add to dictionary
         angle_vector_indices_dp[tuple(vector)] = indices
@@ -292,9 +309,9 @@ class WalkToSheet():
         winding_direction = True
         if mean_innermost_half > mean_outermost_half:
             winding_direction = False
-            print("Winding direction is reversed.")
-        else:
             print("Winding direction is normal.")
+        else:
+            print("Winding direction is reversed.")
 
         # compute mean ts value of furthest out t values
         count = 0
@@ -302,7 +319,7 @@ class WalkToSheet():
         mean_outermost_ts = 0.0
 
         computed_vectors_set = set()
-        for i in range(len(t_means)):
+        for i in tqdm(range(len(t_means))):
             curve_angle_vector = angle_vector[i]
             if not tuple(curve_angle_vector) in computed_vectors_set:
                 computed_vectors_set.add(tuple(curve_angle_vector))
@@ -871,7 +888,7 @@ class WalkToSheet():
             if valid_bottom_count / len(result_ts) > valid_p_z:
                 break
 
-        valid_top_index = z_height-1
+        valid_top_index = z_height
         # Check for all good z values
         for u in range(z_height-1, valid_bottom_index, -1):
             valid_top_count = 0
@@ -931,7 +948,7 @@ class WalkToSheet():
         test_pointset_ply_path = os.path.join(test_folder, f"ordered_pointset_test_cpp.ply")
         self.pointcloud_from_ordered_pointset(pointset, os.path.join(self.save_path, test_pointset_ply_path))
            
-    def rolled_ordered_pointset(self, points, normals, debug=False, angle_step=1, z_spacing=5):
+    def rolled_ordered_pointset(self, points, normals, debug=False, angle_step=3, z_spacing=10):
         # get winding angles
         winding_angles = points[:, 3]
 
@@ -973,9 +990,9 @@ class WalkToSheet():
         
         print("Using Cpp rolled_ordered_pointset")
         # Set to false to load precomputed partial results during development
-        fresh_start = False
+        fresh_start = True
         if fresh_start:
-            result = pointcloud_processing.create_ordered_pointset(points, normals, self.graph.umbilicus_data, angleStep=float(angle_step), z_spacing=int(z_spacing)) # named parameters for mesh detail level: float angleStep, int z_spacing, float max_eucledian_distance, bool verbose
+            result = pointcloud_processing.create_ordered_pointset(points, normals, self.graph.umbilicus_data, angleStep=float(angle_step), z_spacing=int(z_spacing), max_eucledian_distance=20) # named parameters for mesh detail level: float angleStep, int z_spacing, float max_eucledian_distance, bool verbose
             # save result as pkl
             result_pkl_path = os.path.join(self.save_path, "ordered_pointset.pkl")
             with open(result_pkl_path, 'wb') as f:
@@ -994,7 +1011,7 @@ class WalkToSheet():
         mean_innermost_ts, mean_outermost_ts, winding_direction = self.find_inner_outermost_winding_direction(t_means, angle_vector)
 
         # Set to false to load precomputed partial results during development
-        fresh_start2 = False
+        fresh_start2 = True
         if fresh_start2:
             result_ts, result_normals = self.interpolate_ordered_pointset(ordered_pointset, ordered_normals, angle_vector, winding_direction)
             interpolated_ts, interpolated_normals = result_ts, result_normals
@@ -1009,8 +1026,9 @@ class WalkToSheet():
 
         fresh_start3 = True
         if fresh_start3:
-            valid_ts, valid_normals, angle_vector = self.clip_valid_windings(result_ts, result_normals, angle_vector, angle_step)
-            valid_bottom_index, valid_top_index = self.valid_z_values_indices(valid_ts, valid_p_z=0.1)
+            valid_p = 0.4
+            valid_ts, valid_normals, angle_vector = self.clip_valid_windings(result_ts, result_normals, angle_vector, angle_step, valid_p_winding=valid_p, valid_p_z=valid_p)
+            valid_bottom_index, valid_top_index = self.valid_z_values_indices(valid_ts, valid_p_z=valid_p)
 
             # interpolate initial full pointset. After this step there exists an "ordered pointset" prototype without any None values
             interpolated_ts, interpolated_normals, fixed_points = self.initial_full_pointset(valid_ts, valid_normals, angle_vector, mean_innermost_ts, mean_outermost_ts, winding_direction)
@@ -1021,7 +1039,7 @@ class WalkToSheet():
             # Optimize the full pointset for smooth surface with best guesses for interpolated t values
             # interpolated_ts = self.optimize_adjacent(interpolated_ts, neighbours_dict, fixed_points, learning_rate=0.2)
             interpolated_ts = self.optimize_adjacent_cpp(interpolated_ts, neighbours_dict, fixed_points, 
-                                                        learning_rate=0.2, iterations=3, error_val_d=0.005, unfix_factor=2.5,
+                                                        learning_rate=0.2, iterations=2, error_val_d=0.0005, unfix_factor=2.5,
                                                         verbose=True)
 
             # Clip away invalid z values
@@ -1031,6 +1049,14 @@ class WalkToSheet():
 
             # go from interpolated t values to ordered pointset (3D points)
             interpolated_points = self.ordered_pointset_to_3D(interpolated_ts, ordered_umbilicus_points, angle_vector)
+
+            interpolated_subsample_indices = self.subsample_interpolated_points(interpolated_points, mean_distance_threshold=3.333)
+            # subsample everything
+            interpolated_ts = [interpolated_ts[i] for i in interpolated_subsample_indices]
+            interpolated_points = [interpolated_points[i] for i in interpolated_subsample_indices]
+            interpolated_normals = [interpolated_normals[i] for i in interpolated_subsample_indices]
+            ordered_umbilicus_points = [ordered_umbilicus_points[i] for i in interpolated_subsample_indices]
+            angle_vector = [angle_vector[i] for i in interpolated_subsample_indices]
 
             print("Finished Cpp rolled_ordered_pointset")
 
@@ -1052,6 +1078,25 @@ class WalkToSheet():
                 ordered_pointsets_final = pickle.load(f)            
 
         return ordered_pointsets_final
+    
+    def subsample_interpolated_points(self, interpolated_points, mean_distance_threshold=5):
+        # subsample ordered pointset columns to reduce number of columns. they are too dense in the ceter and inflate the mesh size. 
+        # make it harder to work with, store and flatten. nearly no information lost by subsampling there.
+        interpolated_points_ = np.array(interpolated_points)
+        interpolated_subsample_indices = []
+        last_taken_position = None # subsample the pointset to have approximately the same distance between two connecting verices in the xy plane
+        for i in range(len(interpolated_points_)):
+            if last_taken_position is not None:
+                # compute mean distance between points in the xy plane
+                distances = np.linalg.norm(interpolated_points_[i] - interpolated_points_[last_taken_position], axis=1)
+                assert len(distances) == len(interpolated_points_[i]), f"Length of distances: {len(distances)}, length of interpolated_points_: {len(interpolated_points_)}"
+                mean_distance = np.mean(distances)
+                if mean_distance < mean_distance_threshold:
+                    continue
+            last_taken_position = i # store this position since it was added
+            interpolated_subsample_indices.append(i)
+        print(f"Taken {len(interpolated_subsample_indices)} ordered columns from {len(interpolated_points)} total.")
+        return interpolated_subsample_indices
     
     def save_graph_pointcloud(self, graph_path):
         save_path = os.path.join(self.save_path, "graph_pointcloud.ply")
@@ -1143,6 +1188,7 @@ class WalkToSheet():
         # Number of rows and columns in the pointset grid
         num_rows = len(ordered_pointsets)
         num_cols = len(ordered_pointsets[0][0]) if num_rows > 0 else 0
+        ordered_pointsets = np.array(ordered_pointsets)
 
         print(f"Number of rows: {num_rows}, number of columns: {num_cols}")
 
@@ -1287,8 +1333,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     graph_path = os.path.join(os.path.dirname(args.path), args.graph)
-    # graph = load_graph(graph_path)
-    graph = None
+    graph = load_graph(graph_path)
+    # graph = None
     reference_path = graph_path.replace("evolved_graph", "subgraph")
     start_point = args.start_point
     scale_factor = args.scale_factor

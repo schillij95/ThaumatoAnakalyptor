@@ -1739,83 +1739,89 @@ class RandomWalkSolver:
         # when reaching the pyramid top, the graph is expanded again with the help of the landmarks. the top pyramid node is the starting node.
         # expanding the pyramid iteratively and setting the landmark nodes as fixed k values which were calculated in the last pyramid down iteration
 
-        graph = self.graph
-        graphs = [graph]
+        fresh_pyramid = False
+        if fresh_pyramid:
+            graph = self.graph
+            graphs = [graph]
 
-        min_pyramid_nodes = 5
-        pyramid_index = 0
-        pyramid_up_path = os.path.join(path, "pyramid_up.pkl")
-        pyramid_up_initial_landmark_aggregated_connections_path = os.path.join(path, "pyramid_up_initial_landmark_aggregated_connections.pkl")
-        # create folder if not exists
-        os.makedirs(os.path.dirname(pyramid_up_path), exist_ok=True)
-
-        # pyramid up
-        fresh_pyramid_up = True
-        if fresh_pyramid_up:
-            while True:
-                recompute_initial_landmark_aggregated_connections = True
-                if recompute_initial_landmark_aggregated_connections or len(graphs) > 1:
-                    # sample landmark nodes
-                    landmark_nodes = self.sample_landmark_nodes(graph, percentage=0.5)
-                    if len(landmark_nodes) <= min_pyramid_nodes:
-                        break
-                    assert len(landmark_nodes) > 0, "No landmark nodes sampled."
-                    print(f"Pyramid Index is {pyramid_index}. Remaining Landmark Nodes: {len(landmark_nodes)}")
-                    # compute landmark nodes connections
-                    max_steps_ = max_steps if len(graphs) == 1 else max_steps - 1
-                    min_steps_ = min_steps if len(graphs) == 1 else min_steps - 1
-                    pyramid_up_nr_average_ = pyramid_up_nr_average if len(graphs) == 1 else pyramid_up_nr_average * 2
-                    # aggregated_connections = self.solve_pyramid_up(graph, landmark_nodes, max_nr_walks=pyramid_up_nr_average_, max_steps=max_steps_, max_tries=max_tries, min_steps=min_steps_, stop_event=stop_event)
-                    aggregated_connections = self.solve_pyramid_up_cpp(graph, landmark_nodes, max_nr_walks=pyramid_up_nr_average_, max_steps=max_steps_, max_tries=max_tries, min_steps=min_steps_, stop_event=stop_event)
-                    if len(graphs) == 1:
-                        # save the initial landmark aggregated_connections
-                        with open(pyramid_up_initial_landmark_aggregated_connections_path, 'wb') as file:
-                            pickle.dump(aggregated_connections, file)
-                else:
-                    # load the initial landmark aggregated_connections
-                    with open(pyramid_up_initial_landmark_aggregated_connections_path, 'rb') as file:
-                        aggregated_connections = pickle.load(file)
-
-                # contract the graph
-                l_subsequent_ = l_subsequent
-                n_ = n
-                if len(graphs) > 5:
-                    l_subsequent_ = l_subsequent - 1
-                    n_ = n + 2
-                elif len(graphs) > 1:
-                    l_subsequent_ = l_subsequent - 1
-                    n_ = n + 1
-
-                graph = self.contract_graph(graph, aggregated_connections,l=l, l_subsequent=l_subsequent_, n=n_)
-                graphs.append(graph)
-                assert len(graph.nodes) >= 1, "Graph has no nodes."
-                pyramid_index += 1
-            # save the landmarks, and graphs as .pkl
+            min_pyramid_nodes = 5
+            pyramid_index = 0
+            pyramid_up_path = os.path.join(path, "pyramid_up.pkl")
+            pyramid_up_initial_landmark_aggregated_connections_path = os.path.join(path, "pyramid_up_initial_landmark_aggregated_connections.pkl")
             # create folder if not exists
             os.makedirs(os.path.dirname(pyramid_up_path), exist_ok=True)
-            with open(pyramid_up_path, 'wb') as file:
-                pickle.dump((graphs, landmark_nodes), file)
-        else:
-            with open(pyramid_up_path, 'rb') as file:
-                graphs, landmark_nodes = pickle.load(file)
 
-        assert len(landmark_nodes) <= min_pyramid_nodes, f"More than {min_pyramid_nodes} landmark node left."
-        fixed_nodes = [tuple(landmark_nodes[0])]
-        fixed_ks = [0]
-        # pyramid down
-        for i in tqdm(range(len(graphs)-1, -1, -1), desc="Pyramid Down"):
-            # skip last 2 graph steps, because this graph has too much noise in its nodes. the sheets are allready found earlier in the pyramid
-            if i < 1:
-                continue
-            graph = graphs[i]
-            print(f"Pyramid Down Index: {i}, nr nodes in graph: {len(graph.nodes)}")
-            small_addition = 0
-            if i > len(graphs) - 4:
-                small_addition = 2 * nr_walks_per_node + abs(i - (len(graphs) - 4))*nr_walks_per_node
-            # compute pyramid down
-            # fixed_nodes, fixed_ks = self.solve_pyramid_down(graph, fixed_nodes, fixed_ks, path, max_nr_walks=max_nr_walks, nr_walks_per_node=nr_walks_per_node + small_addition, max_unchanged_walks=max_unchanged_walks/4000 * (len(graph.nodes)), max_steps=max_steps, max_tries=max_tries, min_steps=min_steps, min_end_steps=min_end_steps, stop_event=stop_event)
-            fixed_nodes, fixed_ks = self.solve_pyramid_down_cpp(graph, fixed_nodes, fixed_ks, path, max_nr_walks=max_nr_walks, nr_walks_per_node=nr_walks_per_node + small_addition, max_unchanged_walks=max_unchanged_walks/4000 * (len(graph.nodes)), max_steps=max_steps, max_tries=max_tries, min_steps=16, min_end_steps=16, stop_event=stop_event)
-            self.save_solution(path, np.array(fixed_nodes), np.array(fixed_ks))
+            # pyramid up
+            fresh_pyramid_up = True
+            if fresh_pyramid_up:
+                while True:
+                    recompute_initial_landmark_aggregated_connections = True
+                    if recompute_initial_landmark_aggregated_connections or len(graphs) > 1:
+                        # sample landmark nodes
+                        landmark_nodes = self.sample_landmark_nodes(graph, percentage=0.5)
+                        if len(landmark_nodes) <= min_pyramid_nodes:
+                            break
+                        assert len(landmark_nodes) > 0, "No landmark nodes sampled."
+                        print(f"Pyramid Index is {pyramid_index}. Remaining Landmark Nodes: {len(landmark_nodes)}")
+                        # compute landmark nodes connections
+                        max_steps_ = max_steps if len(graphs) == 1 else max_steps - 1
+                        min_steps_ = min_steps if len(graphs) == 1 else min_steps - 1
+                        pyramid_up_nr_average_ = pyramid_up_nr_average if len(graphs) == 1 else pyramid_up_nr_average * 2
+                        # aggregated_connections = self.solve_pyramid_up(graph, landmark_nodes, max_nr_walks=pyramid_up_nr_average_, max_steps=max_steps_, max_tries=max_tries, min_steps=min_steps_, stop_event=stop_event)
+                        aggregated_connections = self.solve_pyramid_up_cpp(graph, landmark_nodes, max_nr_walks=pyramid_up_nr_average_, max_steps=max_steps_, max_tries=max_tries, min_steps=min_steps_, stop_event=stop_event)
+                        if len(graphs) == 1:
+                            # save the initial landmark aggregated_connections
+                            with open(pyramid_up_initial_landmark_aggregated_connections_path, 'wb') as file:
+                                pickle.dump(aggregated_connections, file)
+                    else:
+                        # load the initial landmark aggregated_connections
+                        with open(pyramid_up_initial_landmark_aggregated_connections_path, 'rb') as file:
+                            aggregated_connections = pickle.load(file)
+
+                    # contract the graph
+                    l_subsequent_ = l_subsequent
+                    n_ = n
+                    if len(graphs) > 5:
+                        l_subsequent_ = l_subsequent - 1
+                        n_ = n + 2
+                    elif len(graphs) > 1:
+                        l_subsequent_ = l_subsequent - 1
+                        n_ = n + 1
+
+                    graph = self.contract_graph(graph, aggregated_connections,l=l, l_subsequent=l_subsequent_, n=n_)
+                    graphs.append(graph)
+                    assert len(graph.nodes) >= 1, "Graph has no nodes."
+                    pyramid_index += 1
+                # save the landmarks, and graphs as .pkl
+                # create folder if not exists
+                os.makedirs(os.path.dirname(pyramid_up_path), exist_ok=True)
+                with open(pyramid_up_path, 'wb') as file:
+                    pickle.dump((graphs, landmark_nodes), file)
+            else:
+                with open(pyramid_up_path, 'rb') as file:
+                    graphs, landmark_nodes = pickle.load(file)
+
+            assert len(landmark_nodes) <= min_pyramid_nodes, f"More than {min_pyramid_nodes} landmark node left."
+            fixed_nodes = [tuple(landmark_nodes[0])]
+            fixed_ks = [0]
+            # pyramid down
+            for i in tqdm(range(len(graphs)-1, -1, -1), desc="Pyramid Down"):
+                # skip last 2 graph steps, because this graph has too much noise in its nodes. the sheets are allready found earlier in the pyramid
+                if i < 1:
+                    continue
+                graph = graphs[i]
+                print(f"Pyramid Down Index: {i}, nr nodes in graph: {len(graph.nodes)}")
+                small_addition = 0
+                if i > len(graphs) - 4:
+                    small_addition = 2 * nr_walks_per_node + abs(i - (len(graphs) - 4))*nr_walks_per_node
+                # compute pyramid down
+                # fixed_nodes, fixed_ks = self.solve_pyramid_down(graph, fixed_nodes, fixed_ks, path, max_nr_walks=max_nr_walks, nr_walks_per_node=nr_walks_per_node + small_addition, max_unchanged_walks=max_unchanged_walks/4000 * (len(graph.nodes)), max_steps=max_steps, max_tries=max_tries, min_steps=min_steps, min_end_steps=min_end_steps, stop_event=stop_event)
+                fixed_nodes, fixed_ks = self.solve_pyramid_down_cpp(graph, fixed_nodes, fixed_ks, path, max_nr_walks=max_nr_walks, nr_walks_per_node=nr_walks_per_node + small_addition, max_unchanged_walks=max_unchanged_walks/4000 * (len(graph.nodes)), max_steps=max_steps, max_tries=max_tries, min_steps=16, min_end_steps=16, stop_event=stop_event)
+                self.save_solution(path, np.array(fixed_nodes), np.array(fixed_ks))
+        else:
+            print ("Loading pyramid and continuing at production run.")
+            fixed_nodes = np.load(path.replace("blocks", "graph_RW") + "_nodes.npy")
+            fixed_ks = np.load(path.replace("blocks", "graph_RW") + "_ks.npy")
 
         production_run = True
         if production_run:
@@ -2630,7 +2636,7 @@ def random_walks():
     min_steps = 16
     min_end_steps = 16
     max_tries = 6
-    max_unchanged_walks = 30 * max_nr_walks
+    max_unchanged_walks = 100 * max_nr_walks
     recompute = 0
     compute_cpp_translation = False
     

@@ -902,7 +902,7 @@ std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<std::vector<
 
         std::vector<float> valid_ts;
         std::vector<std::vector<float>> valid_normals;
-        int max_number_closest_points = 20;
+        int max_number_closest_points = 40;
         int current_number_closest_points = 0;
 
         for (int j = 0; j < distances.size(); ++j) {
@@ -911,11 +911,11 @@ std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<std::vector<
                 valid_normals.push_back(sorted_normals[j]);
                 current_number_closest_points++;
             }
-            else {
-                if (sorted_distances[j] < max_eucledian_distance) {
-                    std::cout << "Distance: " << sorted_distances[j] << " ts: " << sorted_ts[j] << std::endl;
-                }
-            }
+            // else {
+            //     if (sorted_distances[j] < max_eucledian_distance) {
+            //         std::cout << "Distance: " << sorted_distances[j] << " ts: " << sorted_ts[j] << std::endl;
+            //     }
+            // }
             if (current_number_closest_points >= max_number_closest_points) {
                 break;
             }
@@ -1548,6 +1548,8 @@ private:
         auto errors = compute_interpolated_adjacent_errors();
         float sum_errors = 0.0;
         int count_fixed = 0;
+        float sum_error_unfixed = 0.0;
+        int count_unfixed = 0;
 
         // Calculate mean error of fixed points
         for (size_t i = 0; i < fixed_points.size(); i++) {
@@ -1556,17 +1558,27 @@ private:
                     sum_errors += errors[i][j];
                     count_fixed++;
                 }
+                else {
+                    sum_error_unfixed += errors[i][j];
+                    count_unfixed++;
+                }
             }
         }
 
         float error_mean_fixed = count_fixed > 0 ? sum_errors / count_fixed : 0.0;
         float error_threshold = unfix_factor * error_mean_fixed;
 
+        float error_mean_unfixed = count_unfixed > 0 ? sum_error_unfixed / count_unfixed : 0.0;
+        float fixing_threshold = 0.2 * error_mean_unfixed;
+
         // Unfix points exceeding the error threshold
         for (size_t i = 0; i < fixed_points.size(); i++) {
             for (size_t j = 0; j < fixed_points[i].size(); j++) {
                 if (fixed_points[i][j] && (errors[i][j] > error_threshold)) {
                     fixed_points[i][j] = false;
+                }
+                if (!fixed_points[i][j] && (errors[i][j] < fixing_threshold)) {
+                    fixed_points[i][j] = true;
                 }
             }
         }

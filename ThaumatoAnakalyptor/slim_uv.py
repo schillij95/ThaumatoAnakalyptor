@@ -46,10 +46,11 @@ class Flatboi:
 
         self.original_uvs = np.array(self.original_uvs).reshape((-1, 3, 2))
         assert len(self.triangles) == len(self.original_uvs), f"Number of triangles and uvs do not match. {len(self.triangles)} != {len(self.original_uvs)}"
+        filter_list = [abs(triangle_area(self.vertices[t[0]], self.vertices[t[1]], self.vertices[t[2]])) > area_cutoff for t in self.triangles]
         # Filter original uvs
-        self.original_uvs = np.array([self.original_uvs[i] for i in range(len(self.triangles)) if abs(triangle_area(self.vertices[self.triangles[i][0]], self.vertices[self.triangles[i][1]], self.vertices[self.triangles[i][2]])) > area_cutoff])
+        self.original_uvs = np.array([self.original_uvs[i] for i in range(len(self.triangles)) if filter_list[i]])
         # Filter triangles
-        self.triangles = np.array([t for t in self.triangles if abs(triangle_area(self.vertices[t[0]], self.vertices[t[1]], self.vertices[t[2]])) > area_cutoff])
+        self.triangles = np.array([self.triangles[i] for i in range(len(self.triangles)) if filter_list[i]])
         print(f"Filtered out {len_before - len(self.triangles)} triangles with 0 area of total {len_before} triangles.")
         assert len(self.triangles) == len(self.original_uvs), f"Number of triangles and uvs do not match. {len(self.triangles)} != {len(self.original_uvs)}"
         self.original_uvs = np.array(self.original_uvs).reshape((-1, 2))

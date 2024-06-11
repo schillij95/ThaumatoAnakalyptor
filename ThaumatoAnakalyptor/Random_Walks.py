@@ -2103,7 +2103,8 @@ def random_walks():
     min_steps = 16
     max_tries = 6
     min_end_steps = 4
-    max_unchanged_walks = 30 * max_nr_walks
+    # max_unchanged_walks = 30 * max_nr_walks
+    max_unchanged_walks = 100 * max_nr_walks
     recompute = 0
     compute_cpp_translation = False
     
