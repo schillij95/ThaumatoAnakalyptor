@@ -1196,6 +1196,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solve(
     std::vector<K> start_ks,
     Config& config,
     int numThreads = 28,
+    bool return_every_hundrethousandth = false,
     int walksPerThread = 1000
     ) 
 {
@@ -1270,7 +1271,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solve(
     }
 
     int current_nr_walks = 0;
-    while (true)
+    while (walk_aggregation_count < 100000 || !return_every_hundrethousandth)
     {
         current_nr_walks += nrWalks;
         // std::cout << "\033[1;32m" << "[ThaumatoAnakalyptor]: Starting " << nr_unchanged_walks << " random walk. Nr good nodes: " << nodes.size() << "\033[0m" << std::endl;
@@ -1876,7 +1877,9 @@ std::pair<py::array_t<int>, py::array_t<int>> solveRandomWalk(
     std::vector<std::vector<int>> kValues, 
     std::vector<std::vector<bool>> same_block,
     std::vector<std::vector<float>> umbilicusDirections,
-    std::vector<std::vector<float>>  centroids) 
+    std::vector<std::vector<float>>  centroids,
+    bool return_every_hundrethousandth
+    ) 
 {
     std::cout << "Begin solveRandomWalk" << std::endl;
 
@@ -1893,7 +1896,7 @@ std::pair<py::array_t<int>, py::array_t<int>> solveRandomWalk(
     std::cout << "Nodes initialized" << std::endl;
 
     const size_t numThreads = std::max((int)(1), (int)((std::thread::hardware_concurrency() * 4) / 5));
-    auto [final_nodes, final_ks] = solve(start_nodes, start_ks, config, numThreads);
+    auto [final_nodes, final_ks] = solve(start_nodes, start_ks, config, numThreads, return_every_hundrethousandth);
 
     std::cout << "Solve done" << std::endl;
 
@@ -2936,7 +2939,18 @@ PYBIND11_MODULE(sheet_generation, m) {
 
     m.def("solve_pyramid_random_walk_down", &solvePyramidRandomWalkDown, "Function to the pyramid random walk down problem in C++");
 
-    m.def("solve_random_walk", &solveRandomWalk, "Function to solve random walk problem in C++");
+    m.def("solve_random_walk", &solveRandomWalk, 
+            "Function to solve random walk problem in C++",
+            py::arg("start_ids"),
+            py::arg("start_ks"),
+            py::arg("overlappThresholdFile"),
+            py::arg("ids"),
+            py::arg("nextNodes"),
+            py::arg("kValues"),
+            py::arg("same_block"),
+            py::arg("umbilicusDirections"),
+            py::arg("centroids"),
+            py::arg("return_every_hundrethousandth") = false);
 
     m.def("graph_skeleton_filter", &skeletonFilterGraph, "Function to filter a Graph per DP skeleton in C++");
 

@@ -3,6 +3,7 @@
 from .finalize_mesh import main as finalize_mesh_main
 from .mesh_to_surface import ppm_and_texture
 
+import subprocess
 from tqdm import tqdm
 import os
 import argparse
@@ -32,4 +33,20 @@ if __name__ == "__main__":
         obj_paths = obj_paths[start:]
     for obj_path in tqdm(obj_paths, desc='Texturing meshes'):
         print(f"Texturing {obj_path}")
-        ppm_and_texture(obj_path, gpus=args.gpus, grid_cell_path=args.grid_cell, output_path=None, r=args.r, format=args.format, display=args.display, nr_workers=args.nr_workers, prefetch_factor=args.prefetch_factor)
+        # ppm_and_texture(obj_path, gpus=args.gpus, grid_cell_path=args.grid_cell, output_path=None, r=args.r, format=args.format, display=args.display, nr_workers=args.nr_workers, prefetch_factor=args.prefetch_factor)
+
+        # Call mesh_to_surface as a separate process
+        command = [
+                    "python3", "-m", "ThaumatoAnakalyptor.mesh_to_surface", 
+                    obj_path, args.grid_cell, 
+                    "--gpus", str(args.gpus), 
+                    "--r", str(args.r),
+                    "--format", args.format,
+                    "--nr_workers", str(args.nr_workers),
+                    "--prefetch_factor", str(args.prefetch_factor)
+                ]
+        if args.display:
+            command.append("--display")
+        # Running the command
+        process_rendering = subprocess.Popen(command)
+        process_rendering.wait()

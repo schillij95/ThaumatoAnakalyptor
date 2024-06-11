@@ -1585,19 +1585,25 @@ class RandomWalkSolver:
 
         return nodes, ks
     
-    def solve_cpp(self, starting_nodes, starting_ks, min_steps=10, min_end_steps=4):
-        starting_nodes = [[int(n) for n in node] for node in starting_nodes]
-        starting_ks = [int(k) for k in starting_ks]
+    def solve_cpp(self, path, starting_nodes, starting_ks, min_steps=10, min_end_steps=4):
         overlapp_threshold = deepcopy(self.graph.overlapp_threshold)
         overlapp_threshold["min_steps"] = min_steps
         overlapp_threshold["min_end_steps"] = min_end_steps
         ### C++ RW, should work
         try:
-            nodes_array, ks_array = sheet_generation.solve_random_walk(starting_nodes, starting_ks, *self.translate_data_to_cpp_v2(self.graph, overlapp_threshold))
+            translation = self.translate_data_to_cpp_v2(self.graph, overlapp_threshold)
+            while True:
+                starting_nodes = [[int(n) for n in node] for node in starting_nodes]
+                last_len_starting_nodes = len(starting_nodes)
+                starting_ks = [int(k) for k in starting_ks]
+                starting_nodes, starting_ks = sheet_generation.solve_random_walk(starting_nodes, starting_ks, *translation, return_every_hundrethousandth=True)
+                self.save_solution(path, np.array(starting_nodes), np.array(starting_ks))
+                if len(starting_nodes) - last_len_starting_nodes < 100000:
+                    break
         except Exception as e:
             print(f"Error: {e}")
             raise e
-        return nodes_array, ks_array
+        return starting_nodes, starting_ks
         # return None, None
     
     def sample_landmark_nodes(self, graph, percentage=0.1):
@@ -2591,6 +2597,8 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
             scroll_graph = load_graph(recompute_path)
     scroll_graph.set_overlapp_threshold(overlapp_threshold)
     scroll_graph.start_block, scroll_graph.patch_id = start_block, patch_id
+
+    print(f"Number of nodes in the graph: {len(scroll_graph.nodes)}")
 
     # Pyramid Random Walks
     solver = RandomWalkSolver(scroll_graph, umbilicus_path)
