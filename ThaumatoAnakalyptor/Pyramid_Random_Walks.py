@@ -1586,6 +1586,7 @@ class RandomWalkSolver:
         return nodes, ks
     
     def solve_cpp(self, path, starting_nodes, starting_ks, min_steps=10, min_end_steps=4):
+        print(f"Starting nodes shape: {starting_nodes.shape}")
         overlapp_threshold = deepcopy(self.graph.overlapp_threshold)
         overlapp_threshold["min_steps"] = min_steps
         overlapp_threshold["min_end_steps"] = min_end_steps
@@ -1597,14 +1598,14 @@ class RandomWalkSolver:
                 last_len_starting_nodes = len(starting_nodes)
                 starting_ks = [int(k) for k in starting_ks]
                 starting_nodes, starting_ks = sheet_generation.solve_random_walk(starting_nodes, starting_ks, *translation, return_every_hundrethousandth=True)
-                self.save_solution(path, np.array(starting_nodes), np.array(starting_ks))
+                starting_nodes, starting_ks = np.array(starting_nodes), np.array(starting_ks)
+                self.save_solution(path, starting_nodes, starting_ks)
                 if len(starting_nodes) - last_len_starting_nodes < 100000:
                     break
         except Exception as e:
             print(f"Error: {e}")
             raise e
         return starting_nodes, starting_ks
-        # return None, None
     
     def sample_landmark_nodes(self, graph, percentage=0.1):
         # randomly sample 1% of nodes in the graph as landmark nodes without duplicates
@@ -1832,7 +1833,7 @@ class RandomWalkSolver:
         production_run = True
         if production_run:
             # last pass over it with solve cpp random walks
-            self.solve_cpp(fixed_nodes, fixed_ks, 16, 4)
+            fixed_nodes, fixed_ks = self.solve_cpp(path, fixed_nodes, fixed_ks, 16, 4)
 
         return np.array(fixed_nodes), np.array(fixed_ks)
     
