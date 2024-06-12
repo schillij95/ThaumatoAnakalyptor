@@ -1023,7 +1023,7 @@ class WalkToSheet():
             with open(result_pkl_path, 'rb') as f:
                 (result_ts, result_normals) = pickle.load(f)
 
-        fresh_start3 = False
+        fresh_start3 = True
         if fresh_start3:
             valid_p = 0.4
             valid_ts, valid_normals, angle_vector = self.clip_valid_windings(result_ts, result_normals, angle_vector, angle_step, valid_p_winding=valid_p, valid_p_z=valid_p)
