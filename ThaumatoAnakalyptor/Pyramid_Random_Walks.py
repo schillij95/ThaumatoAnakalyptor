@@ -1585,7 +1585,7 @@ class RandomWalkSolver:
         node_usage_path = os.path.join(path, "node_usage.pkl")
         try:
             # Optionally load translation from .pkl instead of recomputing
-            fresh_start = False
+            fresh_start = True
             if fresh_start:
                 translation = self.translate_data_to_cpp_v2(self.graph, overlapp_threshold)
                 # save the translation as .pkl
