@@ -274,12 +274,13 @@ std::pair<std::unordered_set<NodePtr>, int> frontier_bfs(NodePtr node, int max_d
                 q.push({next_node, next_depth});
             }
         }
-        // Add all the same block next nodes to the queue
-        for (const auto& next_node : current_node->same_block_next_nodes) {
-            if (next_node) {
-                q.push({next_node, next_depth});
-            }
-        }
+        /* Seems to result in less potent picks if used. */
+        // // Add all the same block next nodes to the queue
+        // for (const auto& next_node : current_node->same_block_next_nodes) {
+        //     if (next_node) {
+        //         q.push({next_node, next_depth});
+        //     }
+        // }
     } 
     return {visited, nr_unassigned};
 }
@@ -1260,7 +1261,8 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solve(
     // Run a minimum nr of random walks before adaptively changing the parameters.
     // Ensures to warm up the nr picked and with that the starting node sampling logic
     // Ensures to warmup the aggregation logic
-    int warmup_nr_walks = 2500000 + 2 * walk_aggregation_threshold_start * min_steps_start * nodes.size();
+    int warmup_nr_walks_ = 2500000 + 2 * walk_aggregation_threshold_start * min_steps_start * nodes.size();
+    int warmup_nr_walks = warmup_nr_walks_;
     // Yellow print
     std::cout << "\033[1;33m" << "[ThaumatoAnakalyptor]: Starting " << warmup_nr_walks << " warmup random walks. Nr good nodes: " << nodes.size() << "\033[0m" << std::endl;
 
@@ -1293,6 +1295,8 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solve(
         if (nr_unchanged_walks > max_unchanged_walks && walk_aggregation_count != 0 && warmup_nr_walks < current_nr_walks) { //  && (/* More checks*/)
             // Reset the unchanged walks counter
             nr_unchanged_walks = 0;
+            warmup_nr_walks = warmup_nr_walks_ / 10;
+            current_nr_walks = 0;
             // // set picked_nrs to 0
             // for (size_t i = 0; i < picked_nrs.size(); ++i) {
             //     picked_nrs[i] = 0;

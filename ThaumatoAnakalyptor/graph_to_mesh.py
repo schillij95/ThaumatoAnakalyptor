@@ -957,7 +957,6 @@ class WalkToSheet():
         print(f"Min and max winding angles: {min_wind}, {max_wind}")
 
         # some debugging visualization of seperate pointcloud windings
-        produce_test_pointclouds_windings = False
         if debug:
             # remove test folder
             test_folder = os.path.join(self.save_path, "test_winding_angles")
@@ -1271,7 +1270,7 @@ class WalkToSheet():
         mesh_path = os.path.join(self.save_path, "mesh.obj")
 
         # Set to false to load precomputed partial results during development
-        start_fresh = False
+        start_fresh = True
         if start_fresh: 
             # Set to false to load precomputed partial results during development
             start_fresh_build_points = True
