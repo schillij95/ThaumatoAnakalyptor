@@ -1312,16 +1312,6 @@ class RandomWalkSolver:
 
         return nodes, ks
 
-    def solve_cpp(self, path, starting_node, max_nr_walks=100, max_unchanged_walks=10000, max_steps=100, max_tries=6, min_steps=10, min_end_steps=4, continue_walks=False, nodes=None, ks=None):
-        ### C++ RW, not yet fully implemented on the cpp side
-        # try:
-        #     nodes_array, ks_array = sheet_generation.solve_random_walk(*starting_node, *self.translate_data_to_cpp(recompute_translation=False))
-        # except Exception as e:
-        #     print(f"Error: {e}")
-        #     raise e
-        # return nodes_array, ks_array
-        return None, None
-
     def solve(self, path, starting_node, max_nr_walks=100, max_unchanged_walks=10000, max_steps=100, max_tries=6, min_steps=10, min_end_steps=4, continue_walks=False, nodes=None, ks=None, k_step_size=8):
         k_step_size_half = k_step_size // 2
         overlapp_threshold = self.graph.overlapp_threshold
@@ -1586,20 +1576,42 @@ class RandomWalkSolver:
         return nodes, ks
     
     def solve_cpp(self, path, starting_nodes, starting_ks, min_steps=10, min_end_steps=4):
+        ### C++ RW, works
         print(f"Starting nodes shape: {starting_nodes.shape}")
         overlapp_threshold = deepcopy(self.graph.overlapp_threshold)
         overlapp_threshold["min_steps"] = min_steps
         overlapp_threshold["min_end_steps"] = min_end_steps
-        ### C++ RW, should work
+        translation_path = os.path.join(path, "translation.pkl")
+        node_usage_path = os.path.join(path, "node_usage.pkl")
         try:
-            translation = self.translate_data_to_cpp_v2(self.graph, overlapp_threshold)
+            # Optionally load translation from .pkl instead of recomputing
+            fresh_start = False
+            if fresh_start:
+                translation = self.translate_data_to_cpp_v2(self.graph, overlapp_threshold)
+                # save the translation as .pkl
+                # create folder if not exists
+                os.makedirs(os.path.dirname(translation_path), exist_ok=True)
+                with open(translation_path, 'wb') as file:
+                    pickle.dump(translation, file)
+                node_usage_count = {}
+            else:
+                with open(translation_path, 'rb') as file:
+                    translation = pickle.load(file)
+                if os.path.exists(node_usage_path):
+                    with open(node_usage_path, 'rb') as file:
+                        node_usage_count = pickle.load(file)
+                else:
+                    print("Node usage count not found. Starting fresh.")
+                    node_usage_count = {}
             while True:
                 starting_nodes = [[int(n) for n in node] for node in starting_nodes]
                 last_len_starting_nodes = len(starting_nodes)
                 starting_ks = [int(k) for k in starting_ks]
-                starting_nodes, starting_ks = sheet_generation.solve_random_walk(starting_nodes, starting_ks, *translation, return_every_hundrethousandth=True)
+                starting_nodes, starting_ks, node_usage_count = sheet_generation.solve_random_walk(starting_nodes, starting_ks, node_usage_count, *translation, return_every_hundrethousandth=True)
                 starting_nodes, starting_ks = np.array(starting_nodes), np.array(starting_ks)
                 self.save_solution(path, starting_nodes, starting_ks)
+                with open(node_usage_path, 'wb') as file:
+                    pickle.dump(node_usage_count, file)
                 if len(starting_nodes) - last_len_starting_nodes < 100000:
                     break
         except Exception as e:
@@ -1833,7 +1845,7 @@ class RandomWalkSolver:
         production_run = True
         if production_run:
             # last pass over it with solve cpp random walks
-            fixed_nodes, fixed_ks = self.solve_cpp(path, fixed_nodes, fixed_ks, 16, 4)
+            fixed_nodes, fixed_ks = self.solve_cpp(path, fixed_nodes, fixed_ks, 8, 4)
 
         return np.array(fixed_nodes), np.array(fixed_ks)
     
@@ -2645,7 +2657,7 @@ def random_walks():
     min_steps = 16
     min_end_steps = 16
     max_tries = 6
-    max_unchanged_walks = 100 * max_nr_walks # 30 * max_nr_walks
+    max_unchanged_walks = 30 * max_nr_walks # 30 * max_nr_walks
     recompute = 0
     compute_cpp_translation = False
     

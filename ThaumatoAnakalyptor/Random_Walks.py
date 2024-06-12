@@ -1299,7 +1299,7 @@ class RandomWalkSolver:
     def solve_cpp(self, starting_node):
         ### C++ RW, should work
         try:
-            nodes_array, ks_array = sheet_generation.solve_random_walk([[*starting_node]], [0], *self.translate_data_to_cpp_v2(self.graph, self.graph.overlapp_threshold))
+            nodes_array, ks_array, node_usage_count = sheet_generation.solve_random_walk([[*starting_node]], [0], {}, *self.translate_data_to_cpp_v2(self.graph, self.graph.overlapp_threshold))
         except Exception as e:
             print(f"Error: {e}")
             raise e
@@ -2103,8 +2103,8 @@ def random_walks():
     min_steps = 16
     max_tries = 6
     min_end_steps = 4
-    # max_unchanged_walks = 30 * max_nr_walks
-    max_unchanged_walks = 100 * max_nr_walks
+    max_unchanged_walks = 30 * max_nr_walks
+    # max_unchanged_walks = 100 * max_nr_walks
     recompute = 0
     compute_cpp_translation = False
     

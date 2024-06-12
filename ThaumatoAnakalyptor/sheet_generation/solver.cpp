@@ -203,7 +203,7 @@ struct Node {
 // Using shared pointers for Node management
 using NodePtr = std::shared_ptr<Node>;
 
-using AggregateKey = std::tuple<int, int, int>;
+using AggregateKey = std::tuple<int, int, int>; // Start Node, End Node, K
 
 struct KeyHash {
     std::size_t operator()(const AggregateKey& key) const {
@@ -1197,10 +1197,32 @@ ThreadResult threadRandomWalk(
     return {walks, ks, successes, new_nodes};
 }
 
+std::unordered_map<int, std::unordered_map<K, int>> translate_node_usage_count_python(const NodeUsageCount& node_usage_count) {
+    std::unordered_map<int, std::unordered_map<K, int>> translated_node_usage_count;
+    for (const auto& [node, k_count] : node_usage_count) {
+        int node_index = node->index;
+        for (const auto& [k, count] : k_count) {
+            translated_node_usage_count[node_index][k] = count;
+        }
+    }
+    return translated_node_usage_count;
+}
 
-std::tuple<std::vector<NodePtr>, std::vector<K>> solve(
+NodeUsageCount translate_node_usage_count_cpp(const std::unordered_map<int, std::unordered_map<K, int>> node_usage_count, const std::vector<NodePtr>& nodes) {
+    NodeUsageCount translated_node_usage_count;
+    for (const auto& [node_index, k_count] : node_usage_count) {
+        NodePtr node = nodes[node_index];
+        for (const auto& [k, count] : k_count) {
+            translated_node_usage_count[node][k] = count;
+        }
+    }
+    return translated_node_usage_count;
+}
+
+std::tuple<std::vector<NodePtr>, std::vector<K>, std::unordered_map<int, std::unordered_map<K, int>>> solve(
     std::vector<NodePtr> start_nodes,
     std::vector<K> start_ks,
+    std::unordered_map<int, std::unordered_map<K, int>> python_node_usage_count,
     Config& config,
     int numThreads = 28,
     bool return_every_hundrethousandth = false,
@@ -1254,7 +1276,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solve(
     }
 
     int nr_unchanged_walks = 0;
-    NodeUsageCount node_usage_count; // Map to track node usage count with specific k values
+    NodeUsageCount node_usage_count = translate_node_usage_count_cpp(std::cref(python_node_usage_count), std::cref(nodes)); // Map to track node usage count with specific k values
     int walk_aggregation_count = 0;
     int total_walks = 0;
     int nrWalks = walksPerThread * numThreads;
@@ -1426,7 +1448,9 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solve(
             precompute_pick_frontier(std::cref(nodes));
         }
     }
-    return {nodes, ks};
+    python_node_usage_count = translate_node_usage_count_python(std::cref(node_usage_count));
+
+    return {nodes, ks, python_node_usage_count};
 }
 
 AggregatedConnections solveUp(
@@ -1878,9 +1902,10 @@ void loadOverlappThreshold(const std::string &filename) {
     // Add code to load other parameters as needed
 }
 
-std::pair<py::array_t<int>, py::array_t<int>> solveRandomWalk(
+std::tuple<py::array_t<int>, py::array_t<int>, std::unordered_map<int, std::unordered_map<K, int>>> solveRandomWalk(
     std::vector<std::vector<int>> start_ids,
     std::vector<int> start_ks,
+    std::unordered_map<int, std::unordered_map<K, int>> initial_node_usage_count,
     const std::string &overlappThresholdFile,
     std::vector<std::vector<int>> ids, 
     std::vector<std::vector<std::vector<int>>> nextNodes, 
@@ -1906,12 +1931,13 @@ std::pair<py::array_t<int>, py::array_t<int>> solveRandomWalk(
     std::cout << "Nodes initialized" << std::endl;
 
     const size_t numThreads = std::max((int)(1), (int)((std::thread::hardware_concurrency() * 4) / 5));
-    auto [final_nodes, final_ks] = solve(start_nodes, start_ks, config, numThreads, return_every_hundrethousandth);
+    auto [final_nodes, final_ks, python_node_usage_count] = solve(start_nodes, start_ks, initial_node_usage_count, config, numThreads, return_every_hundrethousandth);
 
     std::cout << "Solve done" << std::endl;
 
     // Convert final_nodes and final_ks to a format suitable for Python
-    return process_result(final_nodes, final_ks);
+    auto [fns, fks] = process_result(final_nodes, final_ks);
+    return {fns, fks, python_node_usage_count};
 }
 
 AggregatedConnections solvePyramidRandomWalkUp(
@@ -2953,6 +2979,7 @@ PYBIND11_MODULE(sheet_generation, m) {
             "Function to solve random walk problem in C++",
             py::arg("start_ids"),
             py::arg("start_ks"),
+            py::arg("initial_node_usage_count"),
             py::arg("overlappThresholdFile"),
             py::arg("ids"),
             py::arg("nextNodes"),

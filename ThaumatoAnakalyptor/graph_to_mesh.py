@@ -989,7 +989,7 @@ class WalkToSheet():
         
         print("Using Cpp rolled_ordered_pointset")
         # Set to false to load precomputed partial results during development
-        fresh_start = True
+        fresh_start = False
         if fresh_start:
             result = pointcloud_processing.create_ordered_pointset(points, normals, self.graph.umbilicus_data, angleStep=float(angle_step), z_spacing=int(z_spacing), max_eucledian_distance=20) # named parameters for mesh detail level: float angleStep, int z_spacing, float max_eucledian_distance, bool verbose
             # save result as pkl
@@ -1010,7 +1010,7 @@ class WalkToSheet():
         mean_innermost_ts, mean_outermost_ts, winding_direction = self.find_inner_outermost_winding_direction(t_means, angle_vector)
 
         # Set to false to load precomputed partial results during development
-        fresh_start2 = True
+        fresh_start2 = False
         if fresh_start2:
             result_ts, result_normals = self.interpolate_ordered_pointset(ordered_pointset, ordered_normals, angle_vector, winding_direction)
             interpolated_ts, interpolated_normals = result_ts, result_normals
@@ -1023,7 +1023,7 @@ class WalkToSheet():
             with open(result_pkl_path, 'rb') as f:
                 (result_ts, result_normals) = pickle.load(f)
 
-        fresh_start3 = True
+        fresh_start3 = False
         if fresh_start3:
             valid_p = 0.4
             valid_ts, valid_normals, angle_vector = self.clip_valid_windings(result_ts, result_normals, angle_vector, angle_step, valid_p_winding=valid_p, valid_p_z=valid_p)
@@ -1038,7 +1038,7 @@ class WalkToSheet():
             # Optimize the full pointset for smooth surface with best guesses for interpolated t values
             # interpolated_ts = self.optimize_adjacent(interpolated_ts, neighbours_dict, fixed_points, learning_rate=0.2)
             interpolated_ts = self.optimize_adjacent_cpp(interpolated_ts, neighbours_dict, fixed_points, 
-                                                        learning_rate=0.2, iterations=2, error_val_d=0.0005, unfix_factor=2.5,
+                                                        learning_rate=0.2, iterations=5, error_val_d=0.0005, unfix_factor=2.5,
                                                         verbose=True)
 
             # Clip away invalid z values
@@ -1270,7 +1270,7 @@ class WalkToSheet():
         mesh_path = os.path.join(self.save_path, "mesh.obj")
 
         # Set to false to load precomputed partial results during development
-        start_fresh = True
+        start_fresh = False
         if start_fresh: 
             # Set to false to load precomputed partial results during development
             start_fresh_build_points = True
@@ -1332,8 +1332,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     graph_path = os.path.join(os.path.dirname(args.path), args.graph)
-    graph = load_graph(graph_path)
-    # graph = None
+    # graph = load_graph(graph_path)
+    graph = None
     reference_path = graph_path.replace("evolved_graph", "subgraph")
     start_point = args.start_point
     scale_factor = args.scale_factor

@@ -186,13 +186,13 @@ class Flatboi:
             if new_energy >= float("inf") or new_energy == float("nan") or np.isnan(new_energy) or np.isinf(new_energy):
                 continue
                 # raise ValueError("SLIM energy is infinite or NaN.")
-            # elif new_energy < temp_energy:
-            #     if abs(new_energy - temp_energy) < threshold:
-            #         converged = True
-            #     else:
-            #         converged = False
-            # else:
-            #     converged = True
+            elif new_energy < temp_energy:
+                if abs(new_energy - temp_energy) < threshold:
+                    converged = True
+                else:
+                    converged = False
+            else:
+                converged = True
 
         slim_uvs = slim.vertices()
 
@@ -262,12 +262,12 @@ class Flatboi:
 
         print("Symmetric Dirichlet Distortion Energy")
         slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_SYMMETRIC_DIRICHLET, soft_penalty=0)
-        slim_uvs, energies_ = self.slim_optimization(slim)
+        slim_uvs, energies_ = self.slim_optimization(slim, iterations=30)
         energies.extend(list(energies_))
 
         print("Exponential Symmetric Dirichlet Distortion Energy")
         slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_EXP_SYMMETRIC_DIRICHLET, soft_penalty=0)
-        slim_uvs, energies_ = self.slim_optimization(slim)
+        slim_uvs, energies_ = self.slim_optimization(slim, iterations=10)
         energies.extend(list(energies_))
 
         l2, linf, area_error = self.stretch_metrics(slim.vertices())
