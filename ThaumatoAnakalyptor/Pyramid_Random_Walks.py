@@ -1609,6 +1609,7 @@ class RandomWalkSolver:
                 starting_ks = [int(k) for k in starting_ks]
                 assert len(starting_nodes) == len(starting_ks), f"Number of nodes and k values must be equal. Got {len(starting_nodes)} nodes and {len(starting_ks)} k values."
                 starting_nodes, starting_ks, node_usage_count = sheet_generation.solve_random_walk(starting_nodes, starting_ks, node_usage_count, *translation, return_every_hundrethousandth=True)
+                node_usage_count = deepcopy(node_usage_count)
                 starting_nodes, starting_ks = np.array(starting_nodes), np.array(starting_ks)
                 self.save_solution(path, starting_nodes, starting_ks)
                 with open(node_usage_path, 'wb') as file:
