@@ -1232,7 +1232,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::unordered_map<int, std::un
     Config& config,
     int numThreads = 28,
     bool return_every_hundrethousandth = false,
-    int walksPerThread = 1000000
+    int walksPerThread = 100000
     ) 
 {
     // Map to count the frequency of each message
@@ -1291,7 +1291,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::unordered_map<int, std::un
     // Run a minimum nr of random walks before adaptively changing the parameters.
     // Ensures to warm up the nr picked and with that the starting node sampling logic
     // Ensures to warmup the aggregation logic
-    long long int warmup_nr_walks_ = static_cast<long long int>(2500000) + static_cast<long long int>(2) * static_cast<long long int>(walk_aggregation_threshold_start) * static_cast<long long int>(min_steps_start) * static_cast<long long int>(start_nodes.size());
+    long long int warmup_nr_walks_ = static_cast<long long int>(2500000) + static_cast<long long int>(walk_aggregation_threshold_start) * static_cast<long long int>(min_steps_start) * static_cast<long long int>(start_nodes.size()) / static_cast<long long int>(5);
     long long int warmup_nr_walks = warmup_nr_walks_;
     std::cout << "Here 6" << std::endl;
     // Yellow print
