@@ -16,8 +16,8 @@
 
 // Global random number generator - initialized once for performance
 std::mt19937 gen(std::random_device{}());
-std::uniform_int_distribution<size_t> dist_pick;
-std::discrete_distribution<size_t> dist_frontier;
+std::uniform_int_distribution<int> dist_pick;
+std::discrete_distribution<int> dist_frontier;
 // std::mt19937 gen(31415629);
 
 namespace py = pybind11;
@@ -177,7 +177,7 @@ struct VolumeID {
 };
 
 struct VolumeIDHash {
-   size_t operator()(const VolumeID& volumeID) const {
+   int operator()(const VolumeID& volumeID) const {
         // Combine hashes of individual fields
         return std::hash<int>()(volumeID.x) ^ std::hash<int>()(-volumeID.y) ^ std::hash<int>()(100000 * volumeID.z);
     }
@@ -206,9 +206,9 @@ using NodePtr = std::shared_ptr<Node>;
 using AggregateKey = std::tuple<int, int, int>; // Start Node, End Node, K
 
 struct KeyHash {
-    std::size_t operator()(const AggregateKey& key) const {
+    int operator()(const AggregateKey& key) const {
         auto [x, y, z] = key;
-        std::size_t res = 17;
+        int res = 17;
         res = res * 31 + std::hash<int>()(x);
         res = res * 31 + std::hash<int>()(y);
         res = res * 31 + std::hash<int>()(z);
@@ -308,14 +308,14 @@ std::pair<std::vector<NodePtr>, std::vector<NodePtr>> initializeNodes(
     )
 {
     // Assuming the first dimension of each vector is 'n'
-    size_t n = ids.size(); 
+    int n = ids.size(); 
     std::vector<NodePtr> nodes;
     nodes.reserve(n); // Reserve space for 'n' nodes
 
     std::cout << "Begin initialization" << std::endl;
     VolumeDict volume_dict;
     // First pass: Initialize nodes
-    for (size_t i = 0; i < n; ++i) {
+    for (int i = 0; i < n; ++i) {
         auto node = std::make_shared<Node>();
         node->volume_id = {ids[i][0], ids[i][1], ids[i][2]};
         node->patch_id = ids[i][3];
@@ -338,7 +338,7 @@ std::pair<std::vector<NodePtr>, std::vector<NodePtr>> initializeNodes(
     std::cout << "First pass done" << std::endl;
 
     // Second pass: Set next_nodes pointers
-    for (size_t i = 0; i < n; ++i) {
+    for (int i = 0; i < n; ++i) {
         for (int j = 0; j < nextNodes[i].size(); ++j) {
             VolumeID nextVolID = {nextNodes[i][j][0], nextNodes[i][j][1], nextNodes[i][j][2]};
             PatchID nextPatchID = nextNodes[i][j][3];
@@ -362,7 +362,7 @@ std::pair<std::vector<NodePtr>, std::vector<NodePtr>> initializeNodes(
 
     if (false) {
         // Third pass: Filter out non-reciprocal next_nodes
-        for (size_t i = 0; i < n; ++i) {
+        for (int i = 0; i < n; ++i) {
             for (int j = 0; j < nodes[i]->next_nodes.size(); ++j) {
                 NodePtr nextNode = nodes[i]->next_nodes[j];
                 if (nextNode) {
@@ -413,7 +413,7 @@ std::pair<py::array_t<int>, py::array_t<int>> process_result(std::vector<NodePtr
     K max_ks = *std::max_element(final_ks.begin(), final_ks.end());
     std::cout << "Min k: " << min_ks << " Max k: " << max_ks << std::endl;
 
-    for (size_t i = 0; i < final_nodes.size(); ++i) {
+    for (int i = 0; i < final_nodes.size(); ++i) {
         NodePtr node = final_nodes[i];
         K k = final_ks[i];
 
@@ -427,7 +427,7 @@ std::pair<py::array_t<int>, py::array_t<int>> process_result(std::vector<NodePtr
     return std::make_pair(result_ids, result_ks);
 }
 
-std::tuple<NodePtr, K, size_t> pick_start_node(
+std::tuple<NodePtr, K, int> pick_start_node(
     std::vector<NodePtr> nodes, 
     std::vector<K> ks, 
     std::vector<int> picked_nrs)
@@ -443,8 +443,8 @@ std::tuple<NodePtr, K, size_t> pick_start_node(
     float min_mean_abs = mean_ - min_;
     float threshold = min_ + min_mean_abs * 0.25f;
 
-    std::vector<size_t> valid_indices;
-    for (size_t i = 0; i < picked_nrs.size(); ++i) {
+    std::vector<int> valid_indices;
+    for (int i = 0; i < picked_nrs.size(); ++i) {
         if (picked_nrs[i] <= threshold) {
             valid_indices.push_back(i);
         }
@@ -452,8 +452,8 @@ std::tuple<NodePtr, K, size_t> pick_start_node(
 
     assert(!valid_indices.empty() && "No nodes to pick from.");
 
-    std::uniform_int_distribution<size_t> dist(0, valid_indices.size() - 1);
-    size_t rand_index = valid_indices[dist(gen)];
+    std::uniform_int_distribution<int> dist(0, valid_indices.size() - 1);
+    int rand_index = valid_indices[dist(gen)];
 
     NodePtr node = nodes[rand_index];
     K k = ks[rand_index];
@@ -461,7 +461,7 @@ std::tuple<NodePtr, K, size_t> pick_start_node(
     return {node, k, rand_index};
 }
 
-std::tuple<std::vector<NodePtr>, std::vector<K>, std::vector<size_t>> pick_start_nodes(
+std::tuple<std::vector<NodePtr>, std::vector<K>, std::vector<int>> pick_start_nodes(
     std::vector<NodePtr> nodes, 
     std::vector<K> ks, 
     std::vector<int> picked_nrs,
@@ -470,7 +470,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::vector<size_t>> pick_start
 {
     std::vector<NodePtr> start_nodes;
     std::vector<K> start_ks;
-    std::vector<size_t> start_indices;
+    std::vector<int> start_indices;
 
     
     assert(!nodes.empty() && "No nodes to pick from.");
@@ -484,8 +484,8 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::vector<size_t>> pick_start
     float min_mean_abs = mean_ - min_;
     float threshold = min_ + min_mean_abs * 0.25f;
 
-    std::vector<size_t> valid_indices;
-    for (size_t i = 0; i < picked_nrs.size(); ++i) {
+    std::vector<int> valid_indices;
+    for (int i = 0; i < picked_nrs.size(); ++i) {
         if (picked_nrs[i] <= threshold) {
             valid_indices.push_back(i);
         }
@@ -493,9 +493,9 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::vector<size_t>> pick_start
 
     assert(!valid_indices.empty() && "No nodes to pick from.");
 
-    std::uniform_int_distribution<size_t> dist(0, valid_indices.size() - 1);
+    std::uniform_int_distribution<int> dist(0, valid_indices.size() - 1);
     for (int i = 0; i < nr_walks; ++i) {
-        size_t rand_index = valid_indices[dist(gen)];
+        int rand_index = valid_indices[dist(gen)];
 
         NodePtr node = nodes[rand_index];
         K k = ks[rand_index];
@@ -508,24 +508,24 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::vector<size_t>> pick_start
     return {start_nodes, start_ks, start_indices};
 }
 
-std::tuple<std::vector<NodePtr>, std::vector<K>, std::vector<size_t>> pick_start_nodes_precomputed(
+std::tuple<std::vector<NodePtr>, std::vector<K>, std::vector<int>> pick_start_nodes_precomputed(
     const std::vector<NodePtr>& nodes, 
     const std::vector<K>& ks, 
-    const std::vector<size_t>& valid_indices,
+    const std::vector<int>& valid_indices,
     int nr_walks
     )
 {
     std::vector<NodePtr> start_nodes;
     std::vector<K> start_ks;
-    std::vector<size_t> start_indices;
+    std::vector<int> start_indices;
 
     start_nodes.reserve(nr_walks);  // Reserving space to avoid multiple reallocations
     start_ks.reserve(nr_walks);
     start_indices.reserve(nr_walks);
 
     for (int i = 0; i < nr_walks; ++i) {
-        // size_t rand_index = valid_indices[dist_pick(gen)];
-        size_t rand_index = dist_frontier(gen);
+        // int rand_index = valid_indices[dist_pick(gen)];
+        int rand_index = dist_frontier(gen);
 
         NodePtr node = nodes[rand_index];
         K k = ks[rand_index];
@@ -542,19 +542,19 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::vector<size_t>> pick_start
     return {std::move(start_nodes), std::move(start_ks), std::move(start_indices)};
 }
 
-std::tuple<std::vector<NodePtr>, std::vector<K>, std::vector<size_t>> pick_start_nodes_precomputed_pyramid_down(
+std::tuple<std::vector<NodePtr>, std::vector<K>, std::vector<int>> pick_start_nodes_precomputed_pyramid_down(
     std::uniform_int_distribution<>& distrib,
     const std::vector<NodePtr>& landmark_nodes,
     const std::vector<K>& landmark_ks, 
     const std::vector<NodePtr>& nodes, 
     const std::vector<K>& ks, 
-    const std::vector<size_t>& valid_indices,
+    const std::vector<int>& valid_indices,
     int nr_walks
     )
 {
     std::vector<NodePtr> start_nodes;
     std::vector<K> start_ks;
-    std::vector<size_t> start_indices;
+    std::vector<int> start_indices;
 
     start_nodes.reserve(nr_walks);  // Reserving space to avoid multiple reallocations
     start_ks.reserve(nr_walks);
@@ -572,8 +572,8 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::vector<size_t>> pick_start
             start_indices.push_back(rand_index);
         }
         else {
-            // size_t rand_index = valid_indices[dist_pick(gen)];
-            size_t rand_index = dist_frontier(gen);
+            // int rand_index = valid_indices[dist_pick(gen)];
+            int rand_index = dist_frontier(gen);
 
             NodePtr node = nodes[rand_index];
             K k = ks[rand_index];
@@ -591,12 +591,12 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::vector<size_t>> pick_start
     return {std::move(start_nodes), std::move(start_ks), std::move(start_indices)};
 }
 
-void precompute_pick(const std::vector<long>& picked_nrs, std::vector<size_t>& valid_indices) {
+void precompute_pick(const std::vector<long>& picked_nrs, std::vector<int>& valid_indices) {
     double mean_ = 0.0;
     double min_ = std::numeric_limits<double>::max();
     int count = 0;
     valid_indices.clear();
-    for (size_t i = 0; i < picked_nrs.size(); ++i) {
+    for (int i = 0; i < picked_nrs.size(); ++i) {
         // Update mean and min statistics
         mean_ += (double)picked_nrs[i];
         count++;
@@ -611,13 +611,13 @@ void precompute_pick(const std::vector<long>& picked_nrs, std::vector<size_t>& v
     double threshold = min_ + min_mean_abs * 0.25;
     // std::cout << "Mean: " << mean_ << " Min: " << min_ << " Threshold: " << threshold << std::endl;
 
-    for (size_t i = 0; i < picked_nrs.size(); ++i) {
+    for (int i = 0; i < picked_nrs.size(); ++i) {
         if ((double)picked_nrs[i] <= threshold) {
             valid_indices.push_back(i);
         }
     }
     gen = std::mt19937(std::random_device{}());
-    dist_pick = std::uniform_int_distribution<size_t>(0, valid_indices.size() - 1);
+    dist_pick = std::uniform_int_distribution<int>(0, valid_indices.size() - 1);
 }
 
 void precompute_pick_frontier(const std::vector<NodePtr> nodes) {
@@ -641,7 +641,7 @@ void precompute_pick_frontier(const std::vector<NodePtr> nodes) {
     float frontier_threshold_min_mean = frontier_min + (frontier_mean - frontier_min) * 0.25f;
     float frontier_threshold_max_mean = frontier_max - (frontier_max - frontier_mean) * 0.25f;
 
-    for (size_t i = 0; i < nodes.size(); ++i) {
+    for (int i = 0; i < nodes.size(); ++i) {
         frontier_nrs[i] -= frontier_mean;
         if (frontier_nrs[i] < 0) {
             frontier_nrs[i] = 0;
@@ -649,7 +649,7 @@ void precompute_pick_frontier(const std::vector<NodePtr> nodes) {
     }
 
     gen = std::mt19937(std::random_device{}());
-    dist_frontier = std::discrete_distribution<size_t>(frontier_nrs.begin(), frontier_nrs.end());
+    dist_frontier = std::discrete_distribution<int>(frontier_nrs.begin(), frontier_nrs.end());
 }
 
 inline std::pair<NodePtr, K> pick_next_node(std::mt19937& gen_, std::uniform_int_distribution<>& distrib, const Node& node, int start_k_diff, int max_same_block_jump_range, bool enable_winding_switch = false) {
@@ -786,7 +786,7 @@ bool check_overlapp_walk(
     int step_size = 20, 
     int away_dist_check = 500) 
 {
-    for (size_t i = 0; i < walk.size(); ++i) {
+    for (int i = 0; i < walk.size(); ++i) {
         NodePtr node = walk[i];
         K k = ks[i];
         if (!check_overlapp_node(node, k, std::cref(volume_dict), max_umbilicus_difference, step_size, away_dist_check)) {
@@ -1009,7 +1009,7 @@ std::tuple<int, bool> walk_aggregation_func(
     std::vector<NodePtr> aggregated_nodes;
     std::vector<K> aggregated_ks;
 
-    for (size_t i = 0; i < walk.size(); ++i) {
+    for (int i = 0; i < walk.size(); ++i) {
         NodePtr node = walk[i];
         K k = ks[i];
 
@@ -1042,7 +1042,7 @@ std::tuple<int, bool> walk_aggregation_func(
     }
 
     // Update volume_dict with the newly aggregated nodes
-    for (size_t i = 0; i < aggregated_nodes.size(); ++i) {
+    for (int i = 0; i < aggregated_nodes.size(); ++i) {
         NodePtr node = aggregated_nodes[i];
         K k = aggregated_ks[i];
 
@@ -1061,7 +1061,7 @@ std::tuple<int, bool> walk_aggregation_func(
         // Append same number of 0 to picked_nrs vector
         picked_nrs.insert(picked_nrs.end(), aggregated_nodes.size(), 0);
         // Update the index of the aggregated nodes
-        for (size_t i = 0; i < aggregated_nodes.size(); ++i) {
+        for (int i = 0; i < aggregated_nodes.size(); ++i) {
             aggregated_nodes[i]->index = nodes_final.size() - aggregated_nodes.size() + i;
         }
     }
@@ -1082,7 +1082,7 @@ void walk_aggregate_connections(
     assert(start_node->is_landmark && "First node in walk must be a landmark");
 
     int nr_landmarks_direction1 = 0;
-    size_t i = 1;
+    int i = 1;
     for (; i < walk.size(); ++i) {
         NodePtr end_node = walk[i];
         K k = ks[i];
@@ -1110,7 +1110,7 @@ void walk_aggregate_connections(
     }
     // look from other direction
     int nr_landmarks_direction2 = 0;
-    for (size_t u = walk.size() - 1; u > i; --u) {
+    for (int u = walk.size() - 1; u > i; --u) {
         NodePtr end_node = walk[u];
         K k = ks[u];
         K k_inv = -k;
@@ -1257,7 +1257,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::unordered_map<int, std::un
     std::vector<NodePtr> nodes;
     std::vector<K> ks;
     std::vector<long> picked_nrs;
-    std::vector<size_t> valid_indices;
+    std::vector<int> valid_indices;
 
     if (!continue_walks) {
         for (int i = 0; i < start_nodes.size(); ++i) {
@@ -1275,16 +1275,16 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::unordered_map<int, std::un
         // Add start_node to volume_dict
     }
 
-    int nr_unchanged_walks = 0;
+    long long int nr_unchanged_walks = 0;
     NodeUsageCount node_usage_count = translate_node_usage_count_cpp(std::cref(python_node_usage_count), std::cref(nodes)); // Map to track node usage count with specific k values
-    int walk_aggregation_count = 0;
-    int total_walks = 0;
-    int nrWalks = walksPerThread * numThreads;
+    long long int walk_aggregation_count = 0;
+    long long int total_walks = 0;
+    long long int nrWalks = walksPerThread * numThreads;
     // Run a minimum nr of random walks before adaptively changing the parameters.
     // Ensures to warm up the nr picked and with that the starting node sampling logic
     // Ensures to warmup the aggregation logic
-    int warmup_nr_walks_ = 2500000 + 2 * walk_aggregation_threshold_start * min_steps_start * nodes.size();
-    int warmup_nr_walks = warmup_nr_walks_;
+    long long int warmup_nr_walks_ = 2500000 + 2 * walk_aggregation_threshold_start * min_steps_start * nodes.size();
+    long long int warmup_nr_walks = warmup_nr_walks_;
     // Yellow print
     std::cout << "\033[1;33m" << "[ThaumatoAnakalyptor]: Starting " << warmup_nr_walks << " warmup random walks. Nr good nodes: " << nodes.size() << "\033[0m" << std::endl;
 
@@ -1300,7 +1300,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::unordered_map<int, std::un
         gen_.push_back(gen_t_);
     }
 
-    int current_nr_walks = 0;
+    long long int current_nr_walks = 0;
     while (walk_aggregation_count < 100000 || !return_every_hundrethousandth)
     {
         current_nr_walks += nrWalks;
@@ -1320,7 +1320,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::unordered_map<int, std::un
             warmup_nr_walks = warmup_nr_walks_ / 10;
             current_nr_walks = 0;
             // // set picked_nrs to 0
-            // for (size_t i = 0; i < picked_nrs.size(); ++i) {
+            // for (int i = 0; i < picked_nrs.size(); ++i) {
             //     picked_nrs[i] = 0;
             // }
             // precompute_pick(std::cref(picked_nrs), valid_indices);
@@ -1346,10 +1346,10 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::unordered_map<int, std::un
         // pick nrWalks start nodes
         std::vector<NodePtr> sns;
         std::vector<K> sks;
-        std::vector<size_t> indices_s;
+        std::vector<int> indices_s;
         int nrWalks = walksPerThread * numThreads;
         std::tie(sns, sks, indices_s) = pick_start_nodes_precomputed(std::cref(nodes), std::cref(ks), std::cref(valid_indices), nrWalks);
-        // for (size_t i = 0; i < indices_s.size(); ++i) {
+        // for (int i = 0; i < indices_s.size(); ++i) {
         //     update_picked_nr(std::cref(nodes), picked_nrs, indices_s[i], 1);
         // }
 
@@ -1372,7 +1372,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::unordered_map<int, std::un
                     // Safe to get the future since it's ready and being accessed first time
                     auto [walks_, walk_ks_, successes_, new_nodes_] = it->get();
 
-                    for (size_t j = 0; j < walks_.size(); ++j) {
+                    for (int j = 0; j < walks_.size(); ++j) {
                         walks_futures.push_back(std::move(walks_[j]));
                         walk_ks_futures.push_back(std::move(walk_ks_[j]));
                         successes_futures.push_back(successes_[j]);
@@ -1393,7 +1393,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::unordered_map<int, std::un
         // // single threaded call to threadRandomWalk
         // auto [walks_futures, walk_ks_futures, messages_futures, successes_futures, new_nodes_futures] = threadRandomWalk(gen_[0], nrWalks, sns, sks, volume_dict, sheet_z_range, sheet_k_range, max_umbilicus_difference, max_steps, max_tries, min_steps);
 
-        // for (size_t i = 0; i < messages_futures.size(); ++i) {
+        // for (int i = 0; i < messages_futures.size(); ++i) {
         //     message_count[messages_futures[i]]++;
         // }
         // Increment the count for the returned message
@@ -1401,7 +1401,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::unordered_map<int, std::un
 
         // Loop over all the walks by iterating trough them
         bool total_aggregation_success = false;
-        for (size_t i = 0; i < walks_futures.size(); ++i) {
+        for (int i = 0; i < walks_futures.size(); ++i) {
             auto& walk = walks_futures[i];
             auto& walk_ks = walk_ks_futures[i];
             bool success = successes_futures[i];
@@ -1485,7 +1485,7 @@ AggregatedConnections solveUp(
     std::vector<NodePtr> nodes;
     std::vector<K> ks;
     std::vector<long> picked_nrs;
-    std::vector<size_t> valid_indices;
+    std::vector<int> valid_indices;
 
     for (int i = 0; i < landmark_nodes.size(); ++i) {
         NodePtr landmark_node = landmark_nodes[i];
@@ -1552,7 +1552,7 @@ AggregatedConnections solveUp(
         // pick nrWalks start nodes
         std::vector<NodePtr> sns;
         std::vector<K> sks;
-        std::vector<size_t> indices_s;
+        std::vector<int> indices_s;
         std::tie(sns, sks, indices_s) = pick_start_nodes_precomputed(std::cref(nodes), std::cref(ks), std::cref(valid_indices), nrWalks);
 
         auto end2 = std::chrono::high_resolution_clock::now();
@@ -1577,7 +1577,7 @@ AggregatedConnections solveUp(
                     // Safe to get the future since it's ready and being accessed first time
                     auto [walks_, walk_ks_, successes_, new_nodes_] = it->get();
 
-                    for (size_t j = 0; j < walks_.size(); ++j) {
+                    for (int j = 0; j < walks_.size(); ++j) {
                         walks_futures.push_back(std::move(walks_[j]));
                         walk_ks_futures.push_back(std::move(walk_ks_[j]));
                         successes_futures.push_back(successes_[j]);
@@ -1598,7 +1598,7 @@ AggregatedConnections solveUp(
         auto end3 = std::chrono::high_resolution_clock::now();
 
         // Loop over all the walks by iterating trough them
-        for (size_t i = 0; i < walks_futures.size(); ++i) {
+        for (int i = 0; i < walks_futures.size(); ++i) {
             auto& walk = walks_futures[i];
             auto& walk_ks = walk_ks_futures[i];
             bool success = successes_futures[i];
@@ -1671,7 +1671,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
     std::vector<NodePtr> nodes;
     std::vector<K> ks;
     std::vector<long> picked_nrs;
-    std::vector<size_t> valid_indices;
+    std::vector<int> valid_indices;
 
     if (!continue_walks) {
         for (int i = 0; i < start_nodes.size(); ++i) {
@@ -1741,7 +1741,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
         if (nr_unchanged_walks > max_unchanged_walks && walk_aggregation_count != 0) { //  && (/* More checks*/)
             nr_unchanged_walks = 0;
             // set picked_nrs to 0
-            for (size_t i = 0; i < picked_nrs.size(); ++i) {
+            for (int i = 0; i < picked_nrs.size(); ++i) {
                 picked_nrs[i] = 0;
             }
             precompute_pick(std::cref(picked_nrs), valid_indices);
@@ -1752,10 +1752,10 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
         // pick nrWalks start nodes
         std::vector<NodePtr> sns;
         std::vector<K> sks;
-        std::vector<size_t> indices_s;
+        std::vector<int> indices_s;
         int nrWalks = walksPerThread * numThreads;
         std::tie(sns, sks, indices_s) = pick_start_nodes_precomputed_pyramid_down(dist, std::cref(start_nodes), std::cref(start_ks), std::cref(nodes), std::cref(ks), std::cref(valid_indices), nrWalks);
-        for (size_t i = 0; i < indices_s.size(); ++i) {
+        for (int i = 0; i < indices_s.size(); ++i) {
             update_picked_nr(std::cref(nodes), picked_nrs, indices_s[i], 1);
         }
 
@@ -1781,7 +1781,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
                     // Safe to get the future since it's ready and being accessed first time
                     auto [walks_, walk_ks_, successes_, new_nodes_] = it->get();
 
-                    for (size_t j = 0; j < walks_.size(); ++j) {
+                    for (int j = 0; j < walks_.size(); ++j) {
                         walks_futures.push_back(std::move(walks_[j]));
                         walk_ks_futures.push_back(std::move(walk_ks_[j]));
                         successes_futures.push_back(successes_[j]);
@@ -1803,7 +1803,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
 
         // Loop over all the walks by iterating trough them
         bool total_aggregation_success = false;
-        for (size_t i = 0; i < walks_futures.size(); ++i) {
+        for (int i = 0; i < walks_futures.size(); ++i) {
             auto& walk = walks_futures[i];
             auto& walk_ks = walk_ks_futures[i];
             bool success = successes_futures[i];
@@ -1865,8 +1865,8 @@ std::pair<std::vector<double>, std::vector<double>> process_array(py::array_t<do
 
     std::vector<double> output1, output2;
 
-    for (size_t i = 0; i < buf_info.shape[0]; i++) {
-        for (size_t j = 0; j < buf_info.shape[1]; j++) {
+    for (int i = 0; i < buf_info.shape[0]; i++) {
+        for (int j = 0; j < buf_info.shape[1]; j++) {
             double val = ptr[i * buf_info.shape[1] + j];
             std::cout << val << std::endl;
             output1.push_back(val * some_integer); // Example operation
@@ -1920,7 +1920,7 @@ std::tuple<py::array_t<int>, py::array_t<int>, std::unordered_map<int, std::unor
 
     Config config;
     config.load(overlappThresholdFile);
-    config.print();
+    // config.print();
 
     std::cout << "Config loaded" << std::endl;
 
@@ -1930,7 +1930,7 @@ std::tuple<py::array_t<int>, py::array_t<int>, std::unordered_map<int, std::unor
 
     std::cout << "Nodes initialized" << std::endl;
 
-    const size_t numThreads = std::max((int)(1), (int)((std::thread::hardware_concurrency() * 4) / 5));
+    const int numThreads = std::max((int)(1), (int)((std::thread::hardware_concurrency() * 4) / 5));
     auto [final_nodes, final_ks, python_node_usage_count] = solve(start_nodes, start_ks, initial_node_usage_count, config, numThreads, return_every_hundrethousandth);
 
     std::cout << "Solve done" << std::endl;
@@ -1976,7 +1976,7 @@ AggregatedConnections solvePyramidRandomWalkUp(
 
     std::cout << "Nodes initialized" << std::endl;
 
-    const size_t numThreads = std::max((int)(1), (int)((std::thread::hardware_concurrency() * 4) / 5));
+    const int numThreads = std::max((int)(1), (int)((std::thread::hardware_concurrency() * 4) / 5));
     AggregatedConnections agg_con = solveUp(start_nodes, config, numThreads);
 
     std::cout << "Solve done" << std::endl;
@@ -2025,7 +2025,7 @@ std::pair<py::array_t<int>, py::array_t<int>> solvePyramidRandomWalkDown(
 
     std::cout << "Nodes initialized" << std::endl;
 
-    const size_t numThreads = std::max((int)(1), (int)((std::thread::hardware_concurrency() * 4) / 5));
+    const int numThreads = std::max((int)(1), (int)((std::thread::hardware_concurrency() * 4) / 5));
     auto [final_nodes, final_ks] = solveDown(nodes.size(), landmark_nodes, landmark_ks, config, nr_walks_per_node, numThreads);
 
     std::cout << "Solve done" << std::endl;
@@ -2077,8 +2077,8 @@ int k_in_k(uint64_t k) {
 
 int64_t* DP_to_k(uint64_t* DP, int nodes_length) {
     int64_t* k_values = new int64_t[nodes_length*nodes_length];
-    for (size_t i = 0; i < nodes_length; i++) {
-        for (size_t j = 0; j < nodes_length; j++) {
+    for (int i = 0; i < nodes_length; i++) {
+        for (int j = 0; j < nodes_length; j++) {
             k_values[i*nodes_length + j] = k_in_k(DP[i*nodes_length + j]);
         }
     }
@@ -2086,20 +2086,20 @@ int64_t* DP_to_k(uint64_t* DP, int nodes_length) {
 }
 
 void processChunk(int start, int end, int nodes_length, uint64_t* initialDP, uint64_t* initialDP_copy) {
-    for (size_t this_node = start; this_node < end; this_node++) {
-        for (size_t adjacent_node = 0; adjacent_node < nodes_length; adjacent_node++) {
+    for (int this_node = start; this_node < end; this_node++) {
+        for (int adjacent_node = 0; adjacent_node < nodes_length; adjacent_node++) {
             if (initialDP[this_node*nodes_length + adjacent_node] == 0) {
                 continue;
             }
             auto this_ks = ks_in_k(initialDP[this_node*nodes_length + adjacent_node]);
-            for (size_t this_k : this_ks) {
+            for (int this_k : this_ks) {
                 // For each adjacent node, find its adjacent nodes and good k values
-                for (size_t adjacent_next_node = 0; adjacent_next_node < nodes_length; adjacent_next_node++) {
+                for (int adjacent_next_node = 0; adjacent_next_node < nodes_length; adjacent_next_node++) {
                     if (initialDP[adjacent_node*nodes_length + adjacent_next_node] == 0) {
                         continue;
                     }
                     std::vector<int> other_ks = ks_in_k(initialDP[adjacent_node*nodes_length + adjacent_next_node]);
-                    for (size_t other_k : other_ks) {
+                    for (int other_k : other_ks) {
                         if (this_k + other_k < -32) {
                             continue;
                         }
@@ -2122,21 +2122,21 @@ uint64_t* computeAdjacencyTransitionsParallel(
 {
     // Deep Copy the initialDP
     uint64_t* initialDP_copy = new uint64_t[nodes_length*nodes_length];
-    for (size_t i = 0; i < nodes_length; i++) {
-        for (size_t j = 0; j < nodes_length; j++) {
+    for (int i = 0; i < nodes_length; i++) {
+        for (int j = 0; j < nodes_length; j++) {
                 initialDP_copy[i*nodes_length + j] = initialDP[i*nodes_length + j];
         }
     }
     
-    const size_t numThreads = std::thread::hardware_concurrency();
+    const int numThreads = std::thread::hardware_concurrency();
     std::vector<std::future<void>> futures;
 
     // Calculate chunk size per thread
-    size_t chunkSize = nodes_length / numThreads;
+    int chunkSize = nodes_length / numThreads;
 
-    for (size_t i = 0; i < numThreads; i++) {
-        size_t start = i * chunkSize;
-        size_t end = (i == numThreads - 1) ? nodes_length : start + chunkSize;
+    for (int i = 0; i < numThreads; i++) {
+        int start = i * chunkSize;
+        int end = (i == numThreads - 1) ? nodes_length : start + chunkSize;
 
         futures.push_back(std::async(std::launch::async, processChunk, start, end, nodes_length, initialDP, initialDP_copy));
     }
@@ -2154,20 +2154,20 @@ uint64_t* computeAdjacencyTransitionsParallel(
 }
 
 void processSameBlockChunk(int start, int end, int nodes_length, uint64_t* sameBlockDP, uint64_t* initialDP_copy) {
-    for (size_t this_node = start; this_node < end; this_node++) {
-        for (size_t adjacent_node = 0; adjacent_node < nodes_length; adjacent_node++) {
+    for (int this_node = start; this_node < end; this_node++) {
+        for (int adjacent_node = 0; adjacent_node < nodes_length; adjacent_node++) {
             if (initialDP_copy[this_node*nodes_length + adjacent_node] == 0) {
                 continue;
             }
             auto this_ks = ks_in_k(initialDP_copy[this_node*nodes_length + adjacent_node]);
-            for (size_t this_k : this_ks) {
+            for (int this_k : this_ks) {
                 // For each adjacent node, find its adjacent nodes and good k values
-                for (size_t adjacent_next_node = 0; adjacent_next_node < nodes_length; adjacent_next_node++) {
+                for (int adjacent_next_node = 0; adjacent_next_node < nodes_length; adjacent_next_node++) {
                     if (sameBlockDP[adjacent_node*nodes_length + adjacent_next_node] == 0) {
                         continue;
                     }
                     std::vector<int> other_ks = ks_in_k(sameBlockDP[adjacent_node*nodes_length + adjacent_next_node]);
-                    for (size_t other_k : other_ks) {
+                    for (int other_k : other_ks) {
                         if (this_k + other_k < -32) {
                             continue;
                         }
@@ -2191,21 +2191,21 @@ uint64_t* computeAdjacencyTransitionsSameBlockParallel(
 {
     // Deep Copy the sameBlockDP
     uint64_t* filteredDP_copy = new uint64_t[nodes_length*nodes_length];
-    for (size_t i = 0; i < nodes_length; i++) {
-        for (size_t j = 0; j < nodes_length; j++) {
+    for (int i = 0; i < nodes_length; i++) {
+        for (int j = 0; j < nodes_length; j++) {
                 filteredDP_copy[i*nodes_length + j] = filteredDP[i*nodes_length + j];
         }
     }
     
-    const size_t numThreads = std::thread::hardware_concurrency();
+    const int numThreads = std::thread::hardware_concurrency();
     std::vector<std::future<void>> futures;
 
     // Calculate chunk size per thread
-    size_t chunkSize = nodes_length / numThreads;
+    int chunkSize = nodes_length / numThreads;
 
-    for (size_t i = 0; i < numThreads; i++) {
-        size_t start = i * chunkSize;
-        size_t end = (i == numThreads - 1) ? nodes_length : start + chunkSize;
+    for (int i = 0; i < numThreads; i++) {
+        int start = i * chunkSize;
+        int end = (i == numThreads - 1) ? nodes_length : start + chunkSize;
 
         futures.push_back(std::async(std::launch::async, processSameBlockChunk, start, end, nodes_length, sameBlockDP, filteredDP_copy));
     }
@@ -2230,27 +2230,27 @@ uint64_t* computeAdjacencyTransitions(
 {
     // Deep Copy the initialDP
     uint64_t* initialDP_copy = new uint64_t[nodes_length*nodes_length];
-    for (size_t i = 0; i < nodes_length; i++) {
-        for (size_t j = 0; j < nodes_length; j++) {
+    for (int i = 0; i < nodes_length; i++) {
+        for (int j = 0; j < nodes_length; j++) {
                 initialDP_copy[i*nodes_length + j] = initialDP[i*nodes_length + j];
         }
     }
 
     // For each node, check if the next node is adjacent
-    for (size_t this_node = 0; this_node < nodes_length; this_node++) {
-        for (size_t adjacent_node = 0; adjacent_node < nodes_length; adjacent_node++) {
+    for (int this_node = 0; this_node < nodes_length; this_node++) {
+        for (int adjacent_node = 0; adjacent_node < nodes_length; adjacent_node++) {
             if (initialDP[this_node*nodes_length + adjacent_node] == 0) {
                 continue;
             }
             auto this_ks = ks_in_k(initialDP[this_node*nodes_length + adjacent_node]);
-            for (size_t this_k : this_ks) {
+            for (int this_k : this_ks) {
                 // For each adjacent node, find its adjacent nodes and good k values
-                for (size_t adjacent_next_node = 0; adjacent_next_node < nodes_length; adjacent_next_node++) {
+                for (int adjacent_next_node = 0; adjacent_next_node < nodes_length; adjacent_next_node++) {
                     if (initialDP[adjacent_node*nodes_length + adjacent_next_node] == 0) {
                         continue;
                     }
                     std::vector<int> other_ks = ks_in_k(initialDP[adjacent_node*nodes_length + adjacent_next_node]);
-                    for (size_t other_k : other_ks) {
+                    for (int other_k : other_ks) {
                         if (this_k + other_k < -32) {
                             continue;
                         }
@@ -2278,9 +2278,9 @@ std::vector<int> count_overlap(
 {
     // Count the number of True values per node
     std::vector<int> overlapCounts;
-    for (size_t i = 0; i < nodes_length; i++) {
+    for (int i = 0; i < nodes_length; i++) {
         int count_total = 0;
-        for (size_t j = 0; j < nodes_length; j++) {
+        for (int j = 0; j < nodes_length; j++) {
             int count_ = count_ks(filteredGraph[i*nodes_length + j]) -1; // Do not count itself
             if (count_ > 0) {
                 count_total += count_;
@@ -2300,13 +2300,13 @@ std::vector<std::pair<int, int>> localEdgeMaxima(
 {
     // for Each node Check all the adjacent nodes and determine if the edge is a local maxima
     std::vector<int> localMaximaNode;
-    for (size_t this_node = 0; this_node < nodes_length; this_node++) {
+    for (int this_node = 0; this_node < nodes_length; this_node++) {
         // Skip if the node has no overlap
         if (overlapCounts[this_node] == 0) {
             continue;
         }
         bool isLocalMaxima = true;
-        for (size_t adjacent_node = 0; adjacent_node < nodes_length; adjacent_node++) {
+        for (int adjacent_node = 0; adjacent_node < nodes_length; adjacent_node++) {
             if (this_node == adjacent_node) {
                 continue;
             }
@@ -2324,11 +2324,11 @@ std::vector<std::pair<int, int>> localEdgeMaxima(
 
     // For each local maxima node, find the adjacent node with the highest overlap count
     std::vector<std::pair<int, int>> localMaximaPairs;
-    for (size_t i = 0; i < localMaximaNode.size(); i++) {
+    for (int i = 0; i < localMaximaNode.size(); i++) {
         int this_node = localMaximaNode[i];
         int maxOverlap = 0;
         int maxOverlapNode = -1;
-        for (size_t adjacent_node = 0; adjacent_node < nodes_length; adjacent_node++) {
+        for (int adjacent_node = 0; adjacent_node < nodes_length; adjacent_node++) {
             if (this_node == adjacent_node) {
                 continue;
             }
@@ -2360,8 +2360,8 @@ void adjacency_count(
 {
     // count adjacency numbers in the graph
     int adjacencyCount = 0;
-    for (size_t i = 0; i < nodes_length; i++) {
-        for (size_t j = 0; j < nodes_length; j++) {
+    for (int i = 0; i < nodes_length; i++) {
+        for (int j = 0; j < nodes_length; j++) {
             if (initialDP[i*nodes_length + j] > 0) {
                 adjacencyCount++;
             }
@@ -2439,7 +2439,7 @@ uint64_t* filterGraph(
         }
 
         // Delete local edge maxima edges
-        for (size_t i = 0; i < localMaximaPairs.size(); i++) {
+        for (int i = 0; i < localMaximaPairs.size(); i++) {
             int this_node = localMaximaPairs[i].first;
             int maxOverlapNode = localMaximaPairs[i].second;
             initialDP[this_node*nodes_length + maxOverlapNode] = 0;
@@ -2465,8 +2465,8 @@ py::array_t<int64_t> skeletonFilterGraph(
     auto dp_non_transition_unchecked = initialNonTransitionDP_.unchecked<2>(); // Access without bounds checking
     // Convert initialNonTransitionDP to a C++ array
     uint64_t* initialNonTransitionDP = new uint64_t[nodes_length*nodes_length];
-    for (size_t i = 0; i < nodes_length; i++) {
-        for (size_t j = 0; j < nodes_length; j++) {
+    for (int i = 0; i < nodes_length; i++) {
+        for (int j = 0; j < nodes_length; j++) {
             initialNonTransitionDP[i*nodes_length + j] = dp_non_transition_unchecked(i, j);
         }
     }
@@ -2474,8 +2474,8 @@ py::array_t<int64_t> skeletonFilterGraph(
     auto dp_transition_unchecked = initialTransitionDP_.unchecked<2>(); // Access without bounds checking
     // Convert initialTransitionDP to a C++ array
     uint64_t* initialTransitionDP = new uint64_t[nodes_length*nodes_length];
-    for (size_t i = 0; i < nodes_length; i++) {
-        for (size_t j = 0; j < nodes_length; j++) {
+    for (int i = 0; i < nodes_length; i++) {
+        for (int j = 0; j < nodes_length; j++) {
             initialTransitionDP[i*nodes_length + j] = dp_transition_unchecked(i, j);
         }
     }
@@ -2483,8 +2483,8 @@ py::array_t<int64_t> skeletonFilterGraph(
     auto sameBlock_dp_unchecked = sameBlockDP_.unchecked<2>(); // Access without bounds checking
     // Convert sameBlockDP to a C++ array
     uint64_t* sameBlockDP = new uint64_t[nodes_length*nodes_length];
-    for (size_t i = 0; i < nodes_length; i++) {
-        for (size_t j = 0; j < nodes_length; j++) {
+    for (int i = 0; i < nodes_length; i++) {
+        for (int j = 0; j < nodes_length; j++) {
             sameBlockDP[i*nodes_length + j] = sameBlock_dp_unchecked(i, j);
         }
     }
@@ -2498,15 +2498,15 @@ py::array_t<int64_t> skeletonFilterGraph(
     initialTransitionDP = filterGraph(nodes_length, initialTransitionDP, emptyDP);
 
     uint64_t* initialDP = new uint64_t[nodes_length*nodes_length];
-    for (size_t i = 0; i < nodes_length; i++) {
-        for (size_t j = 0; j < nodes_length; j++) {
+    for (int i = 0; i < nodes_length; i++) {
+        for (int j = 0; j < nodes_length; j++) {
             initialDP[i*nodes_length + j] = initialNonTransitionDP[i*nodes_length + j] | initialTransitionDP[i*nodes_length + j];
         }
     }
 
     uint64_t* transitionDP = new uint64_t[nodes_length*nodes_length];
-    for (size_t i = 0; i < nodes_length; i++) {
-        for (size_t j = 0; j < nodes_length; j++) {
+    for (int i = 0; i < nodes_length; i++) {
+        for (int j = 0; j < nodes_length; j++) {
             transitionDP[i*nodes_length + j] = initialTransitionDP[i*nodes_length + j] | sameBlockDP[i*nodes_length + j];
         }
     }
@@ -2515,8 +2515,8 @@ py::array_t<int64_t> skeletonFilterGraph(
     int64_t* k_values_initial = DP_to_k(initialDP, nodes_length);
     // find all unique k values
     std::set<int> k_values_set;
-    for (size_t i = 0; i < nodes_length; i++) {
-        for (size_t j = 0; j < nodes_length; j++) {
+    for (int i = 0; i < nodes_length; i++) {
+        for (int j = 0; j < nodes_length; j++) {
             k_values_set.insert(k_values_initial[i*nodes_length + j]);
         }
     }
@@ -2537,8 +2537,8 @@ py::array_t<int64_t> skeletonFilterGraph(
     py::array_t<int64_t> result_DP(py::array::ShapeContainer({static_cast<long int>(nodes_length), static_cast<long int>(nodes_length)}));
     auto r_DP = result_DP.mutable_unchecked<2>(); // Now correctly a 3D array
 
-    for (size_t i = 0; i < nodes_length; i++) {
-        for (size_t j = 0; j < nodes_length; j++) {
+    for (int i = 0; i < nodes_length; i++) {
+        for (int j = 0; j < nodes_length; j++) {
                 int64_t k = k_values[i*nodes_length + j];
                 r_DP(i, j) = k;
         }
@@ -2786,7 +2786,7 @@ std::pair<py::array_t<int>, double> build_graph_from_individual_init(
     py::array_t<int64_t> valid_edges_python(py::array::ShapeContainer({static_cast<long int>(fill_length)}));
     auto valid_edges_res = valid_edges_python.mutable_unchecked<1>(); // Now correctly a 3D array
 
-    for (size_t i = 0; i < fill_length; i++) {
+    for (int i = 0; i < fill_length; i++) {
         valid_edges_res(i) = valid_edges[i];
     }
 
@@ -2796,7 +2796,7 @@ std::pair<py::array_t<int>, double> build_graph_from_individual_init(
 // Define a hash function for the tuple
 struct hash_tuple {
     template <class T>
-    std::size_t operator()(const T& tuple) const {
+    int operator()(const T& tuple) const {
         auto hash1 = std::hash<int>{}(std::get<0>(tuple));
         auto hash2 = std::hash<int>{}(std::get<1>(tuple));
         auto hash3 = std::hash<int>{}(std::get<2>(tuple));
@@ -2961,7 +2961,7 @@ std::pair<py::array_t<int>, double> build_graph_from_individual_patch_init(
     py::array_t<int64_t> valid_edges_python(py::array::ShapeContainer({static_cast<long int>(fill_length)}));
     auto valid_edges_res = valid_edges_python.mutable_unchecked<1>(); // Now correctly a 3D array
 
-    for (size_t i = 0; i < fill_length; i++) {
+    for (int i = 0; i < fill_length; i++) {
         valid_edges_res(i) = valid_edges[i];
     }
 
