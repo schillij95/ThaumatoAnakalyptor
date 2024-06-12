@@ -274,6 +274,12 @@ std::pair<std::unordered_set<NodePtr>, int> frontier_bfs(NodePtr node, int max_d
                 q.push({next_node, next_depth});
             }
         }
+        // Add all the same block next nodes to the queue
+        for (const auto& next_node : current_node->same_block_next_nodes) {
+            if (next_node) {
+                q.push({next_node, next_depth});
+            }
+        }
     } 
     return {visited, nr_unassigned};
 }
