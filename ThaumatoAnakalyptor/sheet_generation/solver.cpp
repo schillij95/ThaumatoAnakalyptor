@@ -1317,8 +1317,8 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::unordered_map<int, std::un
         if (nr_unchanged_walks > max_unchanged_walks && walk_aggregation_count != 0 && warmup_nr_walks < current_nr_walks) { //  && (/* More checks*/)
             // Reset the unchanged walks counter
             nr_unchanged_walks = 0;
-            // warmup_nr_walks = warmup_nr_walks_ / 10;
-            // current_nr_walks = 0;
+            warmup_nr_walks = warmup_nr_walks_ / 10;
+            current_nr_walks = 0;
             // // set picked_nrs to 0
             // for (size_t i = 0; i < picked_nrs.size(); ++i) {
             //     picked_nrs[i] = 0;

@@ -167,6 +167,8 @@ class Flatboi:
         return slim_uvs
     
     def slim_optimization(self, slim, iterations=None):
+        slim_uvs_initial = slim.vertices()
+
         if iterations is None:
             iterations = self.max_iter
         energies = np.zeros(iterations+1, dtype=np.float64)
@@ -175,7 +177,7 @@ class Flatboi:
         threshold = 1e-5
         converged = False
         iteration = 0
-        while (not converged) and (iteration < iterations):
+        while iteration < iterations:
             print(iteration)
             temp_energy = slim.energy()
             slim.solve(1)
@@ -184,17 +186,25 @@ class Flatboi:
             iteration += 1
             print(f"{temp_energy:.3f} {new_energy:.3f}")
             if new_energy >= float("inf") or new_energy == float("nan") or np.isnan(new_energy) or np.isinf(new_energy):
-                continue
+                converged = False
+                break
                 # raise ValueError("SLIM energy is infinite or NaN.")
             elif new_energy < temp_energy:
                 if abs(new_energy - temp_energy) < threshold:
                     converged = True
+                    break
                 else:
-                    converged = False
+                    converged = True
             else:
-                converged = True
+                converged = False
+                break
 
-        slim_uvs = slim.vertices()
+        if converged:
+            print("Converg(ed/ing)")
+            slim_uvs = slim.vertices()
+        else:
+            print("Not Converged")
+            slim_uvs = slim_uvs_initial
 
         slim_uvs = self.orient_uvs(slim_uvs)
         slim_uvs = slim_uvs.astype(np.float64)
@@ -232,7 +242,7 @@ class Flatboi:
         # initializing SLIM with Symmetric Dirichlet Distortion Energy (isometric)
         print("Symmetric Dirichlet Distortion Energy")
         slim = igl.SLIM(self.vertices, self.triangles, v_init=uv, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_SYMMETRIC_DIRICHLET, soft_penalty=0)
-        slim_uvs, energies_ = self.slim_optimization(slim)
+        slim_uvs, energies_ = self.slim_optimization(slim, iterations=5)
         energies.extend(list(energies_))
 
         print("Log ARAP Energy")
@@ -262,12 +272,12 @@ class Flatboi:
 
         print("Symmetric Dirichlet Distortion Energy")
         slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_SYMMETRIC_DIRICHLET, soft_penalty=0)
-        slim_uvs, energies_ = self.slim_optimization(slim, iterations=30)
+        slim_uvs, energies_ = self.slim_optimization(slim, iterations=5)
         energies.extend(list(energies_))
 
         print("Exponential Symmetric Dirichlet Distortion Energy")
         slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_EXP_SYMMETRIC_DIRICHLET, soft_penalty=0)
-        slim_uvs, energies_ = self.slim_optimization(slim, iterations=10)
+        slim_uvs, energies_ = self.slim_optimization(slim, iterations=5)
         energies.extend(list(energies_))
 
         l2, linf, area_error = self.stretch_metrics(slim.vertices())

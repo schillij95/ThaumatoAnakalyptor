@@ -1585,7 +1585,7 @@ class RandomWalkSolver:
         node_usage_path = os.path.join(path, "node_usage.pkl")
         try:
             # Optionally load translation from .pkl instead of recomputing
-            fresh_start = True
+            fresh_start = False
             if fresh_start:
                 translation = self.translate_data_to_cpp_v2(self.graph, overlapp_threshold)
                 # save the translation as .pkl
@@ -1607,6 +1607,7 @@ class RandomWalkSolver:
                 starting_nodes = [[int(n) for n in node] for node in starting_nodes]
                 last_len_starting_nodes = len(starting_nodes)
                 starting_ks = [int(k) for k in starting_ks]
+                assert len(starting_nodes) == len(starting_ks), f"Number of nodes and k values must be equal. Got {len(starting_nodes)} nodes and {len(starting_ks)} k values."
                 starting_nodes, starting_ks, node_usage_count = sheet_generation.solve_random_walk(starting_nodes, starting_ks, node_usage_count, *translation, return_every_hundrethousandth=True)
                 starting_nodes, starting_ks = np.array(starting_nodes), np.array(starting_ks)
                 self.save_solution(path, starting_nodes, starting_ks)
