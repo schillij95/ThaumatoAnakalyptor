@@ -1603,7 +1603,7 @@ class RandomWalkSolver:
                 else:
                     print("Node usage count not found. Starting fresh.")
                     node_usage_count = {}
-                node_usage_count = {}
+                # node_usage_count = {}
             while True:
                 starting_nodes = [[int(n) for n in node] for node in starting_nodes]
                 last_len_starting_nodes = len(starting_nodes)

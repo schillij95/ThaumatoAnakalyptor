@@ -1323,7 +1323,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::unordered_map<int, std::un
             }
             std::cout << "\033[1;32m" << "[ThaumatoAnakalyptor]: Starting " << total_walks * nrWalks << "th random walk. Nr good nodes: " << nodes.size() << "\033[0m" << std::endl;
         }
-        if (nr_unchanged_walks > max_unchanged_walks && walk_aggregation_count != 0 && warmup_nr_walks < current_nr_walks) { //  && (/* More checks*/)
+        if (nr_unchanged_walks > max_unchanged_walks && (walk_aggregation_count != 0 || warmup_nr_walks < current_nr_walks)) { //  && (/* More checks*/)
             // Reset the unchanged walks counter
             nr_unchanged_walks = 0;
             warmup_nr_walks = warmup_nr_walks_ / 10;
