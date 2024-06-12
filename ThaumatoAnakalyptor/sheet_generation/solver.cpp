@@ -1211,6 +1211,11 @@ std::unordered_map<int, std::unordered_map<K, int>> translate_node_usage_count_p
 NodeUsageCount translate_node_usage_count_cpp(const std::unordered_map<int, std::unordered_map<K, int>> node_usage_count, const std::vector<NodePtr>& nodes) {
     NodeUsageCount translated_node_usage_count;
     for (const auto& [node_index, k_count] : node_usage_count) {
+        // test if node_index is valid
+        if (node_index < 0 || node_index >= nodes.size()) {
+            std::cout << "Invalid node index: " << node_index << std::endl;
+            continue;
+        }
         NodePtr node = nodes[node_index];
         for (const auto& [k, count] : k_count) {
             translated_node_usage_count[node][k] = count;
@@ -1220,18 +1225,16 @@ NodeUsageCount translate_node_usage_count_cpp(const std::unordered_map<int, std:
 }
 
 std::tuple<std::vector<NodePtr>, std::vector<K>, std::unordered_map<int, std::unordered_map<K, int>>> solve(
+    std::vector<NodePtr> all_nodes,
     std::vector<NodePtr> start_nodes,
     std::vector<K> start_ks,
     std::unordered_map<int, std::unordered_map<K, int>> python_node_usage_count,
     Config& config,
     int numThreads = 28,
     bool return_every_hundrethousandth = false,
-    int walksPerThread = 1000
+    int walksPerThread = 1000000
     ) 
 {
-    // TODO: adjust for multiple start nodes, only works for one so far:
-    NodePtr start_node = start_nodes[0];
-
     // Map to count the frequency of each message
     std::unordered_map<std::string, int> message_count;
 
@@ -1275,18 +1278,24 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::unordered_map<int, std::un
         // Add start_node to volume_dict
     }
 
+    std::cout << "Here 1" << std::endl;
     long long int nr_unchanged_walks = 0;
-    NodeUsageCount node_usage_count = translate_node_usage_count_cpp(std::cref(python_node_usage_count), std::cref(nodes)); // Map to track node usage count with specific k values
+    std::cout << "Here 2" << std::endl;
+    NodeUsageCount node_usage_count = translate_node_usage_count_cpp(std::cref(python_node_usage_count), std::cref(all_nodes)); // Map to track node usage count with specific k values
+    std::cout << "Here 3" << std::endl;
     long long int walk_aggregation_count = 0;
     long long int total_walks = 0;
-    long long int nrWalks = walksPerThread * numThreads;
+    std::cout << "Here 4" << std::endl;
+    long long int nrWalks = static_cast<long long int>(walksPerThread) * static_cast<long long int>(numThreads);
+    std::cout << "Here 5" << std::endl;
     // Run a minimum nr of random walks before adaptively changing the parameters.
     // Ensures to warm up the nr picked and with that the starting node sampling logic
     // Ensures to warmup the aggregation logic
-    long long int warmup_nr_walks_ = 2500000 + 2 * walk_aggregation_threshold_start * min_steps_start * nodes.size();
+    long long int warmup_nr_walks_ = static_cast<long long int>(2500000) + static_cast<long long int>(2) * static_cast<long long int>(walk_aggregation_threshold_start) * static_cast<long long int>(min_steps_start) * static_cast<long long int>(start_nodes.size());
     long long int warmup_nr_walks = warmup_nr_walks_;
+    std::cout << "Here 6" << std::endl;
     // Yellow print
-    std::cout << "\033[1;33m" << "[ThaumatoAnakalyptor]: Starting " << warmup_nr_walks << " warmup random walks. Nr good nodes: " << nodes.size() << "\033[0m" << std::endl;
+    std::cout << "\033[1;33m" << "[ThaumatoAnakalyptor]: Starting " << warmup_nr_walks << " warmup random walks. Nr good nodes: " << start_nodes.size() << "\033[0m" << std::endl;
 
     // numm threads gens
     std::vector<std::mt19937> gen_;
@@ -1306,7 +1315,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::unordered_map<int, std::un
         current_nr_walks += nrWalks;
         // std::cout << "\033[1;32m" << "[ThaumatoAnakalyptor]: Starting " << nr_unchanged_walks << " random walk. Nr good nodes: " << nodes.size() << "\033[0m" << std::endl;
         // Display message counts at the end of solve function
-        if (total_walks++ % 100 == 0)
+        if (total_walks++ % 10 == 0)
         {
             std::cout << "\033[1;36m" << "[ThaumatoAnakalyptor]: Random Walk Messages Summary:" << "\033[0m" << std::endl;
             for (const auto& pair : message_count) {
@@ -1931,7 +1940,7 @@ std::tuple<py::array_t<int>, py::array_t<int>, std::unordered_map<int, std::unor
     std::cout << "Nodes initialized" << std::endl;
 
     const int numThreads = std::max((int)(1), (int)((std::thread::hardware_concurrency() * 4) / 5));
-    auto [final_nodes, final_ks, python_node_usage_count] = solve(start_nodes, start_ks, initial_node_usage_count, config, numThreads, return_every_hundrethousandth);
+    auto [final_nodes, final_ks, python_node_usage_count] = solve(nodes, start_nodes, start_ks, initial_node_usage_count, config, numThreads, return_every_hundrethousandth);
 
     std::cout << "Solve done" << std::endl;
 
