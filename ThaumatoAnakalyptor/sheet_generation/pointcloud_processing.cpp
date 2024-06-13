@@ -1489,9 +1489,9 @@ private:
 
         // Calculate neighbour values for each vertex
         std::vector<std::vector<std::tuple<float, float, float, bool, float, bool, float, bool>>> neighbour_values;
-        for (size_t i = 0; i < input_ordered_pointset.size(); i++) {
+        for (int i = 0; i < input_ordered_pointset.size(); i++) {
             std::vector<std::tuple<float, float, float, bool, float, bool, float, bool>> row;
-            for (size_t j = 0; j < input_ordered_pointset[i].size(); j++) {
+            for (int j = 0; j < input_ordered_pointset[i].size(); j++) {
                 if (fixed_points[i][j]) { // optimization only for fixed points
                     row.push_back({1, 1, 0, false, 0, false, 0, false});
                     continue;
@@ -1502,8 +1502,8 @@ private:
             neighbour_values.push_back(row);
         }
 
-        for (size_t i = 0; i < input_ordered_pointset.size(); i++) {
-            for (size_t j = 0; j < input_ordered_pointset[i].size(); j++) {
+        for (int i = 0; i < input_ordered_pointset.size(); i++) {
+            for (int j = 0; j < input_ordered_pointset[i].size(); j++) {
                 if (!fixed_points[i][j]) {
                     // Fetch the necessary neighbor values
                     auto [r, l, m_r, valid_mr, m_l, valid_ml, m_ts, valid_mts] = neighbour_values[i][j];
@@ -1531,8 +1531,8 @@ private:
     std::vector<std::vector<float>> compute_interpolated_adjacent_errors() {
         std::vector<std::vector<float>> errors(input_ordered_pointset.size(), std::vector<float>(input_ordered_pointset[0].size(), 0.0f));
 
-        for (size_t i = 0; i < input_ordered_pointset.size(); i++) {
-            for (size_t j = 0; j < input_ordered_pointset[i].size(); j++) {
+        for (int i = 0; i < input_ordered_pointset.size(); i++) {
+            for (int j = 0; j < input_ordered_pointset[i].size(); j++) {
                 auto [r, l, m_r, valid_mr, m_l, valid_ml, m_ts, valid_mts] = calculate_neighbors_values(i, j);
                 float t = solve_for_t_individual(r, l, m_r, valid_mr, m_l, valid_ml, m_ts, valid_mts, 1.0);
                 assert(t <= 0.0);
@@ -1552,8 +1552,8 @@ private:
         int count_unfixed = 0;
 
         // Calculate mean error of fixed points
-        for (size_t i = 0; i < fixed_points.size(); i++) {
-            for (size_t j = 0; j < fixed_points[i].size(); j++) {
+        for (int i = 0; i < fixed_points.size(); i++) {
+            for (int j = 0; j < fixed_points[i].size(); j++) {
                 if (fixed_points[i][j]) {
                     sum_errors += errors[i][j];
                     count_fixed++;
@@ -1572,8 +1572,8 @@ private:
         float fixing_threshold = 0.2 * error_mean_unfixed;
 
         // Unfix points exceeding the error threshold
-        for (size_t i = 0; i < fixed_points.size(); i++) {
-            for (size_t j = 0; j < fixed_points[i].size(); j++) {
+        for (int i = 0; i < fixed_points.size(); i++) {
+            for (int j = 0; j < fixed_points[i].size(); j++) {
                 if (fixed_points[i][j] && (errors[i][j] > error_threshold)) {
                     fixed_points[i][j] = false;
                 }
