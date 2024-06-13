@@ -697,10 +697,10 @@ std::tuple<py::array_t<float>, py::array_t<float>, py::array_t<float>> load_poin
     if (verbose) {
         std::cout << "Deleted marked points" << std::endl;
     }
-    processor.filterPointsUsingKDTree(2.0, 90.0);
-    if (verbose) {
-        std::cout << "Filtered points using KDTree" << std::endl;
-    }
+    // processor.filterPointsUsingKDTree(2.0, 90.0);
+    // if (verbose) {
+    //     std::cout << "Filtered points using KDTree" << std::endl;
+    // }
     processor.sortPointsWZYX();
     if (verbose) {
         std::cout << "Sorted points by WZYX" << std::endl;
