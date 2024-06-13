@@ -81,7 +81,7 @@ def compute(transform_path, original_volume_id, target_volume_id, mesh_path):
     base_path = str(os.path.dirname(mesh_path))
     mtl_path = f"{base_path}/{segment_name}.mtl"
 
-    texture_filenames = parse_mtl_for_texture_filenames(mtl_path.replace(".mtl", "_.mtl"))
+    texture_filenames = parse_mtl_for_texture_filenames(mtl_path)
     if len(texture_filenames) > 0:
         image_path = os.path.join(base_path, texture_filenames[0])
         print(f"Found material texture image at: {image_path}", end="\n")
