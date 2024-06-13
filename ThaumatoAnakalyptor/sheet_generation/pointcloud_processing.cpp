@@ -1220,7 +1220,7 @@ std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<
     py::array_t<float> original_points,
     py::array_t<float> original_normals,
     py::array_t<float> umbilicus_points,
-    float angleStep, size_t z_spacing, float max_eucledian_distance, bool verbose
+    float angleStep, int z_spacing, float max_eucledian_distance, bool verbose
     )
 {
     RolledPointsetProcessor processor(verbose);
@@ -1654,7 +1654,7 @@ std::vector<std::vector<float>> optimize_ordered_pointset(
     std::vector<std::vector<bool>> fixed_points, 
     std::vector<std::vector<std::vector<std::vector<int>>>> neighbours_indices,
     float learning_rate = 0.1,
-    size_t iterations = 3,
+    int iterations = 3,
     float error_val_d = 0.01,  // Delta for error value convergence
     float unfix_factor = 3.0,
     bool verbose = true
