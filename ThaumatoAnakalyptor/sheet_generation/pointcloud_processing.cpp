@@ -410,7 +410,13 @@ public:
     void filterPointsUsingKDTree(double spatial_threshold, double angle_threshold) {
         // Create a KD-tree for 3D points
         MyKDTree index(3 /*dim*/, cloud_, nf::KDTreeSingleIndexAdaptorParams(10 /* max leaf */));
-        index.buildIndex();
+        try {
+            index.buildIndex();
+        }
+        catch (...) {
+            std::cerr << "Error building KD-tree" << std::endl;
+            return;
+        }
 
         const int num_threads = std::thread::hardware_concurrency(); // Number of concurrent threads supported
         std::vector<std::thread> threads(num_threads);
@@ -419,9 +425,14 @@ public:
         problem_size = cloud_.pts.size() / 1000;
 
         for (int i = 0; i < num_threads; ++i) {
-            int start = i * part_length;
-            int end = (i == num_threads - 1) ? cloud_.pts.size() : start + part_length;
-            threads[i] = std::thread(&PointCloudProcessor::processSubset, this, std::ref(index), start, end, spatial_threshold, angle_threshold);
+            try {
+                int start = i * part_length;
+                int end = (i == num_threads - 1) ? cloud_.pts.size() : start + part_length;
+                threads[i] = std::thread(&PointCloudProcessor::processSubset, this, std::ref(index), start, end, spatial_threshold, angle_threshold);
+            }
+            catch (...) {
+                std::cerr << "Error processing subset" << std::endl;
+            }
         }
 
         // Join all threads
@@ -552,25 +563,30 @@ private:
 
     void processSubset(MyKDTree& index, int start, int end, double spatial_threshold, double angle_threshold) {
         for (int i = start; i < end; ++i) {
-            std::vector<nf::ResultItem<int, double>> ret_matches;
-            nf::SearchParameters params;
-            const double query_pt[3] = { cloud_.pts[i].x, cloud_.pts[i].y, cloud_.pts[i].z };
+            try {
+                std::vector<nf::ResultItem<int, double>> ret_matches;
+                nf::SearchParameters params;
+                const double query_pt[3] = { cloud_.pts[i].x, cloud_.pts[i].y, cloud_.pts[i].z };
 
-            // Perform the radius search
-            const double radius = spatial_threshold * spatial_threshold;
-            index.radiusSearch(&query_pt[0], radius, ret_matches, params);
+                // Perform the radius search
+                const double radius = spatial_threshold * spatial_threshold;
+                index.radiusSearch(&query_pt[0], radius, ret_matches, params);
 
-            for (auto& match : ret_matches) {
-                if (i != match.first && std::abs(cloud_.pts[i].w - cloud_.pts[match.first].w) > angle_threshold) {
-                    cloud_.pts[i].marked_for_deletion = true;
-                    cloud_.pts[match.first].marked_for_deletion = true;
+                for (auto& match : ret_matches) {
+                    if (i != match.first && std::abs(cloud_.pts[i].w - cloud_.pts[match.first].w) > angle_threshold) {
+                        cloud_.pts[i].marked_for_deletion = true;
+                        cloud_.pts[match.first].marked_for_deletion = true;
+                    }
+                }
+                {
+                    if (i % 1000 == 0) {
+                        std::lock_guard<std::mutex> lock(mutex_);
+                        print_progress();
+                    }
                 }
             }
-            {
-                if (i % 1000 == 0) {
-                    std::lock_guard<std::mutex> lock(mutex_);
-                    print_progress();
-                }
+            catch (...) {
+                // std::cerr << "Error processing point: " << e.what() << std::endl;
             }
         }
     }
