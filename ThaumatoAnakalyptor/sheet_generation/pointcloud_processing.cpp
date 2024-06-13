@@ -585,6 +585,12 @@ private:
 
     void processSubset(MyKDTree* index, int start, int end, double spatial_threshold, double angle_threshold) {
         for (int i = start; i < end; ++i) {
+            if (i >= cloud_.pts.size()) {
+                continue;
+            }
+            if (i < 0) {
+                continue;
+            }
             try {
                 std::vector<nf::ResultItem<int, double>> ret_matches;
                 nf::SearchParameters params;
@@ -595,7 +601,14 @@ private:
                 index->radiusSearch(&query_pt[0], radius, ret_matches, params);
 
                 for (auto& match : ret_matches) {
+                    if (match.first >= cloud_.pts.size()) {
+                        continue;
+                    }
+                    if (match.first < 0) {
+                        continue;
+                    }
                     if (i != match.first && std::abs(cloud_.pts[i].w - cloud_.pts[match.first].w) > angle_threshold) {
+                        std::lock_guard<std::mutex> lock(mutex_);
                         cloud_.pts[i].marked_for_deletion = true;
                         cloud_.pts[match.first].marked_for_deletion = true;
                     }
