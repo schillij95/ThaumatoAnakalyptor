@@ -840,7 +840,7 @@ class WalkToSheet():
                 break
         print(f"Found valid start index: {valid_start_indx}")
         
-        valid_end_indx = len(result_ts)
+        valid_end_indx = nr_windings + 1
         for i in range(nr_windings-1, valid_start_indx, -1):
             start_index = int(i * steps_per_winding)
             end_index = int(min((i+1) * steps_per_winding, len(result_ts)))
@@ -989,7 +989,7 @@ class WalkToSheet():
         
         print("Using Cpp rolled_ordered_pointset")
         # Set to false to load precomputed partial results during development
-        fresh_start = True
+        fresh_start = False
         if fresh_start:
             result = pointcloud_processing.create_ordered_pointset(points, normals, self.graph.umbilicus_data, angleStep=float(angle_step), z_spacing=int(z_spacing), max_eucledian_distance=20) # named parameters for mesh detail level: float angleStep, int z_spacing, float max_eucledian_distance, bool verbose
             # save result as pkl
@@ -1010,7 +1010,7 @@ class WalkToSheet():
         mean_innermost_ts, mean_outermost_ts, winding_direction = self.find_inner_outermost_winding_direction(t_means, angle_vector)
 
         # Set to false to load precomputed partial results during development
-        fresh_start2 = True
+        fresh_start2 = False
         if fresh_start2:
             result_ts, result_normals = self.interpolate_ordered_pointset(ordered_pointset, ordered_normals, angle_vector, winding_direction)
             interpolated_ts, interpolated_normals = result_ts, result_normals
@@ -1270,7 +1270,7 @@ class WalkToSheet():
         mesh_path = os.path.join(self.save_path, "mesh.obj")
 
         # Set to false to load precomputed partial results during development
-        start_fresh = True
+        start_fresh = False
         if start_fresh: 
             # Set to false to load precomputed partial results during development
             start_fresh_build_points = True
