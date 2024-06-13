@@ -1852,7 +1852,7 @@ class RandomWalkSolver:
         production_run = True
         if production_run:
             # last pass over it with solve cpp random walks
-            fixed_nodes, fixed_ks = self.solve_cpp(path, fixed_nodes, fixed_ks, 16, 4)
+            fixed_nodes, fixed_ks = self.solve_cpp(path, fixed_nodes, fixed_ks, 8, 4)
 
         return np.array(fixed_nodes), np.array(fixed_ks)
     
@@ -2664,7 +2664,7 @@ def random_walks():
     min_steps = 16
     min_end_steps = 16
     max_tries = 6
-    max_unchanged_walks = 30 * max_nr_walks # 30 * max_nr_walks
+    max_unchanged_walks = 100 * max_nr_walks # 30 * max_nr_walks
     recompute = 0
     compute_cpp_translation = False
     

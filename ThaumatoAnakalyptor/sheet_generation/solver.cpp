@@ -1232,7 +1232,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::unordered_map<int, std::un
     Config& config,
     int numThreads = 28,
     bool return_every_hundrethousandth = false,
-    int walksPerThread = 100000
+    int walksPerThread = 10000
     ) 
 {
     // Map to count the frequency of each message
@@ -1291,8 +1291,10 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::unordered_map<int, std::un
     // Run a minimum nr of random walks before adaptively changing the parameters.
     // Ensures to warm up the nr picked and with that the starting node sampling logic
     // Ensures to warmup the aggregation logic
-    long long int warmup_nr_walks_ = static_cast<long long int>(2500000) + static_cast<long long int>(2) * static_cast<long long int>(walk_aggregation_threshold_start) * static_cast<long long int>(min_steps_start) * static_cast<long long int>(start_nodes.size());
+    long long int warmup_nr_walks_ = static_cast<long long int>(2500000) + static_cast<long long int>(walk_aggregation_threshold_start) * static_cast<long long int>(min_steps_start) * static_cast<long long int>(start_nodes.size()) / static_cast<long long int>(5);
     long long int warmup_nr_walks = warmup_nr_walks_;
+    // long long int warmup_first = warmup_nr_walks * 100; // actual warmup from a cold aggregation start mid run
+    long long int warmup_first = 0; // placeholder for warmup from a cold aggregation start mid run
     std::cout << "Here 6" << std::endl;
     // Yellow print
     std::cout << "\033[1;33m" << "[ThaumatoAnakalyptor]: Starting " << warmup_nr_walks << " warmup random walks. Nr good nodes: " << start_nodes.size() << "\033[0m" << std::endl;
@@ -1324,10 +1326,12 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::unordered_map<int, std::un
             std::cout << "\033[1;32m" << "[ThaumatoAnakalyptor]: Starting " << total_walks * nrWalks << "th random walk. Nr good nodes: " << nodes.size() << "\033[0m" << std::endl;
         }
         // if (nr_unchanged_walks > max_unchanged_walks && (walk_aggregation_count != 0 || warmup_nr_walks < current_nr_walks)) { //  && (/* More checks*/)
-        if (nr_unchanged_walks > max_unchanged_walks && warmup_nr_walks < current_nr_walks) { //  && (/* More checks*/)
+        if (nr_unchanged_walks > max_unchanged_walks && warmup_nr_walks < current_nr_walks && warmup_first < current_nr_walks) { //  && (/* More checks*/)
             // Reset the unchanged walks counter
             nr_unchanged_walks = 0;
-            warmup_nr_walks = warmup_nr_walks_ / 10;
+            // warmup_nr_walks = warmup_nr_walks_ / 10;
+            warmup_nr_walks = warmup_nr_walks_;
+            warmup_first = 0;
             current_nr_walks = 0;
             // // set picked_nrs to 0
             // for (int i = 0; i < picked_nrs.size(); ++i) {

@@ -302,7 +302,10 @@ class MeshDataset(Dataset):
         mask = np.zeros(self.image_size[::-1], dtype=np.uint8)
         for triangle in self.uv:
             triangle = triangle.astype(np.int32)
-            cv2.fillPoly(mask, [triangle], 255)
+            try:
+                cv2.fillPoly(mask, [triangle], 255)
+            except:
+                pass
         mask = mask[::-1, :]
         cv2.imwrite(os.path.join(os.path.dirname(self.path), os.path.basename(self.path) + "_mask.png"), mask)
         

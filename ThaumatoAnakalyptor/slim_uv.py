@@ -7,6 +7,7 @@ from math import sqrt
 from tqdm import tqdm
 import igl
 from PIL import Image
+import cv2
 
 Image.MAX_IMAGE_PIXELS = None
 
@@ -294,6 +295,14 @@ class Flatboi:
         uv_max = np.max(uv, axis=0)
         new_uv = (uv - uv_min) / (uv_max - uv_min)
         return new_uv
+    
+    def generate_mask_png(self):
+        mask = np.zeros(self.image_size[::-1], dtype=np.uint8)
+        for triangle in self.uv:
+            triangle = triangle.astype(np.int32)
+            cv2.fillPoly(mask, [triangle], 255)
+        mask = mask[::-1, :]
+        cv2.imwrite(os.path.join(os.path.dirname(self.path), os.path.basename(self.path).replace(".obj", "_mask.png")), mask)
 
     def save_img(self, uv):
         output_directory = os.path.dirname(self.output_obj)
@@ -301,14 +310,27 @@ class Flatboi:
         image_path = os.path.join(output_directory, f"{base_file_name}_0.png")
         min_x, min_y = np.min(uv, axis=0)
         shifted_coords = uv - np.array([min_x, min_y])
+        shifted_coords[:, 0] *= 242513
+        shifted_coords[:, 1] *= 24505
         max_x, max_y = np.max(shifted_coords, axis=0)
         # Create a white image of the determined size
         image_size = (int(round(max_y)) + 1, int(round(max_x)) + 1)
         print(f"Image size: {image_size}")
-        white_image = np.ones((image_size[0], image_size[1]), dtype=np.uint16) * 65535
+        # white_image = np.ones((image_size[0], image_size[1]), dtype=np.uint16) * 65535
 
-        # Save the grayscale image
-        Image.fromarray(white_image, mode='L').save(image_path)
+        mask = np.zeros((image_size[0], image_size[1]), dtype=np.uint8)
+        triangles = shifted_coords.reshape((-1, 3, 2))
+        for triangle in triangles:
+            triangle = triangle.astype(np.int32)
+            try:
+                cv2.fillPoly(mask, [triangle], 255)
+            except:
+                pass
+        mask = mask[::-1, :]
+        cv2.imwrite(image_path, mask)
+
+        # # Save the grayscale image
+        # Image.fromarray(white_image, mode='L').save(image_path)
 
     def save_mtl(self):
         output_directory = os.path.dirname(self.output_obj)
@@ -412,6 +434,9 @@ class Flatboi:
         
         return l2_mesh, linf_mesh, np.mean(per_triangle_area)
         
+def generate_mask(path):
+    flatboi = Flatboi(path, 5, path)
+    flatboi.save_img(flatboi.original_uvs)
 
 def main():
     cut = ""
@@ -446,12 +471,14 @@ def main():
 
     print(f"Adding UV coordinates to mesh {path}")
 
-    flatboi = Flatboi(path, 5)
-    harmonic_uvs, harmonic_energies = flatboi.slim(initial_condition=args.ic)
-    flatboi.save_img(harmonic_uvs)
-    flatboi.save_obj(harmonic_uvs)
-    print_array_to_file(harmonic_energies, energies_file)       
-    flatboi.save_mtl()
+    generate_mask(path)
+
+    # flatboi = Flatboi(path, 5)
+    # harmonic_uvs, harmonic_energies = flatboi.slim(initial_condition=args.ic)
+    # flatboi.save_img(harmonic_uvs)
+    # flatboi.save_obj(harmonic_uvs)
+    # print_array_to_file(harmonic_energies, energies_file)       
+    # flatboi.save_mtl()
 
 if __name__ == '__main__':
     main()
