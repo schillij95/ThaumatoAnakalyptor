@@ -65,7 +65,7 @@ def compute(transform_path, original_volume_id, target_volume_id, mesh_path):
     else:
         inverted_transform_to_canonical = np.eye(4)
     
-    is_canonical = len(glob.glob(f"{transform_path}/{target_volume_id}-to-*.json")[0]) > 0
+    is_canonical = len(glob.glob(f"{transform_path}/{target_volume_id}-to-*.json")) > 0
     if not is_canonical:
         # Load transform from canonical to target
         transform_to_target_path = glob.glob(f"{transform_path}/*-to-{target_volume_id}.json")[0]
@@ -81,7 +81,7 @@ def compute(transform_path, original_volume_id, target_volume_id, mesh_path):
     base_path = str(os.path.dirname(mesh_path))
     mtl_path = f"{base_path}/{segment_name}.mtl"
 
-    texture_filenames = parse_mtl_for_texture_filenames(mtl_path)
+    texture_filenames = parse_mtl_for_texture_filenames(mtl_path.replace(".mtl", "_.mtl"))
     if len(texture_filenames) > 0:
         image_path = os.path.join(base_path, texture_filenames[0])
         print(f"Found material texture image at: {image_path}", end="\n")
