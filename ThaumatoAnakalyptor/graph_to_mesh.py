@@ -1332,8 +1332,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     graph_path = os.path.join(os.path.dirname(args.path), args.graph)
-    graph = load_graph(graph_path)
-    # graph = None
+    # graph = load_graph(graph_path)
+    graph = None
     reference_path = graph_path.replace("evolved_graph", "subgraph")
     start_point = args.start_point
     scale_factor = args.scale_factor
