@@ -366,10 +366,16 @@ public:
     explicit PointCloudProcessor(PointCloud& cloud, bool verbose) : cloud_(cloud), verbose(verbose) {}
 
     void deleteMarkedPoints() {
-        cloud_.pts.erase(std::remove_if(cloud_.pts.begin(), cloud_.pts.end(), [](const Point& p) {
-            return p.marked_for_deletion;
-        }), cloud_.pts.end());
-        // cloud_.pts.shrink_to_fit(); // Shrink to fit after erasing marked points
+        std::cout << "Deleting marked points..." << std::endl;
+        try {
+            cloud_.pts.erase(std::remove_if(cloud_.pts.begin(), cloud_.pts.end(), [](const Point& p) {
+                return p.marked_for_deletion;
+            }), cloud_.pts.end());
+            // cloud_.pts.shrink_to_fit(); // Shrink to fit after erasing marked points
+        }
+        catch (...) {
+            std::cerr << "Error deleting marked points" << std::endl;
+        }
     }
 
     void sortPointsWZYX() {
@@ -408,10 +414,24 @@ public:
     }
 
     void filterPointsUsingKDTree(double spatial_threshold, double angle_threshold) {
+        MyKDTree* index = nullptr;
         // Create a KD-tree for 3D points
-        MyKDTree index(3 /*dim*/, cloud_, nf::KDTreeSingleIndexAdaptorParams(10 /* max leaf */));
         try {
-            index.buildIndex();
+            std::cout << "Building KD-tree..." << std::endl;
+            index = new MyKDTree(3 /*dim*/, cloud_, nf::KDTreeSingleIndexAdaptorParams(10 /* max leaf */));
+        }
+        catch (...) {
+            std::cerr << "Error creating KD-tree" << std::endl;
+            return;
+        }
+        if (index == nullptr) {
+            std::cerr << "Error creating KD-tree, returning" << std::endl;
+            return;
+        }
+
+        try {
+            std ::cout << "Building index..." << std::endl;
+            index->buildIndex();
         }
         catch (...) {
             std::cerr << "Error building KD-tree" << std::endl;
@@ -424,11 +444,12 @@ public:
         progress = 0;
         problem_size = cloud_.pts.size() / 1000;
 
+        std::cout << "Processing points using KD-tree..." << std::endl;
         for (int i = 0; i < num_threads; ++i) {
             try {
                 int start = i * part_length;
                 int end = (i == num_threads - 1) ? cloud_.pts.size() : start + part_length;
-                threads[i] = std::thread(&PointCloudProcessor::processSubset, this, std::ref(index), start, end, spatial_threshold, angle_threshold);
+                threads[i] = std::thread(&PointCloudProcessor::processSubset, this, index, start, end, spatial_threshold, angle_threshold);
             }
             catch (...) {
                 std::cerr << "Error processing subset" << std::endl;
@@ -444,6 +465,7 @@ public:
         }
         progress = 0;
 
+        std :: cout << "Finished processing points using KD-tree" << std::endl;
         // Apply deletions
         deleteMarkedPoints();
     }
@@ -561,7 +583,7 @@ private:
         begin->w = best_w;  // Update the w value to the best_w
     }
 
-    void processSubset(MyKDTree& index, int start, int end, double spatial_threshold, double angle_threshold) {
+    void processSubset(MyKDTree* index, int start, int end, double spatial_threshold, double angle_threshold) {
         for (int i = start; i < end; ++i) {
             try {
                 std::vector<nf::ResultItem<int, double>> ret_matches;
@@ -570,7 +592,7 @@ private:
 
                 // Perform the radius search
                 const double radius = spatial_threshold * spatial_threshold;
-                index.radiusSearch(&query_pt[0], radius, ret_matches, params);
+                index->radiusSearch(&query_pt[0], radius, ret_matches, params);
 
                 for (auto& match : ret_matches) {
                     if (i != match.first && std::abs(cloud_.pts[i].w - cloud_.pts[match.first].w) > angle_threshold) {
