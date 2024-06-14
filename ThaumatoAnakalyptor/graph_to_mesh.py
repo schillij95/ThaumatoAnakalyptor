@@ -5,6 +5,7 @@ import open3d as o3d
 from tqdm import tqdm
 import time
 import threading
+import multiprocessing
 import pickle
 from copy import deepcopy
 import random
@@ -69,6 +70,118 @@ def angle_between(v1, v2=np.array([1, 0])):
     v1_u = unit_vector(v1)
     v2_u = unit_vector(v2)
     return np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
+
+def compute_means_adjacent(adjacent_ts, adjacent_normals, winding_direction):
+    def calculate_means(ts_lists):
+        res = []
+        for ts in ts_lists:
+            # for t in ts:
+            #     if len(t) > 0:
+            #         print(f"t: {t}")
+            res_ = [np.mean(t) if len(t) > 0 else None for t in ts]
+            res.append(res_)
+        return res
+    # Copy to preserve original lists
+    original_ts = deepcopy(adjacent_ts)
+
+    # Create dictionaries to map each t to its corresponding normal
+    t_normals_dict_list = []
+    for ts, normals in zip(adjacent_ts, adjacent_normals):
+        dict_list = []
+        for t, normal in zip(ts, normals):
+            dict_ts = {}
+            for t_, normal_ in zip(t, normal):
+                dict_ts[t_] = normal_
+            dict_list.append(dict_ts)
+        t_normals_dict_list.append(dict_list)
+    
+    def print_none_vs_means(t_means):
+        count_fixed = 0
+        count_total = 0
+        count_original = 0
+        for i in range(len(t_means)):
+            for u in range(len(t_means[i])):
+                count_total += 1
+                if t_means[i][u] is not None:
+                    count_fixed += 1
+                if len(original_ts[i][u]) > 0:
+                    count_original += 1
+
+        print(f"T means: Fixed {count_fixed}/{count_original} original out of total {count_total} t values spaces.")
+
+    # Calculate initial means of each list, handle empty lists by setting means to None
+    t_means = calculate_means(adjacent_ts)
+
+    # Function to refine means based on adjacent means
+    def refine_means(t_means):
+        for u in range(len(original_ts)) if random.random() < 0.5 else range(len(original_ts)-1, -1, -1): # randomly choose direction in which to iterate and refine
+            for i in range(len(original_ts[u])):
+                # Determine the valid next mean
+                next_mean = next((t_means[j][i] for j in range(u-1, -1, -1) if t_means[j][i] is not None), None)
+                # Determine the valid previous mean
+                prev_mean = next((t_means[j][i] for j in range(u+1, len(t_means)) if t_means[j][i] is not None), None)
+                # Filter t values based on previous and next means
+                if not winding_direction:
+                    prev_mean, next_mean = next_mean, prev_mean
+                adjacent_ts[u][i] = [t for t in original_ts[u][i] if (prev_mean is None or t > prev_mean) and (next_mean is None or t < next_mean)] if ((prev_mean is not None) or (random.random() < 0.75)) and ((next_mean is not None) or (random.random() < 0.75)) else []
+
+        # Recalculate means after filtering
+        return calculate_means(adjacent_ts)
+
+    # Iteratively refine means until they are in the correct order
+    max_iterations = 100  # Limit iterations to prevent infinite loop
+    for _ in range(max_iterations):
+        previous_means = t_means[:]
+        t_means = refine_means(t_means)
+        # Randomly set some t values to None
+        for u in range(len(t_means)):
+            for i in range(len(t_means[u])):
+                if random.random() < 0.1:
+                    t_means[u][i] = None
+
+    # Iteratively refine means until they are in the correct order
+    max_iterations = 10  # Limit iterations to prevent infinite loop
+    for _ in range(max_iterations):
+        previous_means = t_means[:]
+        t_means = refine_means(t_means)
+        if t_means == previous_means:  # Stop if no change
+            break
+
+    normals_means = []
+    for i, ts in enumerate(adjacent_ts):
+        normals_means.append([])
+        for e, t in enumerate(ts):
+            filtered_normals = [t_normals_dict_list[i][e][t_] for t_ in t]
+            normals_means[i].append(np.mean(filtered_normals, axis=0) if len(filtered_normals) > 0 else None)
+
+    # Check for all good t values
+    z_len = len(t_means[0])
+    count_fixed = 0
+    count_total = 0
+    count_wrong = 0
+    for u in range(z_len):
+        last_t = None
+        for i in range(len(t_means)):
+            count_total += 1
+            if t_means[i][u] is not None:
+                if last_t is not None:
+                    if winding_direction and t_means[i][u] >= last_t:
+                        # print(f"Something is wrong with t values: {t_means[i][u]} < {last_t}")
+                        count_wrong += 1
+                        t_means[i][u] = None
+                        continue
+                    elif not winding_direction and t_means[i][u] <= last_t:
+                        # print(f"Something is wrong with t values: {t_means[i][u]} > {last_t}")
+                        count_wrong += 1
+                        t_means[i][u] = None
+                        continue
+                count_fixed += 1
+                last_t = t_means[i][u]
+
+    print(f"Deleted {count_wrong} wrong t values.")
+    # Debug output showing the number of fixed t values and the total numbers of t values
+    print_none_vs_means(t_means)
+    return t_means, normals_means 
 
 class WalkToSheet():
     def __init__(self, graph, path, start_point=[3164, 3476, 3472], scale_factor=1.0):
@@ -176,110 +289,7 @@ class WalkToSheet():
             #         print(f"t: {t}")
             res_ = [np.mean(t) if len(t) > 0 else None for t in ts]
             res.append(res_)
-        return res
-    
-    def compute_means_adjacent(self, adjacent_ts, adjacent_normals, winding_direction):
-        # Copy to preserve original lists
-        original_ts = deepcopy(adjacent_ts)
-
-        # Create dictionaries to map each t to its corresponding normal
-        t_normals_dict_list = []
-        for ts, normals in zip(adjacent_ts, adjacent_normals):
-            dict_list = []
-            for t, normal in zip(ts, normals):
-                dict_ts = {}
-                for t_, normal_ in zip(t, normal):
-                    dict_ts[t_] = normal_
-                dict_list.append(dict_ts)
-            t_normals_dict_list.append(dict_list)
-        
-        def print_none_vs_means(t_means):
-            count_fixed = 0
-            count_total = 0
-            count_original = 0
-            for i in range(len(t_means)):
-                for u in range(len(t_means[i])):
-                    count_total += 1
-                    if t_means[i][u] is not None:
-                        count_fixed += 1
-                    if len(original_ts[i][u]) > 0:
-                        count_original += 1
-
-            print(f"T means: Fixed {count_fixed}/{count_original} original out of total {count_total} t values spaces.")
-
-        # Calculate initial means of each list, handle empty lists by setting means to None
-        t_means = self.calculate_means(adjacent_ts)
-
-        # Function to refine means based on adjacent means
-        def refine_means(t_means):
-            for u in range(len(original_ts)) if random.random() < 0.5 else range(len(original_ts)-1, -1, -1): # randomly choose direction in which to iterate and refine
-                for i in range(len(original_ts[u])):
-                    # Determine the valid next mean
-                    next_mean = next((t_means[j][i] for j in range(u-1, -1, -1) if t_means[j][i] is not None), None)
-                    # Determine the valid previous mean
-                    prev_mean = next((t_means[j][i] for j in range(u+1, len(t_means)) if t_means[j][i] is not None), None)
-                    # Filter t values based on previous and next means
-                    if not winding_direction:
-                        prev_mean, next_mean = next_mean, prev_mean
-                    adjacent_ts[u][i] = [t for t in original_ts[u][i] if (prev_mean is None or t > prev_mean) and (next_mean is None or t < next_mean)] if ((prev_mean is not None) or (random.random() < 0.75)) and ((next_mean is not None) or (random.random() < 0.75)) else []
-
-            # Recalculate means after filtering
-            return self.calculate_means(adjacent_ts)
-
-        # Iteratively refine means until they are in the correct order
-        max_iterations = 100  # Limit iterations to prevent infinite loop
-        for _ in range(max_iterations):
-            previous_means = t_means[:]
-            t_means = refine_means(t_means)
-            # Randomly set some t values to None
-            for u in range(len(t_means)):
-                for i in range(len(t_means[u])):
-                    if random.random() < 0.1:
-                        t_means[u][i] = None
-
-        # Iteratively refine means until they are in the correct order
-        max_iterations = 10  # Limit iterations to prevent infinite loop
-        for _ in range(max_iterations):
-            previous_means = t_means[:]
-            t_means = refine_means(t_means)
-            if t_means == previous_means:  # Stop if no change
-                break
-
-        normals_means = []
-        for i, ts in enumerate(adjacent_ts):
-            normals_means.append([])
-            for e, t in enumerate(ts):
-                filtered_normals = [t_normals_dict_list[i][e][t_] for t_ in t]
-                normals_means[i].append(np.mean(filtered_normals, axis=0) if len(filtered_normals) > 0 else None)
-
-        # Check for all good t values
-        z_len = len(t_means[0])
-        count_fixed = 0
-        count_total = 0
-        count_wrong = 0
-        for u in range(z_len):
-            last_t = None
-            for i in range(len(t_means)):
-                count_total += 1
-                if t_means[i][u] is not None:
-                    if last_t is not None:
-                        if winding_direction and t_means[i][u] >= last_t:
-                            # print(f"Something is wrong with t values: {t_means[i][u]} < {last_t}")
-                            count_wrong += 1
-                            t_means[i][u] = None
-                            continue
-                        elif not winding_direction and t_means[i][u] <= last_t:
-                            # print(f"Something is wrong with t values: {t_means[i][u]} > {last_t}")
-                            count_wrong += 1
-                            t_means[i][u] = None
-                            continue
-                    count_fixed += 1
-                    last_t = t_means[i][u]
-
-        print(f"Deleted {count_wrong} wrong t values.")
-        # Debug output showing the number of fixed t values and the total numbers of t values
-        print_none_vs_means(t_means)
-        return t_means, normals_means     
+        return res    
     
     def find_inner_outermost_winding_direction(self, t_means, angle_vector):
         # Split t_means into outermost and innermost half
@@ -807,7 +817,7 @@ class WalkToSheet():
             same_vector_ts = [ordered_pointset[j] for j in same_vector_indices]
     
             same_vector_normals = [ordered_normals[j] for j in same_vector_indices]
-            t_means, normals_means = self.compute_means_adjacent(same_vector_ts, same_vector_normals, winding_direction)
+            t_means, normals_means = compute_means_adjacent(same_vector_ts, same_vector_normals, winding_direction)
 
             # print(f"length of t_means: {len(t_means)}")
             for e, j in enumerate(same_vector_indices):
@@ -818,6 +828,39 @@ class WalkToSheet():
                 #     if t_means[e][o] is None:
                 #         result_ts[j][o] = 0.0
                 #         result_normals[j][o] = np.array([1.0, 0.0, 0.0])
+
+        return result_ts, result_normals
+    
+    def interpolate_ordered_pointset_multithreaded(self, ordered_pointset, ordered_normals, angle_vector, winding_direction):
+        computed_vectors_set = set()
+        result_ts = []
+        result_normals = []
+        for i in range(len(ordered_pointset)):
+            result_ts.append([None]*len(ordered_pointset[i]))
+            result_normals.append([None]*len(ordered_pointset[i]))
+            
+        args = []
+        list_same_v_i = []
+        for i in tqdm(range(len(ordered_pointset))):
+            curve_angle_vector = angle_vector[i]
+            if tuple(curve_angle_vector) in computed_vectors_set:
+                continue
+            computed_vectors_set.add(tuple(curve_angle_vector))
+            # get all indices with the same angle vector
+            same_vector_indices = self.extract_all_same_vector(angle_vector, curve_angle_vector)
+            same_vector_ts = [ordered_pointset[j] for j in same_vector_indices]
+            same_vector_normals = [ordered_normals[j] for j in same_vector_indices]
+    
+            args.append((same_vector_ts, same_vector_normals, winding_direction))
+            list_same_v_i.append(same_vector_indices)
+            
+        with multiprocessing.Pool(multiprocessing.cpu_count()) as pool:
+            results = list(tqdm(pool.imap(compute_means_adjacent, args), total=len(args)))
+
+        for i, t_mean, normals_mean in enumerate(results):
+            for e, j in enumerate(list_same_v_i[i]):
+                result_ts[j] = t_mean[e]
+                result_normals[j] = normals_mean[e]
 
         return result_ts, result_normals
     
@@ -1013,7 +1056,7 @@ class WalkToSheet():
         # Set to false to load precomputed partial results during development
         fresh_start2 = True
         if fresh_start2:
-            result_ts, result_normals = self.interpolate_ordered_pointset(ordered_pointset, ordered_normals, angle_vector, winding_direction)
+            result_ts, result_normals = self.interpolate_ordered_pointset_multithreaded(ordered_pointset, ordered_normals, angle_vector, winding_direction)
             interpolated_ts, interpolated_normals = result_ts, result_normals
             # save result as pkl
             result_pkl_path = os.path.join(self.save_path, "results_ts_normals.pkl")
