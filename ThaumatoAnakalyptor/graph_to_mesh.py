@@ -990,7 +990,7 @@ class WalkToSheet():
         
         print("Using Cpp rolled_ordered_pointset")
         # Set to false to load precomputed partial results during development
-        fresh_start = True
+        fresh_start = False
         if fresh_start:
             result = pointcloud_processing.create_ordered_pointset(points, normals, self.graph.umbilicus_data, angleStep=float(angle_step), z_spacing=int(z_spacing), max_eucledian_distance=20) # named parameters for mesh detail level: float angleStep, int z_spacing, float max_eucledian_distance, bool verbose
             # save result as pkl
@@ -1271,7 +1271,7 @@ class WalkToSheet():
         mesh_path = os.path.join(self.save_path, "mesh.obj")
 
         # Set to false to load precomputed partial results during development
-        start_fresh = True
+        start_fresh = False
         if start_fresh: 
             # Set to false to load precomputed partial results during development
             start_fresh_build_points = True
@@ -1333,8 +1333,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     graph_path = os.path.join(os.path.dirname(args.path), args.graph)
-    graph = load_graph(graph_path)
-    # graph = None
+    # graph = load_graph(graph_path)
+    graph = None
     reference_path = graph_path.replace("evolved_graph", "subgraph")
     start_point = args.start_point
     scale_factor = args.scale_factor
