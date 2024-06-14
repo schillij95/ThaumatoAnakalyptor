@@ -211,7 +211,7 @@ def main(output_folder, input_mesh, scale_factor, cut_size, delauny):
     mesh = scale_mesh(mesh, scale_factor)
     texture_size = (texture_size * scale_factor).astype(np.int32)
     # Save scaled mesh
-    save_cut(0, obj_path.replace(".obj", "_scaled.obj"), mesh, texture_size)
+    # save_cut(0, obj_path.replace(".obj", "_scaled.obj"), mesh, texture_size)
 
     # Cut mesh into pieces and normalize UVs
     cut_mesh_list = cut_meshes(mesh, texture_size, cut_size)

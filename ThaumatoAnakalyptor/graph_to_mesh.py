@@ -840,8 +840,8 @@ class WalkToSheet():
                 break
         print(f"Found valid start index: {valid_start_indx}")
         
-        valid_end_indx = nr_windings + 1
-        for i in range(nr_windings-1, valid_start_indx, -1):
+        valid_end_indx = nr_windings
+        for i in range(nr_windings-2, valid_start_indx, -1): # skip last winding
             start_index = int(i * steps_per_winding)
             end_index = int(min((i+1) * steps_per_winding, len(result_ts)))
             # skip last winding if it is too short
@@ -859,15 +859,16 @@ class WalkToSheet():
         print(f"Clipped windings from {valid_start_indx} to {valid_end_indx}. Total length: {nr_windings}.")
         # Translate indices from winding to pointset indices
         valid_start_indx = int(valid_start_indx * steps_per_winding)
-        valid_end_indx = int(valid_end_indx * steps_per_winding)
+        valid_end_indx = min(int(valid_end_indx * steps_per_winding), len(result_ts))
 
         # Clip the valid windings
-        valid_ts = result_ts[valid_start_indx:valid_end_indx]
-        valid_normals = result_normals[valid_start_indx:valid_end_indx]
-        angle_vector = angle_vector[valid_start_indx:valid_end_indx]
-        # reset same vector indices
-        global angle_vector_indices_dp
-        angle_vector_indices_dp = {}
+        if valid_start_indx < valid_end_indx:
+            valid_ts = result_ts[valid_start_indx:valid_end_indx]
+            valid_normals = result_normals[valid_start_indx:valid_end_indx]
+            angle_vector = angle_vector[valid_start_indx:valid_end_indx]
+            # reset same vector indices
+            global angle_vector_indices_dp
+            angle_vector_indices_dp = {}
 
         return valid_ts, valid_normals, angle_vector
     
