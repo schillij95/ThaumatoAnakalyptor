@@ -8,6 +8,7 @@ from tqdm import tqdm
 import igl
 from PIL import Image
 import cv2
+import multiprocessing
 
 Image.MAX_IMAGE_PIXELS = None
 
@@ -17,6 +18,13 @@ def print_array_to_file(array, file_path):
         # Write each element of the array to the file
         for element in array:
             file.write(str(element) + '\n')
+
+def triangle_area_multiprocessing(args):
+    v1, v2, v3, area_cutoff = args
+    return triangle_area(v1, v2, v3) > area_cutoff
+
+def triangle_area(v1, v2, v3):
+            return 0.5 * np.linalg.norm(np.cross(v2 - v1, v3 - v1))
 
 class Flatboi:
     input_obj: str
@@ -40,14 +48,20 @@ class Flatboi:
         self.original_uvs = np.asarray(self.mesh.triangle_uvs, dtype=np.float64)
 
     def filter_mesh(self, area_cutoff=0.0000001):
-        def triangle_area(v1, v2, v3):
-            return 0.5 * np.linalg.norm(np.cross(v2 - v1, v3 - v1))
         # Filtering out any triangles with 0 area
         len_before = len(self.triangles)
 
         self.original_uvs = np.array(self.original_uvs).reshape((-1, 3, 2))
         assert len(self.triangles) == len(self.original_uvs), f"Number of triangles and uvs do not match. {len(self.triangles)} != {len(self.original_uvs)}"
-        filter_list = [abs(triangle_area(self.vertices[t[0]], self.vertices[t[1]], self.vertices[t[2]])) > area_cutoff for t in self.triangles]
+        # filter_list = []
+        # for t in tqdm(self.triangles, desc="Filtering Triangles"):
+        #     filter_list.append(triangle_area(self.vertices[t[0]], self.vertices[t[1]], self.vertices[t[2]]) > area_cutoff)
+        # filter_list = [abs(triangle_area(self.vertices[t[0]], self.vertices[t[1]], self.vertices[t[2]])) > area_cutoff for t in self.triangles]
+
+        args = [(self.vertices[t[0]], self.vertices[t[1]], self.vertices[t[2]], area_cutoff) for t in self.triangles]
+        with multiprocessing.Pool(multiprocessing.cpu_count()) as pool:
+            filter_list = list(tqdm(pool.imap(triangle_area_multiprocessing, args), total=len(args), desc="Filtering Triangles"))
+
         # Filter original uvs
         self.original_uvs = np.array([self.original_uvs[i] for i in range(len(self.triangles)) if filter_list[i]])
         # Filter triangles

@@ -162,23 +162,37 @@ def compute_means_adjacent(adjacent_ts, adjacent_normals, winding_direction):
                 normals_means[i].append(np.mean(filtered_normals, axis=0) if len(filtered_normals) > 0 else None)
         return t_means, normals_means
 
-    def fix_windings(t_means):
+    def fix_windings(t_means, fixed):
         column_length = len(t_means[0])
         nr_selected = []
         # Check for all good t values
         for i in range(len(t_means)):
             n_sel = sum([1 for u in range(column_length) if t_means[i][u] is not None])
             nr_selected.append(n_sel)
-
+        
+        # sort descending and get indices of top % of selected t values. 
+        sorted_indices = np.argsort(nr_selected)[::-1]
 
         # Fix top % of nr of selected t values
-        top_percentage = 0.25
         fixed = np.zeros(len(t_means))
+        top_percentage = 0.25
+        nr_fixing = int(len(t_means) * top_percentage)
+        current_fix_count = 0
         for i in range(len(t_means)):
-            n_sel = nr_selected[i]
-            sel_p = n_sel / column_length
-            if sel_p > top_percentage and n_sel > 0:
-                fixed[i] = 1
+            sorted_index = sorted_indices[i]
+            if fixed[sorted_index] == 0:
+                fixed[sorted_index] = 1
+                current_fix_count += 1
+            if nr_fixing <= current_fix_count:
+                break         
+
+        # # Alternative fix top % of selected t values
+        # top_percentage = 0.25
+        # for i in range(len(t_means)):
+        #     n_sel = nr_selected[i]
+        #     sel_p = n_sel / column_length
+        #     if sel_p > top_percentage and n_sel > 0:
+        #         fixed[i] = 1
 
         return fixed, deepcopy(adjacent_ts)
 
@@ -187,7 +201,7 @@ def compute_means_adjacent(adjacent_ts, adjacent_normals, winding_direction):
     fixed_adjacent_ts = deepcopy(adjacent_ts)
     for step in range(3):
         t_means, normals_means = optimization_step(t_means, fixed, fixed_adjacent_ts)
-        fixed, fixed_adjacent_ts = fix_windings(t_means)
+        fixed, fixed_adjacent_ts = fix_windings(t_means, fixed)
 
     # Check for all good t values
     z_len = len(t_means[0])
@@ -1344,6 +1358,7 @@ class WalkToSheet():
         flatboi.save_img(harmonic_uvs)
         flatboi.save_obj(harmonic_uvs)
         flatboi.save_mtl()
+        print(f"Saved flattened mesh to {mesh_output_path}")
 
     def unroll(self, debug=False):
         mesh_path = os.path.join(self.save_path, "mesh.obj")
