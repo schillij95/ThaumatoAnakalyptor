@@ -1550,7 +1550,51 @@ private:
         return {r, l, m_r, valid_mr, m_l, valid_ml, m_ts, valid_mts};
     }
 
+    void compute_section(int start, int end, float& thread_error_val) {
+        for (int i = start; i < end; ++i) {
+            for (size_t j = 0; j < input_ordered_pointset[i].size(); ++j) {
+                if (!fixed_points[i][j]) {
+                    auto [r, l, m_r, valid_mr, m_l, valid_ml, m_ts, valid_mts] = calculate_neighbors_values(i, j);
+                    float t = solve_for_t_individual(r, l, m_r, valid_mr, m_l, valid_ml, m_ts, valid_mts, 1.0);
+                    assert(t <= 0.0);
+                    float d_t = t - input_ordered_pointset[i][j];
+                    d_t = respect_non_overlapping(i, j, d_t);
+                    thread_error_val += std::abs(d_t);
+                    new_interpolated_ts[i][j] = input_ordered_pointset[i][j] + learning_rate * d_t; // Apply learning rate
+                }
+            }
+        }
+    }
+
     float compute_interpolated_adjacent() {
+        float error_val = 0.0;
+        int num_threads = std::thread::hardware_concurrency();
+        std::vector<std::thread> threads;
+        std::vector<float> errors(num_threads, 0.0);
+        int n = input_ordered_pointset.size();
+        int chunk_size = (n + num_threads - 1) / num_threads; // Calculate chunk size for each thread
+
+        for (int i = 0; i < num_threads; ++i) {
+            int start = i * chunk_size;
+            int end = std::min(start + chunk_size, n);
+            threads.emplace_back([this, start, end, &errors, i]() {
+                this->compute_section(start, end, errors[i]);
+            });
+        }
+
+        // Join threads and combine errors
+        for (int i = 0; i < num_threads; ++i) {
+            threads[i].join();
+            error_val += errors[i];
+        }
+
+        // Copy the new interpolated ts to the input ordered pointset
+        input_ordered_pointset = new_interpolated_ts;
+
+        return error_val;
+    }
+
+    float compute_interpolated_adjacent_st() {
         float error_val = 0.0;
         new_interpolated_ts = input_ordered_pointset; // Copy the original ts
 
