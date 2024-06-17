@@ -114,6 +114,14 @@ def compute_means_adjacent(adjacent_ts, adjacent_normals, winding_direction):
 
     # Calculate initial means of each list, handle empty lists by setting means to None
     t_means = calculate_means(adjacent_ts)
+    # debug
+    normals_means = []
+    for i, ts in enumerate(adjacent_ts):
+        normals_means.append([])
+        for e, t in enumerate(ts):
+            filtered_normals = [t_normals_dict_list[i][e][t_] for t_ in t]
+            normals_means[i].append(np.mean(filtered_normals, axis=0) if len(filtered_normals) > 0 else None)
+    return t_means, normals_means
 
     # Function to refine means based on adjacent means
     def refine_means(t_means, fixed, fixed_adjacent_ts):
@@ -174,8 +182,7 @@ def compute_means_adjacent(adjacent_ts, adjacent_normals, winding_direction):
         sorted_indices = np.argsort(nr_selected)[::-1]
 
         # Fix top % of nr of selected t values
-        fixed = np.zeros(len(t_means))
-        top_percentage = 0.25
+        top_percentage = 0.35
         nr_fixing = int(len(t_means) * top_percentage)
         current_fix_count = 0
         for i in range(len(t_means)):
@@ -496,24 +503,24 @@ class WalkToSheet():
                     fixed_points[j][z] = False
 
         # Check interpolated
-        for i in range(len(interpolated_ts)):
-            curve_angle_vector = angle_vector[i]
-            # get all indices with the same angle vector
-            same_vector_indices = self.extract_all_same_vector(angle_vector, curve_angle_vector)
-            i_pos_in_same_vector = same_vector_indices.index(i)
-            for j in range(len(interpolated_ts[i])):
-                if interpolated_ts[i][j] is None:
-                    print(f"Interpolated ts is None at {i}, {j}")
-                if winding_direction:
-                    if i_pos_in_same_vector > 0 and interpolated_ts[i][j] >= interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]:
-                        print(f"low side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not >= {interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]}")
-                    if i_pos_in_same_vector < len(same_vector_indices) - 1 and interpolated_ts[i][j] <= interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]:
-                        print(f"high side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not <= {interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]}")
-                else:
-                    if i_pos_in_same_vector > 0 and interpolated_ts[i][j] <= interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]:
-                        print(f"low side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not <= {interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]}")
-                    if i_pos_in_same_vector < len(same_vector_indices) - 1 and interpolated_ts[i][j] >= interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]:
-                        print(f"high side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not >= {interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]}")
+        # for i in range(len(interpolated_ts)):
+        #     curve_angle_vector = angle_vector[i]
+        #     # get all indices with the same angle vector
+        #     same_vector_indices = self.extract_all_same_vector(angle_vector, curve_angle_vector)
+        #     i_pos_in_same_vector = same_vector_indices.index(i)
+        #     for j in range(len(interpolated_ts[i])):
+        #         if interpolated_ts[i][j] is None:
+        #             print(f"Interpolated ts is None at {i}, {j}")
+        #         if winding_direction:
+        #             if i_pos_in_same_vector > 0 and interpolated_ts[i][j] >= interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]:
+        #                 print(f"low side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not >= {interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]}")
+        #             if i_pos_in_same_vector < len(same_vector_indices) - 1 and interpolated_ts[i][j] <= interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]:
+        #                 print(f"high side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not <= {interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]}")
+        #         else:
+        #             if i_pos_in_same_vector > 0 and interpolated_ts[i][j] <= interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]:
+        #                 print(f"low side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not <= {interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]}")
+        #             if i_pos_in_same_vector < len(same_vector_indices) - 1 and interpolated_ts[i][j] >= interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]:
+        #                 print(f"high side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not >= {interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]}")
 
         return interpolated_ts, interpolated_normals, fixed_points
     
@@ -644,11 +651,11 @@ class WalkToSheet():
                                     interpolated_ts_list, 
                                     fixed_points_list, 
                                     neighbours_list, 
-                                    learning_rate=learning_rate, 
-                                    iterations=iterations,
-                                    error_val_d=error_val_d,
-                                    unfix_factor=unfix_factor,
-                                    verbose=verbose
+                                    learning_rate=float(learning_rate), 
+                                    iterations=int(iterations),
+                                    error_val_d=float(error_val_d),
+                                    unfix_factor=float(unfix_factor),
+                                    verbose=bool(verbose)
                                     )
         
         return interpolated_ts_list
@@ -1103,7 +1110,7 @@ class WalkToSheet():
         mean_innermost_ts, mean_outermost_ts, winding_direction = self.find_inner_outermost_winding_direction(t_means, angle_vector)
 
         # Set to false to load precomputed partial results during development
-        fresh_start2 = False
+        fresh_start2 = True
         if fresh_start2:
             result_ts, result_normals = self.interpolate_ordered_pointset_multithreaded(ordered_pointset, ordered_normals, angle_vector, winding_direction)
             interpolated_ts, interpolated_normals = result_ts, result_normals
@@ -1130,9 +1137,9 @@ class WalkToSheet():
 
             # Optimize the full pointset for smooth surface with best guesses for interpolated t values
             # interpolated_ts = self.optimize_adjacent(interpolated_ts, neighbours_dict, fixed_points, learning_rate=0.2)
-            interpolated_ts = self.optimize_adjacent_cpp(interpolated_ts, neighbours_dict, fixed_points, 
-                                                        learning_rate=0.2, iterations=9, error_val_d=0.0001, unfix_factor=2.5,
-                                                        verbose=True)
+            # interpolated_ts = self.optimize_adjacent_cpp(interpolated_ts, neighbours_dict, fixed_points, 
+            #                                             learning_rate=0.2, iterations=9, error_val_d=0.0001, unfix_factor=2.5,
+            #                                             verbose=True)
 
             # Clip away invalid z values
             interpolated_ts = [interpolated_ts[i][valid_bottom_index:valid_top_index] for i in range(len(interpolated_ts))]

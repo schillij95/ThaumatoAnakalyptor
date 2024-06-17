@@ -1443,9 +1443,11 @@ private:
         if (ts_l != 1) {
             auto [side_old_l, invalid_l] = side_of(old_ts, ts_l);
             assert(!invalid_l);
-            auto [side_new_l, invalid_new_l] = side_of(old_ts + new_ts_d, ts_l);
-            if (side_old_l != side_new_l) {
-                new_ts_d = (ts_l - old_ts) * 0.5;
+            if (!invalid_l) {
+                auto [side_new_l, invalid_new_l] = side_of(old_ts + new_ts_d, ts_l);
+                if (side_old_l != side_new_l) {
+                    new_ts_d = (ts_l - old_ts) * 0.5;
+                }
             }
         }
 
@@ -1453,9 +1455,11 @@ private:
         if (ts_r != 1) {
             auto [side_old_r, invalid_r] = side_of(old_ts, ts_r);
             assert(!invalid_r);
-            auto [side_new_r, invalid_new_r] = side_of(old_ts + new_ts_d, ts_r);
-            if (side_old_r != side_new_r) {
-                new_ts_d = (ts_r - old_ts) * 0.5;
+            if (!invalid_r) {
+                auto [side_new_r, invalid_new_r] = side_of(old_ts + new_ts_d, ts_r);
+                if (side_old_r != side_new_r) {
+                    new_ts_d = (ts_r - old_ts) * 0.5;
+                }
             }
         }
 
@@ -1463,9 +1467,11 @@ private:
         if (ts_ln != 1) {
             auto [side_old_ln, invalid_ln] = side_of(old_ts, ts_ln);
             assert(!invalid_ln);
-            auto [side_new_ln, invalid_new_ln] = side_of(old_ts + new_ts_d, ts_ln);
-            if (side_old_ln != side_new_ln) {
-                new_ts_d = (ts_ln - old_ts) * 0.5;
+            if (!invalid_ln) {
+                auto [side_new_ln, invalid_new_ln] = side_of(old_ts + new_ts_d, ts_ln);
+                if (side_old_ln != side_new_ln) {
+                    new_ts_d = (ts_ln - old_ts) * 0.5;
+                }
             }
         }
 
@@ -1473,9 +1479,11 @@ private:
         if (ts_rn != 1) {
             auto [side_old_rn, invalid_rn] = side_of(old_ts, ts_rn);
             assert(!invalid_rn);
-            auto [side_new_rn, invalid_new_rn] = side_of(old_ts + new_ts_d, ts_rn);
-            if (side_old_rn != side_new_rn) {
-                new_ts_d = (ts_rn - old_ts) * 0.5;
+            if (!invalid_rn) {
+                auto [side_new_rn, invalid_new_rn] = side_of(old_ts + new_ts_d, ts_rn);
+                if (side_old_rn != side_new_rn) {
+                    new_ts_d = (ts_rn - old_ts) * 0.5;
+                }
             }
         }
 
