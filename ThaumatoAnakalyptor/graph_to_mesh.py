@@ -1103,7 +1103,7 @@ class WalkToSheet():
         mean_innermost_ts, mean_outermost_ts, winding_direction = self.find_inner_outermost_winding_direction(t_means, angle_vector)
 
         # Set to false to load precomputed partial results during development
-        fresh_start2 = True
+        fresh_start2 = False
         if fresh_start2:
             result_ts, result_normals = self.interpolate_ordered_pointset_multithreaded(ordered_pointset, ordered_normals, angle_vector, winding_direction)
             interpolated_ts, interpolated_normals = result_ts, result_normals
