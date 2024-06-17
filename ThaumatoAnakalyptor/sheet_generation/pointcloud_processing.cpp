@@ -1264,8 +1264,18 @@ public:
     }
 
     std::vector<std::vector<float>> optimize_ordered_pointset_processor() {
+        // Set up progress tracking
+        problem_size = iterations;
+        progress = 0;
+        std::cout << "Optimizing ordered pointset" << std::endl;
+        // Iterate over the number of iterations
         for (size_t iter = 0; iter < iterations; ++iter) {
-            std::cout << "Iteration: " << (iter + 1) << "/" << iterations << std::endl;
+            // std::cout << "Iteration: " << (iter + 1) << "/" << iterations << std::endl;
+            // Progress tracking
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                print_progress();
+            }
 
             // Calculate the total number of vertices and fixed points
             size_t nr_vertices = 0;
@@ -1283,7 +1293,7 @@ public:
                 float error_val = compute_interpolated_adjacent();
 
                 error_val /= nr_floating; // Normalize error by the number of floating vertices
-                std::cout << "Error value per floating vertex: " << std::setprecision(5) << error_val << std::endl;
+                // std::cout << "Error value per floating vertex: " << std::setprecision(5) << error_val << std::endl;
 
                 // Check for convergence or if the error increased
                 if ((std::abs(last_error_val - error_val) < error_val_d) || (last_error_val - error_val < 0)) {
@@ -1294,6 +1304,12 @@ public:
 
             // Detect and unfix wrong fixed adjacent if necessary
             detect_and_unfix_wrong_fixed_adjacent();
+        }
+        // Finish progress tracking
+        {
+            if (verbose) {
+                std::cout << std::endl;
+            }
         }
 
         return new_interpolated_ts;

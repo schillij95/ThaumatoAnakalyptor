@@ -71,6 +71,9 @@ def angle_between(v1, v2=np.array([1, 0])):
     v2_u = unit_vector(v2)
     return np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
 
+def compute_means_adjacent_args(args):
+    return compute_means_adjacent(*args)
+
 def compute_means_adjacent(adjacent_ts, adjacent_normals, winding_direction):
     def calculate_means(ts_lists):
         res = []
@@ -113,7 +116,7 @@ def compute_means_adjacent(adjacent_ts, adjacent_normals, winding_direction):
     t_means = calculate_means(adjacent_ts)
 
     # Function to refine means based on adjacent means
-    def refine_means(t_means):
+    def refine_means(t_means, fixed, fixed_adjacent_ts):
         for u in range(len(original_ts)) if random.random() < 0.5 else range(len(original_ts)-1, -1, -1): # randomly choose direction in which to iterate and refine
             for i in range(len(original_ts[u])):
                 # Determine the valid next mean
@@ -124,35 +127,67 @@ def compute_means_adjacent(adjacent_ts, adjacent_normals, winding_direction):
                 if not winding_direction:
                     prev_mean, next_mean = next_mean, prev_mean
                 adjacent_ts[u][i] = [t for t in original_ts[u][i] if (prev_mean is None or t > prev_mean) and (next_mean is None or t < next_mean)] if ((prev_mean is not None) or (random.random() < 0.75)) and ((next_mean is not None) or (random.random() < 0.75)) else []
+                if len(adjacent_ts[u][i]) == 0: # ensure that the t value is fixed if no valid t values are found
+                    if fixed[u] == 1:
+                        adjacent_ts[u][i] = fixed_adjacent_ts[u][i]
 
         # Recalculate means after filtering
         return calculate_means(adjacent_ts)
 
-    # Iteratively refine means until they are in the correct order
-    max_iterations = 100  # Limit iterations to prevent infinite loop
-    for _ in range(max_iterations):
-        previous_means = t_means[:]
-        t_means = refine_means(t_means)
-        # Randomly set some t values to None
-        for u in range(len(t_means)):
-            for i in range(len(t_means[u])):
-                if random.random() < 0.1:
-                    t_means[u][i] = None
+    def optimization_step(t_means, fixed, fixed_adjacent_ts):
+        # Iteratively refine means until they are in the correct order
+        max_iterations = 100  # Limit iterations to prevent infinite loop
+        for _ in range(max_iterations):
+            previous_means = t_means[:]
+            t_means = refine_means(t_means, fixed, fixed_adjacent_ts)
+            # Randomly set some t values to None
+            for u in range(len(t_means)):
+                for i in range(len(t_means[u])):
+                    if random.random() < 0.1:
+                        t_means[u][i] = None
 
-    # Iteratively refine means until they are in the correct order
-    max_iterations = 10  # Limit iterations to prevent infinite loop
-    for _ in range(max_iterations):
-        previous_means = t_means[:]
-        t_means = refine_means(t_means)
-        if t_means == previous_means:  # Stop if no change
-            break
+        # Iteratively refine means until they are in the correct order
+        max_iterations = 10  # Limit iterations to prevent infinite loop
+        for _ in range(max_iterations):
+            previous_means = t_means[:]
+            t_means = refine_means(t_means, fixed, fixed_adjacent_ts)
+            if t_means == previous_means:  # Stop if no change
+                break
 
-    normals_means = []
-    for i, ts in enumerate(adjacent_ts):
-        normals_means.append([])
-        for e, t in enumerate(ts):
-            filtered_normals = [t_normals_dict_list[i][e][t_] for t_ in t]
-            normals_means[i].append(np.mean(filtered_normals, axis=0) if len(filtered_normals) > 0 else None)
+        normals_means = []
+        for i, ts in enumerate(adjacent_ts):
+            normals_means.append([])
+            for e, t in enumerate(ts):
+                filtered_normals = [t_normals_dict_list[i][e][t_] for t_ in t]
+                normals_means[i].append(np.mean(filtered_normals, axis=0) if len(filtered_normals) > 0 else None)
+        return t_means, normals_means
+
+    def fix_windings(t_means):
+        column_length = len(t_means[0])
+        nr_selected = []
+        # Check for all good t values
+        for i in range(len(t_means)):
+            n_sel = sum([1 for u in range(column_length) if t_means[i][u] is not None])
+            nr_selected.append(n_sel)
+
+
+        # Fix top % of nr of selected t values
+        top_percentage = 0.25
+        fixed = np.zeros(len(t_means))
+        for i in range(len(t_means)):
+            n_sel = nr_selected[i]
+            sel_p = n_sel / column_length
+            if sel_p > top_percentage and n_sel > 0:
+                fixed[i] = 1
+
+        return fixed, deepcopy(adjacent_ts)
+
+    # Do optimization step
+    fixed = np.zeros(len(t_means))
+    fixed_adjacent_ts = deepcopy(adjacent_ts)
+    for step in range(3):
+        t_means, normals_means = optimization_step(t_means, fixed, fixed_adjacent_ts)
+        fixed, fixed_adjacent_ts = fix_windings(t_means)
 
     # Check for all good t values
     z_len = len(t_means[0])
@@ -178,9 +213,9 @@ def compute_means_adjacent(adjacent_ts, adjacent_normals, winding_direction):
                 count_fixed += 1
                 last_t = t_means[i][u]
 
-    print(f"Deleted {count_wrong} wrong t values.")
+    # print(f"Deleted {count_wrong} wrong t values.")
     # Debug output showing the number of fixed t values and the total numbers of t values
-    print_none_vs_means(t_means)
+    # print_none_vs_means(t_means)
     return t_means, normals_means 
 
 class WalkToSheet():
@@ -855,9 +890,9 @@ class WalkToSheet():
             list_same_v_i.append(same_vector_indices)
             
         with multiprocessing.Pool(multiprocessing.cpu_count()) as pool:
-            results = list(tqdm(pool.imap(compute_means_adjacent, args), total=len(args)))
+            results = list(tqdm(pool.imap(compute_means_adjacent_args, args), total=len(args), desc="Interpolating ordered pointset"))
 
-        for i, t_mean, normals_mean in enumerate(results):
+        for i, (t_mean, normals_mean) in enumerate(results):
             for e, j in enumerate(list_same_v_i[i]):
                 result_ts[j] = t_mean[e]
                 result_normals[j] = normals_mean[e]
@@ -993,15 +1028,15 @@ class WalkToSheet():
         self.pointcloud_from_ordered_pointset(pointset, os.path.join(self.save_path, test_pointset_ply_path))
            
     def rolled_ordered_pointset(self, points, normals, debug=False, angle_step=1, z_spacing=10):
-        # get winding angles
-        winding_angles = points[:, 3]
-
-        min_wind = np.min(winding_angles)
-        max_wind = np.max(winding_angles)
-        print(f"Min and max winding angles: {min_wind}, {max_wind}")
-
         # some debugging visualization of seperate pointcloud windings
         if debug:
+            # get winding angles
+            winding_angles = points[:, 3]
+
+            min_wind = np.min(winding_angles)
+            max_wind = np.max(winding_angles)
+            print(f"Min and max winding angles: {min_wind}, {max_wind}")
+
             # remove test folder
             test_folder = os.path.join(self.save_path, "test_winding_angles")
             if os.path.exists(test_folder):
@@ -1342,13 +1377,17 @@ class WalkToSheet():
             with open(os.path.join(self.save_path, "points_selected.npz"), 'wb') as f:
                 np.savez(f, points=points_originals_selected, normals=normals_originals_selected)
         else:
-            # Open the npz file
-            with open(os.path.join(self.save_path, "points_selected.npz"), 'rb') as f:
-                npzfile = np.load(f)
-                points_originals_selected = npzfile['points']
-                normals_originals_selected = npzfile['normals']
-
-        print(f"Shape of points_originals_selected: {points_originals_selected.shape}")
+            load_points = False
+            if load_points:
+                # Open the npz file
+                with open(os.path.join(self.save_path, "points_selected.npz"), 'rb') as f:
+                    npzfile = np.load(f)
+                    points_originals_selected = npzfile['points']
+                    normals_originals_selected = npzfile['normals']
+                print(f"Shape of points_originals_selected: {points_originals_selected.shape}")
+            else:
+                points_originals_selected = None
+                normals_originals_selected = None
 
         pointset_ply_path = os.path.join(self.save_path, "ordered_pointset.ply")
         # get nodes

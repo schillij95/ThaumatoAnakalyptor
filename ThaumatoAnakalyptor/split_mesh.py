@@ -78,21 +78,20 @@ class MeshSplitter:
                 vertex = triangle[i]
                 adjacent = triangle[(i + 1) % 3]
                 if vertex not in adjacent_dict:
-                    adjacent_dict[vertex] = []
-                adjacent_dict[vertex].append(adjacent)
+                    adjacent_dict[vertex] = set()
+                adjacent_dict[vertex].add(adjacent)
                 if adjacent not in adjacent_dict:
-                    adjacent_dict[adjacent] = []
-                adjacent_dict[adjacent].append(vertex)
+                    adjacent_dict[adjacent] = set()
+                adjacent_dict[adjacent].add(vertex)
 
         vertices = np.array(self.mesh.vertices)
-        adjacency_list = []
         for vertex in range(vertices.shape[0]):
             if vertex not in adjacent_dict:
-                adjacency_list[vertex] = []
+                adjacent_dict[vertex] = []
             else:
-                adjacency_list.append(adjacent_dict[vertex])
+                adjacent_dict[vertex] = list(adjacent_dict[vertex])
 
-        self.adjacency_list = adjacency_list
+        self.adjacency_list = adjacent_dict
 
     def get_adjacent_vertices(self, vertex_idx):
         # Check if the adjacency list exists for the mesh
@@ -109,13 +108,16 @@ class MeshSplitter:
         print(f"Found {len(area_c)} clusters.")
 
         bfs_queue = deque()
-        processing = [False] * self.vertices_np.shape[0]
+        processing = set()
         uv_coordinates = {}
 
         bfs_queue.append((start_vertex_idx, 0.0))
 
         i = 0
+        # tqdm progress bar
+        pbar = tqdm(total=self.vertices_np.shape[0])
         while bfs_queue:
+            pbar.update(1)
             i += 1
             vertex_idx, current_angle = bfs_queue.popleft()
             
@@ -132,13 +134,15 @@ class MeshSplitter:
             uv_coordinates[vertex_idx] = (current_angle, distance)
             adjacent_vertex_indices = self.get_adjacent_vertices(vertex_idx)
             for next_vertex_idx in adjacent_vertex_indices:
-                if processing[next_vertex_idx]:
+                if next_vertex_idx in processing:
                     continue
                 angle_diff = self.angle_between_vertices(self.vertices_np[vertex_idx], self.vertices_np[next_vertex_idx])
                 bfs_queue.append((next_vertex_idx, current_angle + angle_diff))
-                processing[next_vertex_idx] = True
+                processing.add(next_vertex_idx)
 
-        for vertex_idx, (u, v) in uv_coordinates.items():
+        pbar.close()
+        
+        for vertex_idx, (u, v) in tqdm(uv_coordinates.items()):
             self.vertices_np[vertex_idx, 0] = u
             self.vertices_np[vertex_idx, 1] = v
         
@@ -245,12 +249,12 @@ class MeshSplitter:
         while window_start < max_u:
             window_end = window_start + split_width
             window_indices = np.where((self.vertices_np[:, 0] >= window_start) & (self.vertices_np[:, 0] < window_end))
-            qualifying_triangles = np.any(np.isin(self.mesh.triangles, window_indices), axis=1)
-            vertices_indices = np.unique(self.mesh.triangles[qualifying_triangles])
+            qualifying_triangles = np.any(np.isin(np.asarray(self.mesh.triangles), window_indices), axis=1)
+            vertices_indices = np.unique(np.asarray(self.mesh.triangles)[qualifying_triangles])
             window_mesh = o3d.geometry.TriangleMesh()
             window_mesh.vertices = o3d.utility.Vector3dVector(self.vertices_np[vertices_indices])
-            window_mesh.triangles = o3d.utility.Vector3iVector(self.mesh.triangles[qualifying_triangles])
-            window_mesh.normals = o3d.utility.Vector3dVector(np.asarray(window_mesh.normals[vertices_indices]))
+            window_mesh.triangles = o3d.utility.Vector3iVector(np.asarray(self.mesh.triangles)[qualifying_triangles])
+            window_mesh.normals = o3d.utility.Vector3dVector(np.asarray(window_mesh.normals)[vertices_indices])
             
             path_window = os.path.join(os.path.dirname(path), "windowed_mesh", f"window_{window_start:.2f}_{window_end:.2f}.obj")
             # Save the mesh to an .obj file
