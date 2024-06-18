@@ -155,12 +155,23 @@ RUN /bin/bash -c "source youssefGP/bin/activate && \
 # Copy scripts and modules
 COPY ./ThaumatoAnakalyptor/mask3d/ /workspace/ThaumatoAnakalyptor/mask3d/
 
+# Install necessary tools and Eigen3
+RUN apt-get update && \
+    apt-get install -y \
+    libeigen3-dev  \ 
+    libarchive-dev \
+    libtbb-dev
+
 # build C++ ThaumatoAnakalyptor code
+COPY ./ThaumatoAnakalyptor/sheet_generation/ /workspace/ThaumatoAnakalyptor/sheet_generation/
 WORKDIR /workspace/ThaumatoAnakalyptor/sheet_generation/
 
-RUN mkdir build
+# Remove the existing build directory to clear any old configurations
+RUN rm -rf build && mkdir -p build
 
 WORKDIR /workspace/ThaumatoAnakalyptor/sheet_generation/build/
+# print out the contents of the current working directory
+RUN ls -la
 
 RUN cmake .. \
     && cmake --build .
