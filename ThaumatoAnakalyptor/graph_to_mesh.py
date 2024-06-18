@@ -12,8 +12,8 @@ import random
 
 # Custom imports
 from .Random_Walks import load_graph, ScrollGraph
-from .mesh_to_uv import compute as compute_uv
 from .slim_uv import Flatboi, print_array_to_file
+from .split_mesh import MeshSplitter
 
 # import colormap from matplotlib
 import matplotlib
@@ -70,6 +70,37 @@ def angle_between(v1, v2=np.array([1, 0])):
     v1_u = unit_vector(v1)
     v2_u = unit_vector(v2)
     return np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
+
+def flatten_args(args):
+    save_path, mesh_path = args
+    return flatten(save_path, mesh_path)
+
+def flatten(save_path, mesh_path):
+    mesh_output_path = mesh_path.replace(".obj", "_flatboi.obj")
+    flatboi = Flatboi(mesh_path, 5, output_obj=mesh_output_path)
+    fresh_start = True
+    harmonic_uvs_path = os.path.join(save_path, os.path.basename(mesh_path).replace(".obj", "harmonic_uvs.pkl"))
+    if fresh_start:
+        # harmonic_uvs, harmonic_energies = flatboi.slim(initial_condition='harmonic')
+        harmonic_uvs, harmonic_energies = flatboi.slim(initial_condition='ordered')
+        # Get the directory of the input file
+        input_directory = os.path.dirname(mesh_output_path)
+        # Filename for the energies file
+        energies_file = os.path.join(input_directory, 'energies_flatboi.txt')
+        print_array_to_file(harmonic_energies, energies_file)       
+
+        # save harmonic_uvs as pkl
+        with open(harmonic_uvs_path, 'wb') as f:
+            pickle.dump(harmonic_uvs, f)
+    else:
+        with open(harmonic_uvs_path, 'rb') as f:
+            harmonic_uvs = pickle.load(f)
+
+    # Save Flattened mesh
+    flatboi.save_img(harmonic_uvs)
+    flatboi.save_obj(harmonic_uvs)
+    flatboi.save_mtl()
+    print(f"Saved flattened mesh to {mesh_output_path}")
 
 def compute_means_adjacent_args(args):
     return compute_means_adjacent(*args)
@@ -1341,90 +1372,76 @@ class WalkToSheet():
 
         print(f"Saved mesh to {filename}")
 
-    def flatten(self, mesh_path):
-        mesh_output_path = mesh_path.replace(".obj", "_flatboi.obj")
-        flatboi = Flatboi(mesh_path, 5, output_obj=mesh_output_path)
-        fresh_start = True
-        if fresh_start:
-            # harmonic_uvs, harmonic_energies = flatboi.slim(initial_condition='harmonic')
-            harmonic_uvs, harmonic_energies = flatboi.slim(initial_condition='ordered')
-            # Get the directory of the input file
-            input_directory = os.path.dirname(mesh_output_path)
-            # Filename for the energies file
-            energies_file = os.path.join(input_directory, 'energies_flatboi.txt')
-            print_array_to_file(harmonic_energies, energies_file)       
-
-            # save harmonic_uvs as pkl
-            harmonic_uvs_path = os.path.join(self.save_path, "harmonic_uvs.pkl")
-            with open(harmonic_uvs_path, 'wb') as f:
-                pickle.dump(harmonic_uvs, f)
-        else:
-            harmonic_uvs_path = os.path.join(self.save_path, "harmonic_uvs.pkl")
-            with open(harmonic_uvs_path, 'rb') as f:
-                harmonic_uvs = pickle.load(f)
-
-        # Save Flattened mesh
-        flatboi.save_img(harmonic_uvs)
-        flatboi.save_obj(harmonic_uvs)
-        flatboi.save_mtl()
-        print(f"Saved flattened mesh to {mesh_output_path}")
+    def split(self, mesh_path, fresh_start=True):
+        umbilicus_path = os.path.join(os.path.dirname(self.path), "umbilicus.txt")
+        splitter = MeshSplitter(mesh_path, umbilicus_path)
+        split_mesh_paths = splitter.compute(split_width=50000, fresh_start=fresh_start)
+        return split_mesh_paths
 
     def unroll(self, debug=False):
         mesh_path = os.path.join(self.save_path, "mesh.obj")
 
-        # Set to false to load precomputed partial results during development
-        start_fresh = False
-        if start_fresh: 
-            # Set to false to load precomputed partial results during development
-            start_fresh_build_points = True
-            if start_fresh_build_points:
-                # get points
-                points, normals, colors = self.build_points()
+        # # Set to false to load precomputed partial results during development
+        # start_fresh = False
+        # if start_fresh: 
+        #     # Set to false to load precomputed partial results during development
+        #     start_fresh_build_points = True
+        #     if start_fresh_build_points:
+        #         # get points
+        #         points, normals, colors = self.build_points()
 
-                # Make directory if it doesn't exist
-                os.makedirs(self.save_path, exist_ok=True)
-                # Save as npz
-                with open(os.path.join(self.save_path, "points.npz"), 'wb') as f:
-                    np.savez(f, points=points, normals=normals, colors=colors)
-            else:
-                # Open the npz file
-                with open(os.path.join(self.save_path, "points.npz"), 'rb') as f:
-                    npzfile = np.load(f)
-                    points = npzfile['points']
-                    normals = npzfile['normals']
-                    colors = npzfile['colors']
+        #         # Make directory if it doesn't exist
+        #         os.makedirs(self.save_path, exist_ok=True)
+        #         # Save as npz
+        #         with open(os.path.join(self.save_path, "points.npz"), 'wb') as f:
+        #             np.savez(f, points=points, normals=normals, colors=colors)
+        #     else:
+        #         # Open the npz file
+        #         with open(os.path.join(self.save_path, "points.npz"), 'rb') as f:
+        #             npzfile = np.load(f)
+        #             points = npzfile['points']
+        #             normals = npzfile['normals']
+        #             colors = npzfile['colors']
 
-            points_originals_selected = points
-            normals_originals_selected = normals
+        #     points_originals_selected = points
+        #     normals_originals_selected = normals
 
-            # Save as npz
-            with open(os.path.join(self.save_path, "points_selected.npz"), 'wb') as f:
-                np.savez(f, points=points_originals_selected, normals=normals_originals_selected)
-        else:
-            load_points = False
-            if load_points:
-                # Open the npz file
-                with open(os.path.join(self.save_path, "points_selected.npz"), 'rb') as f:
-                    npzfile = np.load(f)
-                    points_originals_selected = npzfile['points']
-                    normals_originals_selected = npzfile['normals']
-                print(f"Shape of points_originals_selected: {points_originals_selected.shape}")
-            else:
-                points_originals_selected = None
-                normals_originals_selected = None
+        #     # Save as npz
+        #     with open(os.path.join(self.save_path, "points_selected.npz"), 'wb') as f:
+        #         np.savez(f, points=points_originals_selected, normals=normals_originals_selected)
+        # else:
+        #     load_points = False
+        #     if load_points:
+        #         # Open the npz file
+        #         with open(os.path.join(self.save_path, "points_selected.npz"), 'rb') as f:
+        #             npzfile = np.load(f)
+        #             points_originals_selected = npzfile['points']
+        #             normals_originals_selected = npzfile['normals']
+        #         print(f"Shape of points_originals_selected: {points_originals_selected.shape}")
+        #     else:
+        #         points_originals_selected = None
+        #         normals_originals_selected = None
 
-        pointset_ply_path = os.path.join(self.save_path, "ordered_pointset.ply")
-        # get nodes
-        ordered_pointsets = self.rolled_ordered_pointset(points_originals_selected, normals_originals_selected, debug=debug)
+        # pointset_ply_path = os.path.join(self.save_path, "ordered_pointset.ply")
+        # # get nodes
+        # ordered_pointsets = self.rolled_ordered_pointset(points_originals_selected, normals_originals_selected, debug=debug)
 
-        self.pointcloud_from_ordered_pointset(ordered_pointsets, pointset_ply_path)
+        # self.pointcloud_from_ordered_pointset(ordered_pointsets, pointset_ply_path)
 
-        mesh, uv_image = self.mesh_from_ordered_pointset(ordered_pointsets)
+        # mesh, uv_image = self.mesh_from_ordered_pointset(ordered_pointsets)
 
-        self.save_mesh(mesh, uv_image, mesh_path)
+        # self.save_mesh(mesh, uv_image, mesh_path)
+
+        split_mesh_paths = self.split(mesh_path, fresh_start=True)
+
+        # # Flatten mesh
+        # for split_mesh_path in tqdm(split_mesh_paths, desc="Flattening meshes"):
+        #     flatten(self.save_path, split_mesh_path)
 
         # Flatten mesh
-        self.flatten(mesh_path)
+        args = [(self.save_path, split_mesh_path) for split_mesh_path in split_mesh_paths]
+        with multiprocessing.Pool(multiprocessing.cpu_count()) as pool:
+            tqdm(pool.imap(flatten_args, args), total=len(args), desc="Flattening meshes")
 
 if __name__ == '__main__':
     start_point = [3164, 3476, 3472]

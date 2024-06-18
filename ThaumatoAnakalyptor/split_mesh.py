@@ -11,8 +11,10 @@ from tqdm import tqdm
 import os
 
 class MeshSplitter:
-    def __init__(self, input_mesh, umbilicus_path):
-        self.mesh = input_mesh
+    def __init__(self, mesh_path, umbilicus_path):
+        # Load mesh
+        self.mesh_path = mesh_path
+        self.mesh = o3d.io.read_triangle_mesh(mesh_path)
         self.vertices_np = np.asarray(self.mesh.vertices).copy()  # Create a copy of the vertices as a NumPy array
         self.visited_vertices = set()
 
@@ -241,29 +243,71 @@ class MeshSplitter:
         """
         self.visited_vertices.clear()
 
-    def split_mesh(self, path, split_width):
+    def save_vertices(self):
+        # numpy tp mesh path
+        vertices_path = os.path.join(os.path.dirname(self.mesh_path), "vertices_flattened.npy")
+        # Save as npz
+        with open(vertices_path, 'wb') as f:
+            np.savez(f, vertices=self.vertices_np)
+
+    def load_vertices(self):
+        vertices_path = os.path.join(os.path.dirname(self.mesh_path), "vertices_flattened.npy")
+        # Open the npz file
+        with open(vertices_path, 'rb') as f:
+            npzfile = np.load(f)
+            self.vertices_np = npzfile['vertices']
+
+
+    def split_mesh(self, split_width):
+        # Function to cut the mesh into pieces along the x-axis
+        vertices = np.asarray(self.mesh.vertices)
+        normals = np.asarray(self.mesh.vertex_normals)
+        triangles = np.asarray(self.mesh.triangles)
+        triangle_uvs = np.asarray(self.mesh.triangle_uvs)
+
         # split the mesh based on the vertices_np and split_width
         min_u = np.min(self.vertices_np[:, 0])
         max_u = np.max(self.vertices_np[:, 0])
+        mesh_paths = []
         window_start = min_u
         while window_start < max_u:
             window_end = window_start + split_width
             window_indices = np.where((self.vertices_np[:, 0] >= window_start) & (self.vertices_np[:, 0] < window_end))
-            qualifying_triangles = np.any(np.isin(np.asarray(self.mesh.triangles), window_indices), axis=1)
-            vertices_indices = np.unique(np.asarray(self.mesh.triangles)[qualifying_triangles])
-            window_mesh = o3d.geometry.TriangleMesh()
-            window_mesh.vertices = o3d.utility.Vector3dVector(self.vertices_np[vertices_indices])
-            window_mesh.triangles = o3d.utility.Vector3iVector(np.asarray(self.mesh.triangles)[qualifying_triangles])
-            window_mesh.normals = o3d.utility.Vector3dVector(np.asarray(window_mesh.normals)[vertices_indices])
+            qualifying_triangles = np.any(np.isin(triangles, window_indices), axis=1)
+            qualifying_uvs = qualifying_triangles.repeat(3).reshape(-1)
+
+            selected_triangles = triangles[qualifying_triangles]
+            selected_uvs = triangle_uvs[qualifying_uvs]
+
+             # Create a new mesh with the selected vertices and triangles
+            cut_mesh = o3d.geometry.TriangleMesh()
+            cut_mesh.vertices = o3d.utility.Vector3dVector(vertices)
+            cut_mesh.vertex_normals = o3d.utility.Vector3dVector(normals)
+            cut_mesh.triangles = o3d.utility.Vector3iVector(selected_triangles)
+            cut_mesh.triangle_uvs = o3d.utility.Vector2dVector(selected_uvs)
+            cut_mesh = cut_mesh.remove_unreferenced_vertices()
+            print(f"Nr triangles in cut mesh: {len(np.asarray(cut_mesh.triangles))}")
+            print(f"Nr uvs in cut mesh: {len(np.asarray(cut_mesh.triangle_uvs))}")
+            print(f"Nr vertices in cut mesh: {len(np.asarray(cut_mesh.vertices))}")
             
-            path_window = os.path.join(os.path.dirname(path), "windowed_mesh", f"window_{window_start:.2f}_{window_end:.2f}.obj")
+            path_window = os.path.join(os.path.dirname(self.mesh_path), "windowed_mesh", os.path.basename(self.mesh_path).replace(".obj", f"_window_{int(window_start)}_{int(window_end)}.obj"))
+            mesh_paths.append(path_window)
+            # Create the directory if it doesn't exist
+            os.makedirs(os.path.dirname(path_window), exist_ok=True)
             # Save the mesh to an .obj file
-            o3d.io.write_triangle_mesh(path_window, window_mesh)
+            o3d.io.write_triangle_mesh(path_window, cut_mesh)
+            window_start = window_end
         
-    def compute(self, path, split_width=10000):
-        self.compute_uv_with_bfs(0)
-        self.scale_uv_x()
-        self.split_mesh(path, split_width)
+        return mesh_paths
+        
+    def compute(self, split_width=50000, fresh_start=True):
+        if fresh_start:
+            self.compute_uv_with_bfs(0)
+            self.scale_uv_x()
+            self.save_vertices()
+        else:
+            self.load_vertices()
+        return self.split_mesh(split_width)
 
 if __name__ == '__main__':
     import argparse
@@ -271,18 +315,14 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Split a mesh into pieces by normalized UVs')
     parser.add_argument('--umbilicus_path', type=str, help='Path of center umbilicus positions for the mesh scroll', required=True)
     parser.add_argument('--mesh', type=str, help='Path of .obj Mesh', required=True)
-    parser.add_argument('--split_width', type=int, help='Width of the split windows', default=10000)
+    parser.add_argument('--split_width', type=int, help='Width of the split windows', default=50000)
 
     # Take arguments back over
     args = parser.parse_args()
     print(f"Mesh Splitter arguments: {args}")
 
-    path = args.mesh
     umbilicus_path = args.umbilicus_path
     split_width = args.split_width
-
-    # Load mesh
-    mesh = o3d.io.read_triangle_mesh(path)
     
-    splitter = MeshSplitter(mesh, umbilicus_path)
-    splitter.compute(path, split_width)
+    splitter = MeshSplitter(args.mesh, umbilicus_path)
+    splitter.compute(args.mesh, split_width)
