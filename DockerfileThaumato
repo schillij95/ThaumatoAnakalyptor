@@ -131,10 +131,6 @@ ENV XDG_RUNTIME_DIR=/workspace
 
 RUN cd /
 
-RUN git clone --recursive https://github.com/schillij95/volume-cartographer-papyrus
-# working directory root
-WORKDIR volume-cartographer-papyrus/
-
 RUN apt-get update && apt-get install -y python3-pyqt5
 
 # print the current working directory
@@ -146,30 +142,6 @@ RUN ls -la
 RUN apt-cache search libsdl
 RUN apt-get install -y libsdl2-dev libgsl-dev
 
-# Install vc-deps (dynamic)
-RUN cd /volume-cartographer-papyrus/vc-deps/ \
-&& mkdir -p build \
-&& cd build/ \
-&& ls \
-&& cmake -GNinja -DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release -DVCDEPS_BUILD_ZLIB=OFF -DCMAKE_INSTALL_PREFIX=/usr .. \
-&& ninja \
-&& cd / \
-&& rm -rf /volume-cartographer-papyrus/vc-deps/
-
-WORKDIR /
-
-# RUN export CMAKE_PREFIX_PATH="/usr/local/Qt-6.6.1/" 
-RUN cmake  \
-      -S /volume-cartographer-papyrus/ \
-      -B /volume-cartographer-papyrus/build/ \
-      -GNinja  \
-      -DCMAKE_BUILD_TYPE=Release  \
-      -DCMAKE_INSTALL_RPATH=/usr/local/Qt-6.6.1/lib \
-      -DVC_BUILD_ACVD=ON  \
-      -DVC_BUILD_GUI=OFF  \
-    && cmake --build /volume-cartographer-papyrus/build/ \
-    && cmake --install /volume-cartographer-papyrus/build/ 
-
 # Install virtualenv
 RUN pip install virtualenv
 
@@ -180,21 +152,35 @@ RUN virtualenv youssefGP
 RUN /bin/bash -c "source youssefGP/bin/activate && \
     pip3 install -r https://raw.githubusercontent.com/younader/Vesuvius-Grandprize-Winner/940634f1fe3ffb9a585b733dda6c3dd234540b41/requirements.txt"
 
-# install libarchive for thaumato
-RUN apt-get update && apt-get install -y libarchive-dev libtbb-dev
-
 # Copy scripts and modules
 COPY ./ThaumatoAnakalyptor/mask3d/ /workspace/ThaumatoAnakalyptor/mask3d/
+
+# Install necessary tools and Eigen3
+RUN apt-get update && \
+    apt-get install -y \
+    libeigen3-dev  \ 
+    libarchive-dev \
+    libtbb-dev
+
+# build C++ ThaumatoAnakalyptor code
+COPY ./ThaumatoAnakalyptor/sheet_generation/ /workspace/ThaumatoAnakalyptor/sheet_generation/
+WORKDIR /workspace/ThaumatoAnakalyptor/sheet_generation/
+
+# Remove the existing build directory to clear any old configurations
+RUN rm -rf build && mkdir -p build
+
+WORKDIR /workspace/ThaumatoAnakalyptor/sheet_generation/build/
+# print out the contents of the current working directory
+RUN ls -la
+
+RUN cmake .. \
+    && cmake --build .
+
+WORKDIR /
 
 # Add user for GUI
 # RUN adduser --quiet --disabled-password qtuser && usermod -a -G audio qtuser
 RUN usermod -a -G audio root
 
-# Set the user to 'qtuser'
-# USER qtuser
-
 # Set working directory
 WORKDIR /workspace/
-
-# Optional: Default script to run. Remove this line if you want to run scripts manually
-# CMD ["python", "your_default_script.py"]
