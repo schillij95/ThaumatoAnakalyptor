@@ -9,6 +9,7 @@ import multiprocessing
 import pickle
 from copy import deepcopy
 import random
+import subprocess
 
 # Custom imports
 from .Random_Walks import load_graph, ScrollGraph
@@ -74,7 +75,7 @@ def angle_between(v1, v2=np.array([1, 0])):
 def flatten_args(args):
     save_path, mesh_path = args
     print(f"Flattening {mesh_path}")
-    return flatten(save_path, mesh_path)
+    flatten_subprocess(mesh_path)
 
 def flatten(save_path, mesh_path):
     mesh_output_path = mesh_path.replace(".obj", "_flatboi.obj")
@@ -102,6 +103,18 @@ def flatten(save_path, mesh_path):
     flatboi.save_obj(harmonic_uvs)
     flatboi.save_mtl()
     print(f"Saved flattened mesh to {mesh_output_path}")
+
+def flatten_subprocess(mesh_path):
+    # Call mesh_to_surface as a separate process
+    command = [
+                "python3", "-m", "ThaumatoAnakalyptor.slim_uv", 
+                "--path", mesh_path, 
+                "--iter", str(5), 
+                "--ic", "ordered"
+            ]
+    # Running the command
+    flatteing = subprocess.Popen(command)
+    flatteing.wait()
 
 def compute_means_adjacent_args(args):
     return compute_means_adjacent(*args)
@@ -272,8 +285,9 @@ def compute_means_adjacent(adjacent_ts, adjacent_normals, winding_direction):
     return t_means, normals_means 
 
 class WalkToSheet():
-    def __init__(self, graph, path, start_point=[3164, 3476, 3472], scale_factor=1.0):
+    def __init__(self, graph, path, start_point=[3164, 3476, 3472], scale_factor=1.0, split_width=50000):
         self.scale_factor = scale_factor
+        self.split_width = split_width
         self.graph = graph
         self.path = path
         self.save_path = os.path.dirname(path) + f"/{start_point[0]}_{start_point[1]}_{start_point[2]}/" + path.split("/")[-1]
@@ -1373,10 +1387,12 @@ class WalkToSheet():
 
         print(f"Saved mesh to {filename}")
 
-    def split(self, mesh_path, fresh_start=True):
+    def split(self, mesh_path, split_width=50000, fresh_start=True):
+        # Split Scroll mesh into smaller parts of width split_width
         umbilicus_path = os.path.join(os.path.dirname(self.path), "umbilicus.txt")
         splitter = MeshSplitter(mesh_path, umbilicus_path)
-        split_mesh_paths = splitter.compute(split_width=50000, fresh_start=fresh_start)
+        split_mesh_paths = splitter.compute(split_width=split_width, fresh_start=fresh_start)
+        # Return the paths to the split meshes
         return split_mesh_paths
 
     def unroll(self, debug=False):
@@ -1433,16 +1449,17 @@ class WalkToSheet():
 
         # self.save_mesh(mesh, uv_image, mesh_path)
 
-        split_mesh_paths = self.split(mesh_path, fresh_start=True)
-
-        # Flatten mesh
-        for split_mesh_path in tqdm(split_mesh_paths, desc="Flattening meshes"):
-            flatten(self.save_path, split_mesh_path)
+        split_mesh_paths = self.split(mesh_path, split_width=self.split_width, fresh_start=False)
 
         # # Flatten mesh
-        # args = [(self.save_path, split_mesh_path) for split_mesh_path in split_mesh_paths]
-        # with multiprocessing.Pool(multiprocessing.cpu_count()) as pool:
-        #     tqdm(pool.imap(flatten_args, args), total=len(args), desc="Flattening meshes")
+        # for split_mesh_path in tqdm(split_mesh_paths, desc="Flattening meshes"):
+        #     flatten(self.save_path, split_mesh_path)
+
+        # Flatten mesh
+        args = [(self.save_path, split_mesh_path) for split_mesh_path in split_mesh_paths]
+        num_threads = max(1, multiprocessing.cpu_count() // 2)
+        with multiprocessing.Pool(num_threads) as pool:
+            tqdm(pool.imap(flatten_args, args), total=len(args), desc="Flattening meshes")
 
 if __name__ == '__main__':
     start_point = [3164, 3476, 3472]
@@ -1453,6 +1470,7 @@ if __name__ == '__main__':
     parser.add_argument('--debug', action='store_true', help='Debug mode')
     parser.add_argument('--start_point', type=int, nargs=3, default=start_point, help='Start point for the unrolling')
     parser.add_argument('--scale_factor', type=float, default=1.0, help='Scale factor for the mesh')
+    parser.add_argument('--split_width', type=int, default=50000, help='Width for the mesh splitting')
 
     args = parser.parse_args()
 
@@ -1462,6 +1480,6 @@ if __name__ == '__main__':
     reference_path = graph_path.replace("evolved_graph", "subgraph")
     start_point = args.start_point
     scale_factor = args.scale_factor
-    walk = WalkToSheet(graph, args.path, start_point, scale_factor)
+    walk = WalkToSheet(graph, args.path, start_point, scale_factor, split_width=args.split_width)
     # walk.save_graph_pointcloud(reference_path)
     walk.unroll(debug=args.debug)

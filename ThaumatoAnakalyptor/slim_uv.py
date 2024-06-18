@@ -259,51 +259,51 @@ class Flatboi:
         # initializing SLIM with Symmetric Dirichlet Distortion Energy (isometric)
         print("Symmetric Dirichlet Distortion Energy")
         slim = igl.SLIM(self.vertices, self.triangles, v_init=uv, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_SYMMETRIC_DIRICHLET, soft_penalty=0)
-        slim_uvs, energies_ = self.slim_optimization(slim, uv, iterations=5) # 30 iterations
+        slim_uvs, energies_ = self.slim_optimization(slim, uv, iterations=30) # 30 iterations
         energies.extend(list(energies_))
         print_errors(slim_uvs)
 
-        # print("Log ARAP Energy")
-        # slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_LOG_ARAP, soft_penalty=0)
-        # slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs)
-        # energies.extend(list(energies_))
-        # print_errors(slim_uvs)
+        print("Log ARAP Energy")
+        slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_LOG_ARAP, soft_penalty=0)
+        slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs)
+        energies.extend(list(energies_))
+        print_errors(slim_uvs)
 
-        # print("Symmetric Dirichlet Distortion Energy")
-        # slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_SYMMETRIC_DIRICHLET, soft_penalty=0)
-        # slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs)
-        # energies.extend(list(energies_))
-        # print_errors(slim_uvs)
+        print("Symmetric Dirichlet Distortion Energy")
+        slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_SYMMETRIC_DIRICHLET, soft_penalty=0)
+        slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs)
+        energies.extend(list(energies_))
+        print_errors(slim_uvs)
 
-        # print("Conformal Energy")
-        # slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_CONFORMAL, soft_penalty=0)
-        # slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs)
-        # energies.extend(list(energies_))
-        # print_errors(slim_uvs)
+        print("Conformal Energy")
+        slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_CONFORMAL, soft_penalty=0)
+        slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs)
+        energies.extend(list(energies_))
+        print_errors(slim_uvs)
 
-        # print("Log ARAP Energy")
-        # slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_LOG_ARAP, soft_penalty=0)
-        # slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs)
-        # energies.extend(list(energies_))
-        # print_errors(slim_uvs)
+        print("Log ARAP Energy")
+        slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_LOG_ARAP, soft_penalty=0)
+        slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs)
+        energies.extend(list(energies_))
+        print_errors(slim_uvs)
 
-        # print("ARAP Energy")
-        # slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_ARAP, soft_penalty=0)
-        # slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs)
-        # energies.extend(list(energies_))
-        # print_errors(slim_uvs)
+        print("ARAP Energy")
+        slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_ARAP, soft_penalty=0)
+        slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs)
+        energies.extend(list(energies_))
+        print_errors(slim_uvs)
 
-        # print("Symmetric Dirichlet Distortion Energy")
-        # slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_SYMMETRIC_DIRICHLET, soft_penalty=0)
-        # slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs, iterations=30)
-        # energies.extend(list(energies_))
-        # print_errors(slim_uvs)
+        print("Symmetric Dirichlet Distortion Energy")
+        slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_SYMMETRIC_DIRICHLET, soft_penalty=0)
+        slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs, iterations=30)
+        energies.extend(list(energies_))
+        print_errors(slim_uvs)
 
-        # print("Exponential Symmetric Dirichlet Distortion Energy")
-        # slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_EXP_SYMMETRIC_DIRICHLET, soft_penalty=0)
-        # slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs, iterations=10)
-        # energies.extend(list(energies_))
-        # print_errors(slim_uvs)
+        print("Exponential Symmetric Dirichlet Distortion Energy")
+        slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_EXP_SYMMETRIC_DIRICHLET, soft_penalty=0)
+        slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs, iterations=10)
+        energies.extend(list(energies_))
+        print_errors(slim_uvs)
 
         # rescale slim uvs
         slim_uvs = slim_uvs * self.stretch_factor
@@ -316,14 +316,6 @@ class Flatboi:
         uv_max = np.max(uv, axis=0)
         new_uv = (uv - uv_min) / (uv_max - uv_min)
         return new_uv
-    
-    def generate_mask_png(self):
-        mask = np.zeros(self.image_size[::-1], dtype=np.uint8)
-        for triangle in self.uv:
-            triangle = triangle.astype(np.int32)
-            cv2.fillPoly(mask, [triangle], 255)
-        mask = mask[::-1, :]
-        cv2.imwrite(os.path.join(os.path.dirname(self.path), os.path.basename(self.path).replace(".obj", "_mask.png")), mask)
 
     def save_img(self, uv):
         output_directory = os.path.dirname(self.output_obj)
@@ -452,10 +444,6 @@ class Flatboi:
                 per_triangle_area[t] = 1 - alpha[t]/beta[t]
         
         return l2_mesh, linf_mesh, np.mean(per_triangle_area)
-        
-def generate_mask(path):
-    flatboi = Flatboi(path, 5, path)
-    flatboi.save_img(flatboi.original_uvs)
 
 def main():
     cut = ""
@@ -490,14 +478,12 @@ def main():
 
     print(f"Adding UV coordinates to mesh {path}")
 
-    generate_mask(path)
-
-    # flatboi = Flatboi(path, 5)
-    # harmonic_uvs, harmonic_energies = flatboi.slim(initial_condition=args.ic)
-    # flatboi.save_img(harmonic_uvs)
-    # flatboi.save_obj(harmonic_uvs)
-    # print_array_to_file(harmonic_energies, energies_file)       
-    # flatboi.save_mtl()
+    flatboi = Flatboi(path, args.iter)
+    harmonic_uvs, harmonic_energies = flatboi.slim(initial_condition=args.ic)
+    flatboi.save_img(harmonic_uvs)
+    flatboi.save_obj(harmonic_uvs)
+    print_array_to_file(harmonic_energies, energies_file)       
+    flatboi.save_mtl()
 
 if __name__ == '__main__':
     main()
