@@ -73,6 +73,7 @@ def angle_between(v1, v2=np.array([1, 0])):
 
 def flatten_args(args):
     save_path, mesh_path = args
+    print(f"Flattening {mesh_path}")
     return flatten(save_path, mesh_path)
 
 def flatten(save_path, mesh_path):
@@ -1434,14 +1435,14 @@ class WalkToSheet():
 
         split_mesh_paths = self.split(mesh_path, fresh_start=True)
 
-        # # Flatten mesh
-        # for split_mesh_path in tqdm(split_mesh_paths, desc="Flattening meshes"):
-        #     flatten(self.save_path, split_mesh_path)
-
         # Flatten mesh
-        args = [(self.save_path, split_mesh_path) for split_mesh_path in split_mesh_paths]
-        with multiprocessing.Pool(multiprocessing.cpu_count()) as pool:
-            tqdm(pool.imap(flatten_args, args), total=len(args), desc="Flattening meshes")
+        for split_mesh_path in tqdm(split_mesh_paths, desc="Flattening meshes"):
+            flatten(self.save_path, split_mesh_path)
+
+        # # Flatten mesh
+        # args = [(self.save_path, split_mesh_path) for split_mesh_path in split_mesh_paths]
+        # with multiprocessing.Pool(multiprocessing.cpu_count()) as pool:
+        #     tqdm(pool.imap(flatten_args, args), total=len(args), desc="Flattening meshes")
 
 if __name__ == '__main__':
     start_point = [3164, 3476, 3472]
