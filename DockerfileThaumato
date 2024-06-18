@@ -156,14 +156,14 @@ RUN /bin/bash -c "source youssefGP/bin/activate && \
 COPY ./ThaumatoAnakalyptor/mask3d/ /workspace/ThaumatoAnakalyptor/mask3d/
 
 # build C++ ThaumatoAnakalyptor code
-WORKDIR /workspace/ThaumatoAnakalyptor/ThaumatoAnakalyptor/sheet_generation/
+WORKDIR /workspace/ThaumatoAnakalyptor/sheet_generation/
 
 RUN mkdir build
 
-WORKDIR /workspace/ThaumatoAnakalyptor/ThaumatoAnakalyptor/sheet_generation/build/
+WORKDIR /workspace/ThaumatoAnakalyptor/sheet_generation/build/
 
 RUN cmake .. \
-    && cmake --build . \
+    && cmake --build .
 
 WORKDIR /
 
