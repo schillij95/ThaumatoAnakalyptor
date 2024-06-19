@@ -378,11 +378,12 @@ def skip_computation_block(corner_coords, grid_block_size, umbilicus_points, max
     return umbilicus_point_dist > maximum_distance
 
 class MyPredictionWriter(BasePredictionWriter):
-    def __init__(self, save_template_v, save_template_r, grid_block_size=200):
+    def __init__(self, computed_blocks, pointcloud_base, save_template_v, save_template_r, grid_block_size=200):
         super().__init__(write_interval="batch")  # or "epoch" for end of an epoch
         # num_threads = multiprocessing.cpu_count()
         # self.pool = multiprocessing.Pool(processes=num_threads)  # Initialize the pool once
-
+        self.computed_blocks = computed_blocks 
+        self.pointcloud_base = pointcloud_base
         self.save_template_v = save_template_v
         self.save_template_r = save_template_r
         self.grid_block_size = grid_block_size
@@ -417,15 +418,22 @@ class MyPredictionWriter(BasePredictionWriter):
 
             save_surface_ply(points_r, normals_r, surface_ply_filename_r)
             save_surface_ply(points_v, normals_v, surface_ply_filename_v)
+            self.computed_blocks.append(corner_coords)
+
+        # Save the computed blocks
+        self.computed_blocks = list(set(self.computed_blocks))
+        with open(os.path.join(os.path.join("/", self.pointcloud_base, "computed_blocks.txt"), "computed_blocks.txt"), "w") as f:
+            for block in self.computed_blocks:
+                f.write(str(block) + "\n")
 
 class GridDataset(Dataset):
     def __init__(self, pointcloud_base, start_block, path_template, save_template_v, save_template_r, umbilicus_points, umbilicus_points_old, grid_block_size=200, recompute=False, fix_umbilicus=False, maximum_distance=-1):
         self.grid_block_size = grid_block_size
         self.path_template = path_template
         self.umbilicus_points = umbilicus_points
-        self.blocks_to_process = self.init_blocks_to_process(pointcloud_base, start_block, umbilicus_points, umbilicus_points_old, path_template, grid_block_size, recompute, fix_umbilicus, maximum_distance)
+        self.blocks_to_process, blocks_processed = self.init_blocks_to_process(pointcloud_base, start_block, umbilicus_points, umbilicus_points_old, path_template, grid_block_size, recompute, fix_umbilicus, maximum_distance)
         
-        self.writer = MyPredictionWriter(save_template_v, save_template_r, grid_block_size=grid_block_size)
+        self.writer = MyPredictionWriter(blocks_processed, pointcloud_base, save_template_v, save_template_r, grid_block_size=grid_block_size)
         
     def init_blocks_to_process(self, pointcloud_base, start_block, umbilicus_points, umbilicus_points_old, path_template, grid_block_size, recompute, fix_umbilicus, maximum_distance):
         # Load the set of computed blocks
@@ -438,7 +446,7 @@ class GridDataset(Dataset):
         )
         
         blocks_to_process = sorted(list(blocks_to_process)) # Sort the blocks to process for deterministic behavior
-        return blocks_to_process
+        return blocks_to_process, blocks_processed
         
     def load_computed_blocks(self, pointcloud_base):
         computed_blocks = set()
