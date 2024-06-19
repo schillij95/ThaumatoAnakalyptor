@@ -422,7 +422,7 @@ class MyPredictionWriter(BasePredictionWriter):
 
         # Save the computed blocks
         self.computed_blocks = self.computed_blocks
-        with open(os.path.join(os.path.join("/", self.pointcloud_base, "computed_blocks.txt"), "computed_blocks.txt"), "w") as f:
+        with open(os.path.join(self.pointcloud_base, "computed_blocks.txt"), "w") as f:
             for block in self.computed_blocks:
                 f.write(str(block) + "\n")
 
