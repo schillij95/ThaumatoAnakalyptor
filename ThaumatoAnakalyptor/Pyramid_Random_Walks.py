@@ -369,14 +369,26 @@ class Graph:
         self.compute_node_edges()
         
     def update_winding_angles(self, nodes, ks, update_winding_angles=False):
+        nodes = set([tuple(int(node[i]) for i in range(4)) for node in nodes])
         ks_min = np.min(ks)
         ks = np.array(ks) - ks_min
         # Update winding angles
-        for i, node in enumerate(nodes):
+        for j, node in enumerate(nodes):
             node = tuple(int(node[i]) for i in range(4))
-            self.nodes[node]['assigned_k'] = ks[i]
+            self.nodes[node]['assigned_k'] = ks[j]
             if update_winding_angles:
-                self.nodes[node]['winding_angle'] = - ks[i]*360 + self.nodes[node]['winding_angle']
+                self.nodes[node]['winding_angle'] = - ks[j]*360 + self.nodes[node]['winding_angle']
+
+    def get_nodes_and_ks(self):
+        nodes = []
+        ks = []
+        for node in self.nodes:
+            nodes.append(node)
+            if 'assigned_k' in self.nodes[node]:
+                ks.append(self.nodes[node]['assigned_k'])
+            else:
+                raise KeyError(f"No assigned k for node {node}")
+        return nodes, ks
 
     def save_graph(self, path):
         print(f"Saving graph to {path} ...")
@@ -1141,6 +1153,44 @@ class ScrollGraph(Graph):
                         subgraph.add_edge(node1, node2, self.edges[edge][k]['certainty'], k, self.edges[edge][k]['same_block'], bad_edge=self.edges[edge][k]['bad_edge'])
         subgraph.compute_node_edges()
         return subgraph
+    
+    def graph_selected_nodes(self, nodes, ks, other_block_edges_only=False):
+        print(f"Graphing {len(nodes)} nodes...")
+        nodes = set([tuple([int(n) for n in node]) for node in nodes])
+        # Extract the subgraph only containing the selected nodes and connections between them
+        subgraph = ScrollGraph(self.overlapp_threshold, self.umbilicus_path)
+        # Add nodes
+        for node in nodes:
+            subgraph.add_node(node, self.nodes[node]['centroid'], winding_angle=self.nodes[node]['winding_angle'])
+        # add ks
+        subgraph.update_winding_angles(nodes, ks, update_winding_angles=False)
+        
+        for edge in self.edges:
+            node1, node2 = edge
+            if node1 in nodes and node2 in nodes:
+                if node1[:3] == node2[:3]:
+                    continue
+                # Check if there is a edge with the right k connecting the nodes
+                k1 = subgraph.nodes[node1]['assigned_k']
+                k2 = subgraph.nodes[node2]['assigned_k']
+                k_search = k2 - k1
+                ks_edge = self.get_edge_ks(node1, node2)
+                print(f"Edge: {node1} -> {node2}, k1: {k1}, k2: {k2}, searching k: {k_search} in ks: {ks_edge}")
+                k_in_ks = False
+                for k in ks_edge:
+                    if k == k_search:
+                        k_in_ks = True
+                        break
+                if not k_in_ks:
+                    continue
+                if self.edges[edge][k_search]['bad_edge']:
+                    continue
+                if other_block_edges_only and self.edges[edge][k_search]['same_block']:
+                    continue
+                subgraph.add_edge(node1, node2, self.edges[edge][k_search]['certainty'], k_search, self.edges[edge][k_search]['same_block'], bad_edge=self.edges[edge][k_search]['bad_edge'])
+        
+        subgraph.compute_node_edges()
+        return subgraph
         
 class RandomWalkSolver:
     def __init__(self, graph, umbilicus_path):
@@ -1575,9 +1625,9 @@ class RandomWalkSolver:
 
         return nodes, ks
     
-    def solve_cpp(self, path, starting_nodes, starting_ks, min_steps=10, min_end_steps=4):
+    def solve_cpp(self, path, starting_nodes, starting_ks, min_steps=10, min_end_steps=4, new_node_usage=True):
         ### C++ RW, works
-        print(f"Starting nodes shape: {starting_nodes.shape}")
+        print(f"Starting nodes shape: {np.array(starting_nodes).shape}")
         overlapp_threshold = deepcopy(self.graph.overlapp_threshold)
         overlapp_threshold["min_steps"] = min_steps
         overlapp_threshold["min_end_steps"] = min_end_steps
@@ -1601,7 +1651,7 @@ class RandomWalkSolver:
                     yaml.dump(overlapp_threshold, file)
                 with open(translation_path, 'rb') as file:
                     translation = pickle.load(file)
-                if os.path.exists(node_usage_path):
+                if not new_node_usage and os.path.exists(node_usage_path):
                     with open(node_usage_path, 'rb') as file:
                         node_usage_count = pickle.load(file)
                 else:
@@ -1852,7 +1902,11 @@ class RandomWalkSolver:
         production_run = True
         if production_run:
             # last pass over it with solve cpp random walks
-            fixed_nodes, fixed_ks = self.solve_cpp(path, fixed_nodes, fixed_ks, 8, 4)
+            # fixed_nodes, fixed_ks = self.solve_cpp(path, fixed_nodes, fixed_ks, 8, 4, new_node_usage=False)
+            graph = self.graph.graph_selected_nodes(fixed_nodes, fixed_ks, other_block_edges_only=False)
+            graph.largest_connected_component(delete_nodes=True)
+            fixed_nodes, fixed_ks = graph.get_nodes_and_ks()
+            fixed_nodes, fixed_ks = self.solve_cpp(path, fixed_nodes, fixed_ks, 8, 4, new_node_usage=True)
 
         return np.array(fixed_nodes), np.array(fixed_ks)
     

@@ -69,8 +69,14 @@ class MyPredictionWriter(BasePredictionWriter):
             # display progress cv2.imshow
             image = (self.surface_volume_np[self.r].astype(np.float32) / 65535)
             screen_y = 2560
+            screen_x = 1440
 
-            image = cv2.resize(image, ((screen_y * image.shape[1])//image.shape[0], screen_y))
+            if (screen_y * image.shape[1])//image.shape[0] > screen_x:
+                screen_y = (screen_x * image.shape[0])//image.shape[1]
+            else:
+                screen_x = (screen_y * image.shape[1])//image.shape[0]
+
+            image = cv2.resize(image, (screen_x, screen_y))
             image = image.T
             image = image[::-1, :]
             self.image = image
