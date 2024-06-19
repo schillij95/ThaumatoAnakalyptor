@@ -369,15 +369,19 @@ class Graph:
         self.compute_node_edges()
         
     def update_winding_angles(self, nodes, ks, update_winding_angles=False):
-        nodes = set([tuple(int(node[i]) for i in range(4)) for node in nodes])
+        nodes = [tuple(int(node[i]) for i in range(4)) for node in nodes]
+        nodes_ks_dict = {}
         ks_min = np.min(ks)
         ks = np.array(ks) - ks_min
+        for i, node in enumerate(nodes):
+            nodes_ks_dict[node] = ks[i]
         # Update winding angles
-        for j, node in enumerate(nodes):
+        for node in nodes_ks_dict:
+            k = nodes_ks_dict[node]
             node = tuple(int(node[i]) for i in range(4))
-            self.nodes[node]['assigned_k'] = ks[j]
+            self.nodes[node]['assigned_k'] = k
             if update_winding_angles:
-                self.nodes[node]['winding_angle'] = - ks[j]*360 + self.nodes[node]['winding_angle']
+                self.nodes[node]['winding_angle'] = - k*360 + self.nodes[node]['winding_angle']
 
     def get_nodes_and_ks(self):
         nodes = []
@@ -1156,18 +1160,21 @@ class ScrollGraph(Graph):
     
     def graph_selected_nodes(self, nodes, ks, other_block_edges_only=False):
         print(f"Graphing {len(nodes)} nodes...")
-        nodes = set([tuple([int(n) for n in node]) for node in nodes])
+        nodes = [tuple([int(n) for n in node]) for node in nodes]
+        nodes_set = set([tuple([int(n) for n in node]) for node in nodes])
         # Extract the subgraph only containing the selected nodes and connections between them
         subgraph = ScrollGraph(self.overlapp_threshold, self.umbilicus_path)
         # Add nodes
-        for node in nodes:
+        for node in nodes_set:
             subgraph.add_node(node, self.nodes[node]['centroid'], winding_angle=self.nodes[node]['winding_angle'])
         # add ks
         subgraph.update_winding_angles(nodes, ks, update_winding_angles=False)
         
         for edge in self.edges:
             node1, node2 = edge
-            if node1 in nodes and node2 in nodes:
+            node1 = tuple([int(n) for n in node1])
+            node2 = tuple([int(n) for n in node2])
+            if node1 in nodes_set and node2 in nodes_set:
                 if node1[:3] == node2[:3]:
                     continue
                 # Check if there is a edge with the right k connecting the nodes
@@ -1175,7 +1182,7 @@ class ScrollGraph(Graph):
                 k2 = subgraph.nodes[node2]['assigned_k']
                 k_search = k2 - k1
                 ks_edge = self.get_edge_ks(node1, node2)
-                print(f"Edge: {node1} -> {node2}, k1: {k1}, k2: {k2}, searching k: {k_search} in ks: {ks_edge}")
+                # print(f"Edge: {node1} -> {node2}, k1: {k1}, k2: {k2}, searching k: {k_search} in ks: {ks_edge}")
                 k_in_ks = False
                 for k in ks_edge:
                     if k == k_search:
@@ -2793,7 +2800,6 @@ def random_walks():
     overlapp_threshold["min_steps"] = min_steps
     overlapp_threshold["min_end_steps"] = min_end_steps
     overlapp_threshold["pyramid_up_nr_average"] = args.pyramid_up_nr_average
-
 
     if args.create_graph:
         save_path = os.path.dirname(path) + f"/{start_point[0]}_{start_point[1]}_{start_point[2]}/" + path.split("/")[-1]

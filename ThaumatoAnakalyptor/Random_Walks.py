@@ -358,17 +358,31 @@ class Graph:
                 unused_nodes.append(node)
         self.remove_nodes_edges(unused_nodes)
         self.compute_node_edges()
+        
+    # def update_winding_angles(self, nodes, ks, update_winding_angles=False):
+    #     ks_min = np.min(ks)
+    #     ks = np.array(ks) - ks_min
+    #     # Update winding angles
+    #     for i, node in enumerate(nodes):
+    #         node = tuple(node)
+    #         self.nodes[node]['assigned_k'] = ks[i]
+    #         if update_winding_angles:
+    #             self.nodes[node]['winding_angle'] = - ks[i]*360 + self.nodes[node]['winding_angle']
 
     def update_winding_angles(self, nodes, ks, update_winding_angles=False):
-        nodes = set([tuple(int(node[i]) for i in range(4)) for node in nodes])
+        nodes = [tuple(int(node[i]) for i in range(4)) for node in nodes]
+        nodes_ks_dict = {}
         ks_min = np.min(ks)
         ks = np.array(ks) - ks_min
+        for i, node in enumerate(nodes):
+            nodes_ks_dict[node] = ks[i]
         # Update winding angles
-        for j, node in enumerate(nodes):
+        for node in nodes_ks_dict:
+            k = nodes_ks_dict[node]
             node = tuple(int(node[i]) for i in range(4))
-            self.nodes[node]['assigned_k'] = ks[j]
+            self.nodes[node]['assigned_k'] = k
             if update_winding_angles:
-                self.nodes[node]['winding_angle'] = - ks[j]*360 + self.nodes[node]['winding_angle']
+                self.nodes[node]['winding_angle'] = - k*360 + self.nodes[node]['winding_angle']
 
     def save_graph(self, path):
         print(f"Saving graph to {path} ...")
