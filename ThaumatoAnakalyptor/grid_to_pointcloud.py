@@ -418,10 +418,10 @@ class MyPredictionWriter(BasePredictionWriter):
 
             save_surface_ply(points_r, normals_r, surface_ply_filename_r)
             save_surface_ply(points_v, normals_v, surface_ply_filename_v)
-            self.computed_blocks.append(corner_coords)
+            self.computed_blocks.add(corner_coords)
 
         # Save the computed blocks
-        self.computed_blocks = list(set(self.computed_blocks))
+        self.computed_blocks = self.computed_blocks
         with open(os.path.join(os.path.join("/", self.pointcloud_base, "computed_blocks.txt"), "computed_blocks.txt"), "w") as f:
             for block in self.computed_blocks:
                 f.write(str(block) + "\n")
