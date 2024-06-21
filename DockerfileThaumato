@@ -42,7 +42,7 @@ COPY ./ThaumatoAnakalyptor/mask3d/third_party/ /workspace/ThaumatoAnakalyptor/ma
 
 # Install the Python packages
 RUN pip install torch==1.12.1+cu113 torchvision==0.13.1+cu113 --extra-index-url https://download.pytorch.org/whl/cu113 \
-    && pip install torch-scatter -f https://data.pyg.org/whl/torch-1.12.1+cu113.html \
+    && pip install torch-scatter==2.1.1 -f https://data.pyg.org/whl/torch-1.12.1+cu113.html \
     && pip install 'git+https://github.com/facebookresearch/detectron2.git@710e7795d0eeadf9def0e7ef957eea13532e34cf' --no-deps 
 
 RUN git clone --recursive "https://github.com/NVIDIA/MinkowskiEngine" /workspace/ThaumatoAnakalyptor/mask3d/third_party/MinkowskiEngine \
