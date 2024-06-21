@@ -1495,7 +1495,7 @@ class KDTreeBaseClass
  */
 template <
     typename Distance, class DatasetAdaptor, int32_t DIM = -1,
-    typename IndexType = uint32_t>
+    typename IndexType = size_t>
 class KDTreeSingleIndexAdaptor
     : public KDTreeBaseClass<
           KDTreeSingleIndexAdaptor<Distance, DatasetAdaptor, DIM, IndexType>,
