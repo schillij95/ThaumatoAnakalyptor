@@ -7,6 +7,8 @@ from math import sqrt
 from tqdm import tqdm
 import igl
 from PIL import Image
+import cv2
+import multiprocessing
 
 Image.MAX_IMAGE_PIXELS = None
 
@@ -17,24 +19,52 @@ def print_array_to_file(array, file_path):
         for element in array:
             file.write(str(element) + '\n')
 
+def triangle_area_multiprocessing(args):
+    v1, v2, v3, area_cutoff = args
+    return triangle_area(v1, v2, v3) > area_cutoff
+
+def triangle_area(v1, v2, v3):
+            return 0.5 * np.linalg.norm(np.cross(v2 - v1, v3 - v1))
+
 class Flatboi:
     input_obj: str
+    output_obj: str
     max_iter: int
-    def __init__(self, obj_path: str, max_iter: int):
+    def __init__(self, obj_path: str, max_iter: int, output_obj: str = None):
+        self.stretch_factor = 1000.0
         self.input_obj = obj_path
+        if output_obj is not None:
+            self.output_obj = output_obj
+        else:
+            self.output_obj = obj_path.replace(".obj", "_flatboi.obj")
         self.max_iter = max_iter
         self.read_mesh()
-        # self.filter_mesh()
+        self.filter_mesh()
 
     def read_mesh(self):
         self.mesh = o3d.io.read_triangle_mesh(self.input_obj)
-        self.vertices = np.asarray(self.mesh.vertices, dtype=np.float64)
-        self.triangles = np.asarray(self.mesh.triangles, dtype=np.int32)
+        self.vertices = np.asarray(self.mesh.vertices, dtype=np.float64) / self.stretch_factor
+        self.triangles = np.asarray(self.mesh.triangles, dtype=np.int64)
         self.original_uvs = np.asarray(self.mesh.triangle_uvs, dtype=np.float64)
 
-    def filter_mesh(self):
+    def filter_mesh(self, area_cutoff=0.0000001):
         # Filtering out any triangles with 0 area
-        self.triangles = [t for t in self.triangles if abs(igl.triangle_area(self.vertices[t[0]], self.vertices[t[1]], self.vertices[t[2]])) > 0.0001]
+        len_before = len(self.triangles)
+
+        self.original_uvs = np.array(self.original_uvs).reshape((-1, 3, 2))
+        assert len(self.triangles) == len(self.original_uvs), f"Number of triangles and uvs do not match. {len(self.triangles)} != {len(self.original_uvs)}"
+
+        args = [(self.vertices[t[0]], self.vertices[t[1]], self.vertices[t[2]], area_cutoff) for t in self.triangles]
+        with multiprocessing.Pool(multiprocessing.cpu_count()) as pool:
+            filter_list = list(tqdm(pool.imap(triangle_area_multiprocessing, args), total=len(args), desc="Filtering Triangles"))
+
+        # Filter original uvs
+        self.original_uvs = np.array([self.original_uvs[i] for i in range(len(self.triangles)) if filter_list[i]])
+        # Filter triangles
+        self.triangles = np.array([self.triangles[i] for i in range(len(self.triangles)) if filter_list[i]])
+        print(f"Filtered out {len_before - len(self.triangles)} triangles with 0 area of total {len_before} triangles.")
+        assert len(self.triangles) == len(self.original_uvs), f"Number of triangles and uvs do not match. {len(self.triangles)} != {len(self.original_uvs)}"
+        self.original_uvs = np.array(self.original_uvs).reshape((-1, 2))
 
     def generate_boundary(self):
         res = igl.boundary_loop(self.triangles)
@@ -58,8 +88,6 @@ class Flatboi:
 
         bc = np.zeros((bnd.shape[0],2), dtype=np.float64)
         for i in tqdm(range(bnd.shape[0])):
-            #bc[i] = conformal_flattening[bnd[i]]
-            #bc[i] = vertex_coord[bnd[i]]
             bc[i] = uva[bnd[i]]
 
         return bnd, bc, uva
@@ -106,14 +134,13 @@ class Flatboi:
         for i in range(bnd.shape[0]):
             bnd_uv[i] = uv[bnd[i]]
 
-        arap = igl.ARAP(self.vertices, self.triangles, 2, bnd)
-        print("ARAP")
-        for i in range(3):
-            uv = arap.solve(bnd_uv, uv)
-
         return np.zeros((0, 1), dtype=np.int32), np.zeros((0,2), dtype=np.float64), uv
     
     def orient_uvs(self, vertices):
+        # Assert that no NaNs or Infs are present
+        assert not np.any(np.isnan(vertices)), f"There are {np.sum(np.isnan(vertices))} NaNs in the vertices."
+        assert not np.any(np.isinf(vertices)), f"There are {np.sum(np.isinf(vertices))} Infs in the vertices."
+        print("Orienting UVs...")
         # Rotate vertices and calculate the needed area
         vertices[:, 0] = 1.0 - vertices[:, 0]
         u_range = np.max(vertices[:, 0]) - np.min(vertices[:, 0])
@@ -121,6 +148,7 @@ class Flatboi:
         u_longer_v = u_range > v_range
         u_return = vertices[:, 0]
         v_return = vertices[:, 1]
+
         area_return = u_range * v_range
         for angle in range(-70, 70, 5):
             u_prime = vertices[:, 0] * np.cos(np.deg2rad(angle)) - vertices[:, 1] * np.sin(np.deg2rad(angle))
@@ -137,9 +165,56 @@ class Flatboi:
                 v_return = v_prime
                 area_return = area
 
-        return np.stack((u_return, v_return), axis=-1) 
+        slim_uvs = np.stack((u_return, v_return), axis=-1)
+        return slim_uvs
+    
+    def slim_optimization(self, slim, old_uvs, iterations=None):
+        if iterations is None:
+            iterations = self.max_iter
+        energies = np.zeros(iterations+1, dtype=np.float64)
+        energies[0] = slim.energy()
+
+        threshold = 1e-5
+        converged = False
+        iteration = 0
+        while iteration < iterations:
+            print(iteration)
+            temp_energy = slim.energy()
+            slim.solve(1)
+            new_energy = slim.energy()
+            energies[iteration+1] = new_energy
+            iteration += 1
+            print(f"{temp_energy:.3f} {new_energy:.3f}")
+            if new_energy >= float("inf") or new_energy == float("nan") or np.isnan(new_energy) or np.isinf(new_energy):
+                converged = False
+                break
+            elif new_energy < temp_energy:
+                if abs(new_energy - temp_energy) < threshold:
+                    converged = True
+                    break
+                else:
+                    converged = True
+            else:
+                converged = False
+                break
+
+        if converged:
+            print("Converg(ed/ing)")
+            slim_uvs = slim.vertices()
+        else:
+            print("Not Converged")
+            slim_uvs = old_uvs
+
+        slim_uvs = self.orient_uvs(slim_uvs)
+        slim_uvs = slim_uvs.astype(np.float64)
+
+        return slim_uvs, energies
     
     def slim(self, initial_condition='original'):
+        def print_errors(slim_uvs):
+            l2, linf, area_error = self.stretch_metrics(slim_uvs)
+            print(f"Stretch metrics L2: {l2:.5f}, Linf: {linf:.5f}, Area Error: {area_error:.5f}", end="\n")
+
         if initial_condition == 'original':
             print("Using Cylindrical Unrolling UV Condition")
             bnd, bnd_uv, uv = self.original_ic()
@@ -157,46 +232,69 @@ class Flatboi:
             print("Using Ordered Condition")
             bnd, bnd_uv, uv = self.ordered_ic()
 
+        self.vertices = self.vertices.astype(np.float64)
+        self.triangles = self.triangles.astype(np.int64)
+        uv = uv.astype(np.float64)
+        bnd = bnd.astype(np.int64)
+        bnd_uv = bnd_uv.astype(np.float64)
+
+        uv = self.orient_uvs(uv) # Enables the UVs to be oriented correctly for the slim optimization
+
+        energies = []
+
         # initializing SLIM with Symmetric Dirichlet Distortion Energy (isometric)
+        print("Symmetric Dirichlet Distortion Energy")
         slim = igl.SLIM(self.vertices, self.triangles, v_init=uv, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_SYMMETRIC_DIRICHLET, soft_penalty=0)
+        slim_uvs, energies_ = self.slim_optimization(slim, uv, iterations=30) # 30 iterations
+        energies.extend(list(energies_))
+        print_errors(slim_uvs)
 
-        energies = np.zeros(self.max_iter+1, dtype=np.float64)
-        energies[0] = slim.energy()
+        print("Log ARAP Energy")
+        slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_LOG_ARAP, soft_penalty=0)
+        slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs)
+        energies.extend(list(energies_))
+        print_errors(slim_uvs)
 
+        print("Symmetric Dirichlet Distortion Energy")
+        slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_SYMMETRIC_DIRICHLET, soft_penalty=0)
+        slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs)
+        energies.extend(list(energies_))
+        print_errors(slim_uvs)
 
-        # for i in tqdm(range(self.max_iter)):
-        #     slim.solve(1)
-        #     energies[i+1] = slim.energy()
+        print("Conformal Energy")
+        slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_CONFORMAL, soft_penalty=0)
+        slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs)
+        energies.extend(list(energies_))
+        print_errors(slim_uvs)
 
-        threshold = 1e-5
-        converged = False
-        iteration = 0
-        while (not converged) and (iteration < self.max_iter):
-            print(iteration)
-            temp_energy = slim.energy()
-            slim.solve(1)
-            new_energy = slim.energy()
-            energies[iteration+1] = new_energy
-            iteration += 1
-            print(f"{temp_energy:.3f} {new_energy:.3f}")
-            if new_energy >= float("inf") or new_energy == float("nan") or np.isnan(new_energy) or np.isinf(new_energy):
-                continue
-            elif new_energy < temp_energy:
-                if abs(new_energy - temp_energy) < threshold:
-                    converged = True
-                else:
-                    converged = False
-            else:
-                converged = True
+        print("Log ARAP Energy")
+        slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_LOG_ARAP, soft_penalty=0)
+        slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs)
+        energies.extend(list(energies_))
+        print_errors(slim_uvs)
 
-        l2, linf, area_error = self.stretch_metrics(slim.vertices())
-        print(f"Stretch metrics L2: {l2:.5f}, Linf: {linf:.5f}, Area Error: {area_error:.5f}", end="\n")
+        print("ARAP Energy")
+        slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_ARAP, soft_penalty=0)
+        slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs)
+        energies.extend(list(energies_))
+        print_errors(slim_uvs)
 
-        slim_uvs = slim.vertices()
+        print("Symmetric Dirichlet Distortion Energy")
+        slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_SYMMETRIC_DIRICHLET, soft_penalty=0)
+        slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs, iterations=30)
+        energies.extend(list(energies_))
+        print_errors(slim_uvs)
 
-        slim_uvs = self.orient_uvs(slim_uvs)
+        print("Exponential Symmetric Dirichlet Distortion Energy")
+        slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_EXP_SYMMETRIC_DIRICHLET, soft_penalty=0)
+        slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs, iterations=10)
+        energies.extend(list(energies_))
+        print_errors(slim_uvs)
 
-        return slim_uvs, energies
+        # rescale slim uvs
+        slim_uvs = slim_uvs * self.stretch_factor
+
+        return slim_uvs, np.array(energies)
     
     @staticmethod
     def normalize(uv):
@@ -206,24 +304,32 @@ class Flatboi:
         return new_uv
 
     def save_img(self, uv):
-        input_directory = os.path.dirname(self.input_obj)
-        base_file_name, _ = os.path.splitext(os.path.basename(self.input_obj))
-        image_path = os.path.join(input_directory, f"{base_file_name}_flatboi_0.png")
+        output_directory = os.path.dirname(self.output_obj)
+        base_file_name, _ = os.path.splitext(os.path.basename(self.output_obj))
+        image_path = os.path.join(output_directory, f"{base_file_name}_0.png")
         min_x, min_y = np.min(uv, axis=0)
         shifted_coords = uv - np.array([min_x, min_y])
         max_x, max_y = np.max(shifted_coords, axis=0)
-        # Create a white image of the determined size
+        # Create a mask image of the determined size
         image_size = (int(round(max_y)) + 1, int(round(max_x)) + 1)
-        white_image = np.ones((image_size[0], image_size[1]), dtype=np.uint16) * 65535
+        print(f"Image size: {image_size}")
 
-        # Save the grayscale image
-        Image.fromarray(white_image, mode='L').save(image_path)
+        mask = np.zeros((image_size[0], image_size[1]), dtype=np.uint8)
+        triangles = [[shifted_coords[t_i] for t_i in t] for t in self.triangles]
+        for triangle in triangles:
+            triangle = np.array(triangle).astype(np.int32)
+            try:
+                cv2.fillPoly(mask, [triangle], 255)
+            except:
+                pass
+        mask = mask[::-1, :]
+        cv2.imwrite(image_path, mask)
 
     def save_mtl(self):
-        input_directory = os.path.dirname(self.input_obj)
-        base_file_name, _ = os.path.splitext(os.path.basename(self.input_obj))
+        output_directory = os.path.dirname(self.output_obj)
+        base_file_name, _ = os.path.splitext(os.path.basename(self.output_obj))
         
-        new_file_path = os.path.join(input_directory, f"{base_file_name}_flatboi.mtl")
+        new_file_path = os.path.join(output_directory, f"{base_file_name}.mtl")
         content = f"""# Material file generated by ThaumatoAnakalyptor
         newmtl default
         Ka 1.0 1.0 1.0
@@ -231,22 +337,23 @@ class Flatboi:
         Ks 0.0 0.0 0.0
         illum 2
         d 1.0
-        map_Kd {base_file_name}_flatboi_0.png
+        map_Kd {base_file_name}_0.png
         """
 
         with open(new_file_path, 'w') as file:
             file.write(content)
 
     def save_obj(self, uv):
-        input_directory = os.path.dirname(self.input_obj)
-        base_file_name, _ = os.path.splitext(os.path.basename(self.input_obj))
-        obj_path = os.path.join(input_directory, f"{base_file_name}_flatboi.obj")
+        output_directory = os.path.dirname(self.output_obj)
+        base_file_name, _ = os.path.splitext(os.path.basename(self.output_obj))
+        obj_path = os.path.join(output_directory, f"{base_file_name}.obj")
         normalized_uv = self.normalize(uv)
         slim_uvs = np.zeros((self.triangles.shape[0],3,2), dtype=np.float64)
         for t in range(self.triangles.shape[0]):
             for v in range(self.triangles.shape[1]):
                 slim_uvs[t,v,:] = normalized_uv[self.triangles[t,v]]
         slim_uvs = slim_uvs.reshape(-1,2)
+        self.mesh.triangles = o3d.utility.Vector3iVector(np.array(self.triangles).astype(np.int32))
         self.mesh.triangle_uvs = o3d.utility.Vector2dVector(slim_uvs)
         o3d.io.write_triangle_mesh(obj_path, self.mesh)
 
@@ -279,7 +386,6 @@ class Flatboi:
         s = (ab+bc+ca)/2
         area = sqrt(s*(s-ab)*(s-bc)*(s-ca)) # 3d area
 
-        
         return L2, G, area, abs(A)
     
     def stretch_metrics(self, uv):
@@ -320,7 +426,6 @@ class Flatboi:
                 per_triangle_area[t] = 1 - alpha[t]/beta[t]
         
         return l2_mesh, linf_mesh, np.mean(per_triangle_area)
-        
 
 def main():
     cut = ""
@@ -355,7 +460,7 @@ def main():
 
     print(f"Adding UV coordinates to mesh {path}")
 
-    flatboi = Flatboi(path, 5)
+    flatboi = Flatboi(path, args.iter)
     harmonic_uvs, harmonic_energies = flatboi.slim(initial_condition=args.ic)
     flatboi.save_img(harmonic_uvs)
     flatboi.save_obj(harmonic_uvs)
