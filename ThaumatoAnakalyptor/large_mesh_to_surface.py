@@ -11,7 +11,7 @@ import argparse
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Cut a mesh into pieces and texture the surface")
     parser.add_argument("--input_mesh", type=str, required=True, help="Path to the input mesh file")
-    parser.add_argument('--grid_cell', type=str, required=True, help='Path to the grid cells')
+    parser.add_argument('--scroll', type=str, required=True, help='Path to the grid cells')
     parser.add_argument('--format', type=str, default='jpg')
     parser.add_argument("--cut_size", type=int, help="Size of each cut piece along the X axis", default=40000)
     parser.add_argument("--output_folder", type=str, help="Folder to save the cut meshes", default=None)
@@ -38,15 +38,16 @@ if __name__ == "__main__":
         # Call mesh_to_surface as a separate process
         command = [
                     "python3", "-m", "ThaumatoAnakalyptor.mesh_to_surface", 
-                    obj_path, args.grid_cell, 
+                    obj_path, args.scroll, 
                     "--gpus", str(args.gpus), 
                     "--r", str(args.r),
                     "--format", args.format,
-                    "--nr_workers", str(args.nr_workers),
                     "--prefetch_factor", str(args.prefetch_factor)
                 ]
         if args.display:
             command.append("--display")
+        if args.nr_workers is not None:
+            command.append("--nr_workers", str(args.nr_workers))
         # Running the command
         process_rendering = subprocess.Popen(command)
         process_rendering.wait()
