@@ -69,8 +69,14 @@ class MyPredictionWriter(BasePredictionWriter):
             # display progress cv2.imshow
             image = (self.surface_volume_np[self.r].astype(np.float32) / 65535)
             screen_y = 2560
+            screen_x = 1440
 
-            image = cv2.resize(image, ((screen_y * image.shape[1])//image.shape[0], screen_y))
+            if (screen_y * image.shape[1])//image.shape[0] > screen_x:
+                screen_y = (screen_x * image.shape[0])//image.shape[1]
+            else:
+                screen_x = (screen_y * image.shape[1])//image.shape[0]
+
+            image = cv2.resize(image, (screen_x, screen_y))
             image = image.T
             image = image[::-1, :]
             self.image = image
@@ -272,10 +278,18 @@ class MyPredictionWriter(BasePredictionWriter):
         
 class MeshDataset(Dataset):
     """Dataset class for rendering a mesh."""
-    def __init__(self, path, grid_cell_template, output_path=None, grid_size=500, r=32, max_side_triangle=10, max_workers=1, display=False):
+    def __init__(self, path, scroll, scroll_format="grid cells", output_path=None, grid_size=500, r=32, max_side_triangle=10, max_workers=1, display=False):
         """Initialize the dataset."""
+        self.grid_size = grid_size
         self.path = path
-        self.grid_cell_template = grid_cell_template
+        self.scroll_format = scroll_format
+        if self.scroll_format == "grid cells":
+            self.grid_template = scroll
+        if self.scroll_format == "zarr":
+            self.zarr = self.load_zarr(scroll)
+            # chunk_size = self.zarr.chunks
+            # print(f"Chunk size: {chunk_size}")
+            # self.grid_size = chunk_size[0]
         self.r = r+1
         self.max_side_triangle = max_side_triangle
         self.load_mesh(path)
@@ -283,10 +297,17 @@ class MeshDataset(Dataset):
         write_path = os.path.join(output_path, "layers")
         self.writer = MyPredictionWriter(write_path, self.image_size, r, max_workers=max_workers, display=display)
 
-        self.grid_size = grid_size
         self.grids_to_process = self.init_grids_to_process()
 
         self.adjust_triangle_sizes()
+
+    def load_zarr(self, dirname):
+        stack_array = zarr.open(dirname, mode="r")
+        print("Contents of the group:", list(stack_array.groups()))
+        print("Arrays in the group:", list(stack_array.arrays()))
+        stack_array = stack_array[0]
+        print(f"zarr shape: {stack_array.shape}")
+        return stack_array
 
     def parse_mtl_for_texture_filenames(self, mtl_filepath):
         texture_filenames = []
@@ -302,7 +323,10 @@ class MeshDataset(Dataset):
         mask = np.zeros(self.image_size[::-1], dtype=np.uint8)
         for triangle in self.uv:
             triangle = triangle.astype(np.int32)
-            cv2.fillPoly(mask, [triangle], 255)
+            try:
+                cv2.fillPoly(mask, [triangle], 255)
+            except:
+                pass
         mask = mask[::-1, :]
         cv2.imwrite(os.path.join(os.path.dirname(self.path), os.path.basename(self.path) + "_mask.png"), mask)
         
@@ -560,9 +584,17 @@ class MeshDataset(Dataset):
 
         return selected_triangles_mask
     
+    def load_grid(self, grid_index, uint8=False):
+        if self.scroll_format == "grid cells":
+            return self.load_grid_cell(grid_index, uint8)
+        elif self.scroll_format == "zarr":
+            return self.load_grid_zarr(grid_index, uint8)
+        else:
+            raise NotImplementedError(f"Scroll format {self.scroll_format} not yet implemented.")
+    
     def load_grid_cell(self, grid_index, uint8=False):
         grid_index_ = np.asarray(grid_index)[[1, 0, 2]] # swap axis for 'special' grid cell naming ...
-        path = self.grid_cell_template.format(grid_index_[0]+1, grid_index_[1]+1, grid_index_[2]+1)
+        path = self.grid_template.format(grid_index_[0]+1, grid_index_[1]+1, grid_index_[2]+1)
 
         # Check if the file exists
         if not os.path.exists(path):
@@ -574,7 +606,22 @@ class MeshDataset(Dataset):
             grid_cell = tif.asarray()
 
         if uint8:
-            grid_cell = np.uint8(grid_cell//256)
+            grid_cell = np.uint8(grid_cell//255)
+        return grid_cell
+    
+    def load_grid_zarr(self, grid_index, uint8=False):
+        # Calculate indices for zarr indexing
+        grid_index_ = np.asarray(grid_index)[[2, 1, 0]] # swap axis for zar indexing. z x y
+        grid_start = grid_index_ * self.grid_size
+        grid_end = grid_start + self.grid_size
+        grid_end = [min(grid_end[i], self.zarr.shape[i]) for i in range(3)]
+        # copy data into grid size block
+        grid_cell = np.zeros((self.grid_size, self.grid_size, self.grid_size), dtype=np.uint16)
+        zarr_grid = self.zarr[grid_start[0]:grid_end[0], grid_start[1]:grid_end[1], grid_start[2]:grid_end[2]]
+        grid_cell[:zarr_grid.shape[0], :zarr_grid.shape[1], :zarr_grid.shape[2]] = zarr_grid
+
+        if uint8:
+            grid_cell = np.uint8(grid_cell//255)
         return grid_cell
     
     def __len__(self):
@@ -590,7 +637,7 @@ class MeshDataset(Dataset):
         uv = self.uv[triangles_mask]
 
         # load grid cell from disk
-        grid_cell = self.load_grid_cell(grid_index)
+        grid_cell = self.load_grid(grid_index)
         if grid_cell is None:
             return None, None, None, None, None
         grid_cell = grid_cell.astype(np.float32)
@@ -829,7 +876,7 @@ def custom_collate_fn(batch):
     except:
         return None, None, None, None, None, None
     
-def ppm_and_texture(obj_path, grid_cell_path, output_path=None, grid_size=500, gpus=1, batch_size=1, r=32, format='jpg', max_side_triangle: int = 10, display=False, nr_workers=None, prefetch_factor=2):
+def ppm_and_texture(obj_path, scroll, output_path=None, grid_size=500, gpus=1, batch_size=1, r=32, format='jpg', max_side_triangle: int = 10, display=False, nr_workers=None, prefetch_factor=2):
     # Number of workers
     num_threads = multiprocessing.cpu_count() // int(1.5 * int(gpus))
     num_treads_for_gpus = 12
@@ -843,11 +890,17 @@ def ppm_and_texture(obj_path, grid_cell_path, output_path=None, grid_size=500, g
         num_workers = nr_workers
         max_workers = nr_workers
 
-    # Template for the grid cell files
-    grid_cell_template = os.path.join(grid_cell_path, "cell_yxz_{:03}_{:03}_{:03}.tif")
+    # get scroll format
+    is_zarr = scroll.endswith(".zarr")
+    if is_zarr:
+        scroll_format = "zarr"
+    else:
+        scroll_format = "grid cells"
+        # Template for the grid cell files
+        scroll = os.path.join(scroll, "cell_yxz_{:03}_{:03}_{:03}.tif")
 
     # Initialize the dataset and dataloader
-    dataset = MeshDataset(obj_path, grid_cell_template, output_path=output_path, grid_size=grid_size, r=r, max_side_triangle=max_side_triangle, max_workers=max_workers, display=display)
+    dataset = MeshDataset(obj_path, scroll, scroll_format=scroll_format, output_path=output_path, grid_size=grid_size, r=r, max_side_triangle=max_side_triangle, max_workers=max_workers, display=display)
     dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=custom_collate_fn, shuffle=False, num_workers=num_workers, prefetch_factor=prefetch_factor)
     model = PPMAndTextureModel(r=r, max_side_triangle=max_side_triangle)
     
@@ -865,7 +918,7 @@ def ppm_and_texture(obj_path, grid_cell_path, output_path=None, grid_size=500, g
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('obj', type=str)
-    parser.add_argument('grid_cell', type=str)
+    parser.add_argument('scroll', type=str, help="Path to the grid cells or zarr file.")
     parser.add_argument('--output_path', type=str, default=None, help="Output folder path that shall contain the layers folder.")
     parser.add_argument('--gpus', type=int, default=1)
     parser.add_argument('--r', type=int, default=32)
@@ -880,4 +933,4 @@ if __name__ == '__main__':
     if args.display:
         print("[INFO]: Displaying the rendering image slows down the rendering process by about 20%.")
 
-    ppm_and_texture(args.obj, gpus=args.gpus, grid_cell_path=args.grid_cell, output_path=args.output_path, r=args.r, format=args.format, max_side_triangle=args.max_side_triangle, display=args.display, nr_workers=args.nr_workers, prefetch_factor=args.prefetch_factor)
+    ppm_and_texture(args.obj, gpus=args.gpus, scroll=args.scroll, output_path=args.output_path, r=args.r, format=args.format, max_side_triangle=args.max_side_triangle, display=args.display, nr_workers=args.nr_workers, prefetch_factor=args.prefetch_factor)
