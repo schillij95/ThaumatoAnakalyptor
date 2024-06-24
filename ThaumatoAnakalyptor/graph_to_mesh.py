@@ -123,9 +123,6 @@ def compute_means_adjacent(adjacent_ts, adjacent_normals, winding_direction):
     def calculate_means(ts_lists):
         res = []
         for ts in ts_lists:
-            # for t in ts:
-            #     if len(t) > 0:
-            #         print(f"t: {t}")
             res_ = [np.mean(t) if len(t) > 0 else None for t in ts]
             res.append(res_)
         return res
@@ -166,7 +163,6 @@ def compute_means_adjacent(adjacent_ts, adjacent_normals, winding_direction):
         for e, t in enumerate(ts):
             filtered_normals = [t_normals_dict_list[i][e][t_] for t_ in t]
             normals_means[i].append(np.mean(filtered_normals, axis=0) if len(filtered_normals) > 0 else None)
-    return t_means, normals_means
 
     # Function to refine means based on adjacent means
     def refine_means(t_means, fixed, fixed_adjacent_ts):
@@ -279,9 +275,6 @@ def compute_means_adjacent(adjacent_ts, adjacent_normals, winding_direction):
                 count_fixed += 1
                 last_t = t_means[i][u]
 
-    # print(f"Deleted {count_wrong} wrong t values.")
-    # Debug output showing the number of fixed t values and the total numbers of t values
-    # print_none_vs_means(t_means)
     return t_means, normals_means 
 
 class WalkToSheet():
@@ -373,10 +366,6 @@ class WalkToSheet():
                 i += 1
             else:
                 i += index_dif                  
-                    
-        # for i in range(len(angle_vector)):
-        #     if np.allclose(angle_vector[i], vector):
-        #         indices.append(i)
 
         # Add to dictionary
         angle_vector_indices_dp[tuple(vector)] = indices
@@ -386,9 +375,6 @@ class WalkToSheet():
     def calculate_means(self, ts_lists):
         res = []
         for ts in ts_lists:
-            # for t in ts:
-            #     if len(t) > 0:
-            #         print(f"t: {t}")
             res_ = [np.mean(t) if len(t) > 0 else None for t in ts]
             res.append(res_)
         return res    
@@ -549,24 +535,24 @@ class WalkToSheet():
                     fixed_points[j][z] = False
 
         # Check interpolated
-        # for i in range(len(interpolated_ts)):
-        #     curve_angle_vector = angle_vector[i]
-        #     # get all indices with the same angle vector
-        #     same_vector_indices = self.extract_all_same_vector(angle_vector, curve_angle_vector)
-        #     i_pos_in_same_vector = same_vector_indices.index(i)
-        #     for j in range(len(interpolated_ts[i])):
-        #         if interpolated_ts[i][j] is None:
-        #             print(f"Interpolated ts is None at {i}, {j}")
-        #         if winding_direction:
-        #             if i_pos_in_same_vector > 0 and interpolated_ts[i][j] >= interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]:
-        #                 print(f"low side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not >= {interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]}")
-        #             if i_pos_in_same_vector < len(same_vector_indices) - 1 and interpolated_ts[i][j] <= interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]:
-        #                 print(f"high side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not <= {interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]}")
-        #         else:
-        #             if i_pos_in_same_vector > 0 and interpolated_ts[i][j] <= interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]:
-        #                 print(f"low side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not <= {interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]}")
-        #             if i_pos_in_same_vector < len(same_vector_indices) - 1 and interpolated_ts[i][j] >= interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]:
-        #                 print(f"high side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not >= {interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]}")
+        for i in range(len(interpolated_ts)):
+            curve_angle_vector = angle_vector[i]
+            # get all indices with the same angle vector
+            same_vector_indices = self.extract_all_same_vector(angle_vector, curve_angle_vector)
+            i_pos_in_same_vector = same_vector_indices.index(i)
+            for j in range(len(interpolated_ts[i])):
+                if interpolated_ts[i][j] is None:
+                    print(f"Interpolated ts is None at {i}, {j}")
+                if winding_direction:
+                    if i_pos_in_same_vector > 0 and interpolated_ts[i][j] >= interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]:
+                        print(f"low side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not >= {interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]}")
+                    if i_pos_in_same_vector < len(same_vector_indices) - 1 and interpolated_ts[i][j] <= interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]:
+                        print(f"high side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not <= {interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]}")
+                else:
+                    if i_pos_in_same_vector > 0 and interpolated_ts[i][j] <= interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]:
+                        print(f"low side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not <= {interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]}")
+                    if i_pos_in_same_vector < len(same_vector_indices) - 1 and interpolated_ts[i][j] >= interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]:
+                        print(f"high side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not >= {interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]}")
 
         return interpolated_ts, interpolated_normals, fixed_points
     
@@ -1135,7 +1121,7 @@ class WalkToSheet():
         
         print("Using Cpp rolled_ordered_pointset")
         # Set to false to load precomputed partial results during development
-        fresh_start = False
+        fresh_start = True
         if fresh_start:
             result = pointcloud_processing.create_ordered_pointset(points, normals, self.graph.umbilicus_data, angleStep=float(angle_step), z_spacing=int(z_spacing), max_eucledian_distance=20) # named parameters for mesh detail level: float angleStep, int z_spacing, float max_eucledian_distance, bool verbose
             # save result as pkl
@@ -1182,7 +1168,6 @@ class WalkToSheet():
             neighbours_dict = self.deduct_ordered_pointset_neighbours(interpolated_ts, angle_vector, winding_direction)
 
             # Optimize the full pointset for smooth surface with best guesses for interpolated t values
-            # interpolated_ts = self.optimize_adjacent(interpolated_ts, neighbours_dict, fixed_points, learning_rate=0.2)
             interpolated_ts = self.optimize_adjacent_cpp(interpolated_ts, neighbours_dict, fixed_points, 
                                                         learning_rate=0.2, iterations=9, error_val_d=0.0001, unfix_factor=2.5,
                                                         verbose=True)
@@ -1398,62 +1383,58 @@ class WalkToSheet():
     def unroll(self, debug=False):
         mesh_path = os.path.join(self.save_path, "mesh.obj")
 
-        # # Set to false to load precomputed partial results during development
-        # start_fresh = False
-        # if start_fresh: 
-        #     # Set to false to load precomputed partial results during development
-        #     start_fresh_build_points = True
-        #     if start_fresh_build_points:
-        #         # get points
-        #         points, normals, colors = self.build_points()
+        # Set to false to load precomputed partial results during development
+        start_fresh = True
+        if start_fresh: 
+            # Set to false to load precomputed partial results during development
+            start_fresh_build_points = True
+            if start_fresh_build_points:
+                # get points
+                points, normals, colors = self.build_points()
 
-        #         # Make directory if it doesn't exist
-        #         os.makedirs(self.save_path, exist_ok=True)
-        #         # Save as npz
-        #         with open(os.path.join(self.save_path, "points.npz"), 'wb') as f:
-        #             np.savez(f, points=points, normals=normals, colors=colors)
-        #     else:
-        #         # Open the npz file
-        #         with open(os.path.join(self.save_path, "points.npz"), 'rb') as f:
-        #             npzfile = np.load(f)
-        #             points = npzfile['points']
-        #             normals = npzfile['normals']
-        #             colors = npzfile['colors']
+                # Make directory if it doesn't exist
+                os.makedirs(self.save_path, exist_ok=True)
+                # Save as npz
+                with open(os.path.join(self.save_path, "points.npz"), 'wb') as f:
+                    np.savez(f, points=points, normals=normals, colors=colors)
+            else:
+                # Open the npz file
+                with open(os.path.join(self.save_path, "points.npz"), 'rb') as f:
+                    npzfile = np.load(f)
+                    points = npzfile['points']
+                    normals = npzfile['normals']
+                    colors = npzfile['colors']
 
-        #     points_originals_selected = points
-        #     normals_originals_selected = normals
+            points_originals_selected = points
+            normals_originals_selected = normals
 
-        #     # Save as npz
-        #     with open(os.path.join(self.save_path, "points_selected.npz"), 'wb') as f:
-        #         np.savez(f, points=points_originals_selected, normals=normals_originals_selected)
-        # else:
-        #     load_points = False
-        #     if load_points:
-        #         # Open the npz file
-        #         with open(os.path.join(self.save_path, "points_selected.npz"), 'rb') as f:
-        #             npzfile = np.load(f)
-        #             points_originals_selected = npzfile['points']
-        #             normals_originals_selected = npzfile['normals']
-        #         print(f"Shape of points_originals_selected: {points_originals_selected.shape}")
-        #     else:
-        #         points_originals_selected = None
-        #         normals_originals_selected = None
+            # Save as npz
+            with open(os.path.join(self.save_path, "points_selected.npz"), 'wb') as f:
+                np.savez(f, points=points_originals_selected, normals=normals_originals_selected)
+        else:
+            load_points = True
+            if load_points:
+                # Open the npz file
+                with open(os.path.join(self.save_path, "points_selected.npz"), 'rb') as f:
+                    npzfile = np.load(f)
+                    points_originals_selected = npzfile['points']
+                    normals_originals_selected = npzfile['normals']
+                print(f"Shape of points_originals_selected: {points_originals_selected.shape}")
+            else:
+                points_originals_selected = None
+                normals_originals_selected = None
 
-        # pointset_ply_path = os.path.join(self.save_path, "ordered_pointset.ply")
-        # # get nodes
-        # ordered_pointsets = self.rolled_ordered_pointset(points_originals_selected, normals_originals_selected, debug=debug)
+        pointset_ply_path = os.path.join(self.save_path, "ordered_pointset.ply")
+        # get nodes
+        ordered_pointsets = self.rolled_ordered_pointset(points_originals_selected, normals_originals_selected, debug=debug)
 
-        # self.pointcloud_from_ordered_pointset(ordered_pointsets, pointset_ply_path)
+        self.pointcloud_from_ordered_pointset(ordered_pointsets, pointset_ply_path)
 
-        # mesh, uv_image = self.mesh_from_ordered_pointset(ordered_pointsets)
+        mesh, uv_image = self.mesh_from_ordered_pointset(ordered_pointsets)
 
-        # self.save_mesh(mesh, uv_image, mesh_path)
+        self.save_mesh(mesh, uv_image, mesh_path)
 
         split_mesh_paths = self.split(mesh_path, split_width=self.split_width, fresh_start=False)
-
-        # # Flatten mesh
-        # for split_mesh_path in tqdm(split_mesh_paths, desc="Flattening meshes"):
-        #     flatten(self.save_path, split_mesh_path)
 
         # Flatten mesh
         args = [(self.save_path, split_mesh_path) for split_mesh_path in split_mesh_paths]
@@ -1475,8 +1456,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     graph_path = os.path.join(os.path.dirname(args.path), args.graph)
-    # graph = load_graph(graph_path)
-    graph = None
+    graph = load_graph(graph_path)
+    # graph = None
     reference_path = graph_path.replace("evolved_graph", "subgraph")
     start_point = args.start_point
     scale_factor = args.scale_factor

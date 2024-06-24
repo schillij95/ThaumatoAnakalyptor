@@ -832,18 +832,6 @@ bool comp_lower_bound(const std::vector<float>& pt, float value) {
     return pt[3] < value;
 }
 
-// std::pair<int, int> pointsAtWindingAngle(const std::vector<std::vector<float>>& points, float windingAngle, float maxAngleDiff = 30) {
-//     // Find the start and end indices of points within the maxAngleDiff range
-//     auto startIter = std::lower_bound(points.begin(), points.end(), windingAngle - maxAngleDiff, comp_lower_bound);
-//     auto endIter = std::lower_bound(points.begin(), points.end(), windingAngle + maxAngleDiff, comp_lower_bound);
-
-//     // Calculate the indices from iterators
-//     int startIndex = std::distance(points.begin(), startIter);
-//     int endIndex = std::distance(points.begin(), endIter);
-
-//     return {startIndex, endIndex};
-// }
-
 std::pair<size_t, size_t> pointsAtWindingAngle(const std::vector<std::vector<float>>& points, float windingAngle, size_t last_start_index, size_t last_end_index, float maxAngleDiff = 30) {
     // Find the start and end indices of points within the maxAngleDiff range
     size_t startIndex = last_start_index;
@@ -962,11 +950,6 @@ std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<std::vector<
                 valid_normals.push_back(sorted_normals[j]);
                 current_number_closest_points++;
             }
-            // else {
-            //     if (sorted_distances[j] < max_eucledian_distance) {
-            //         std::cout << "Distance: " << sorted_distances[j] << " ts: " << sorted_ts[j] << std::endl;
-            //     }
-            // }
             if (current_number_closest_points >= max_number_closest_points) {
                 break;
             }
@@ -993,10 +976,6 @@ std::tuple<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<s
 
     // Find the start and end indices of points within the specified winding angle range
     auto [startIndex, endIndex] = pointsAtWindingAngle(points, windingAngle, last_start_index, last_end_index);
-    // if (startIndex == endIndex) {
-    //     auto result_all = std::make_tuple(result, startIndex, endIndex);
-    //     return result_all;
-    // }
 
     // Extract the points and normals within the specified index range
     std::vector<std::vector<float>> extractedPoints(endIndex - startIndex);
@@ -1162,7 +1141,6 @@ private:
                 angleEnd = maxWind;
             }
             size_t startIndex = resultIndex;  // Assign the starting index for results for each thread
-            // threads.push_back(std::thread(workerFunction, std::cref(points), std::cref(normals), std::cref(umbilicus_points), std::cref(zPositions), angleStart, angleEnd, angleStep, max_eucledian_distance, std::ref(results), startIndex)); // non-class variant
             threads.push_back(std::thread([this, &points, &normals, &umbilicus_points, &zPositions, angleStart, angleEnd, angleStep, max_eucledian_distance, &results, startIndex]() {
                 this->workerFunction(points, normals, umbilicus_points, zPositions, angleStart, angleEnd, angleStep, max_eucledian_distance, results, startIndex);
             }));
@@ -1270,7 +1248,6 @@ public:
         std::cout << "Optimizing ordered pointset" << std::endl;
         // Iterate over the number of iterations
         for (size_t iter = 0; iter < iterations; ++iter) {
-            // std::cout << "Iteration: " << (iter + 1) << "/" << iterations << std::endl;
             // Progress tracking
             {
                 std::lock_guard<std::mutex> lock(mutex_);

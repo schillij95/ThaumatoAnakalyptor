@@ -2623,7 +2623,7 @@ class RandomWalkSolver:
         # self.graph.save_graph(path.replace("blocks", "graph_RW_solved") + ".pkl")
         print(f"\033[94m[ThaumatoAnakalyptor]:\033[0m Saved")
 
-def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_translation=False, stop_event=None, toy_problem=False):
+def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_translation=False, stop_event=None, toy_problem=False, update_graph=False):
 
     umbilicus_path = os.path.dirname(path) + "/umbilicus.txt"
     start_block, patch_id = find_starting_patch([start_point], path)
@@ -2656,9 +2656,8 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
             # save np
             np.save(path.replace("blocks", "graph_RW") + "_nodes_cpp_" + str(i) + ".npy", res[i])
         print("Saved cpp translation.")
-        
+    
     # Graph generation area. CREATE subgraph or LOAD graph
-    update_graph = False
     if update_graph:
         scroll_graph = load_graph(recompute_path)
         scroll_graph.set_overlapp_threshold(overlapp_threshold)
@@ -2730,7 +2729,7 @@ def random_walks():
     compute_cpp_translation = False
     
     # Create an argument parser
-    parser = argparse.ArgumentParser(description='Cut out ThaumatoAnakalyptor Papyrus Sheet')
+    parser = argparse.ArgumentParser(description='Cut out ThaumatoAnakalyptor Papyrus Sheet. TAKE CARE TO SET THE "winding_direction" CORRECTLY!')
     parser.add_argument('--path', type=str, help='Papyrus instance patch path (containing .tar)', default=path)
     parser.add_argument('--recompute', type=int,help='Recompute graph', default=recompute)
     parser.add_argument('--print_scores', type=bool,help='Print scores of patches for sheet', default=overlapp_threshold["print_scores"])
@@ -2739,7 +2738,7 @@ def random_walks():
     parser.add_argument('--min_prediction_threshold', type=float,help='Min prediction threshold to add patches to sheet', default=overlapp_threshold["min_prediction_threshold"])
     parser.add_argument('--final_score_min', type=float,help='Final score min threshold to add patches to sheet', default=overlapp_threshold["final_score_min"])
     parser.add_argument('--rounddown_best_score', type=float,help='Pick best score threshold to round down to zero from. Combats segmentation speed slowdown towards the end of segmentation.', default=overlapp_threshold["rounddown_best_score"])
-    parser.add_argument('--winding_direction', type=int,help='Winding direction of sheet in scroll scan', default=overlapp_threshold["winding_direction"])
+    parser.add_argument('--winding_direction', type=int,help='Winding direction of sheet in scroll scan. Examples: SCroll 1: "-1", Scroll 3: "1"', default=overlapp_threshold["winding_direction"])
     parser.add_argument('--sheet_z_range', type=int, nargs=2,help='Z range of segmentation', default=[overlapp_threshold["sheet_z_range"][0], overlapp_threshold["sheet_z_range"][1]])
     parser.add_argument('--sheet_k_range', type=int, nargs=2,help='Angle range (as k 1k = 360 deg, k is int) of the sheet winding for segmentation', default=[overlapp_threshold["sheet_k_range"][0], overlapp_threshold["sheet_k_range"][1]])
     parser.add_argument('--starting_point', type=int, nargs=3,help='Starting point for a new segmentation', default=start_point)
@@ -2758,6 +2757,7 @@ def random_walks():
     parser.add_argument('--walk_aggregation_max_current', type=int,help=f'Maximum number of random walks to aggregate before updating the graph. Default is {overlapp_threshold["walk_aggregation_max_current"]}.', default=int(overlapp_threshold["walk_aggregation_max_current"]))
     parser.add_argument('--pyramid_up_nr_average', type=int,help=f'Number of random walks to aggregate per landmark before walking up the graph. Default is {overlapp_threshold["pyramid_up_nr_average"]}.', default=int(overlapp_threshold["pyramid_up_nr_average"]))
     parser.add_argument('--toy_problem', help='Create toy subgraph for development', action='store_true')
+    parser.add_argument('--update_graph', help='Update graph', action='store_true')
     parser.add_argument('--create_graph', help='Create graph', action='store_true')
 
     # Take arguments back over
@@ -2784,10 +2784,6 @@ def random_walks():
     min_steps = args.min_steps
     max_nr_walks = args.max_nr_walks
     min_end_steps = args.min_end_steps
-    # if args.max_unchanged_walks != max_unchanged_walks:
-    #     max_unchanged_walks = args.max_unchanged_walks
-    # else:
-    #     max_unchanged_walks = 30 * max_nr_walks
     overlapp_threshold["volume_min_certainty_total_percentage"] = args.min_certainty_p
     overlapp_threshold["max_umbilicus_difference"] = args.max_umbilicus_dif
     overlapp_threshold["walk_aggregation_threshold"] = args.walk_aggregation_threshold
@@ -2816,7 +2812,7 @@ def random_walks():
         scroll_graph.save_graph(save_path.replace("blocks", "graph_RW_solved") + ".pkl")
     else:
         # Compute
-        compute(overlapp_threshold=overlapp_threshold, start_point=start_point, path=path, recompute=recompute, compute_cpp_translation=compute_cpp_translation, toy_problem=args.toy_problem)
+        compute(overlapp_threshold=overlapp_threshold, start_point=start_point, path=path, recompute=recompute, compute_cpp_translation=compute_cpp_translation, toy_problem=args.toy_problem, update_graph=args.update_graph)
 
 if __name__ == '__main__':
     random_walks()

@@ -358,16 +358,6 @@ class Graph:
                 unused_nodes.append(node)
         self.remove_nodes_edges(unused_nodes)
         self.compute_node_edges()
-        
-    # def update_winding_angles(self, nodes, ks, update_winding_angles=False):
-    #     ks_min = np.min(ks)
-    #     ks = np.array(ks) - ks_min
-    #     # Update winding angles
-    #     for i, node in enumerate(nodes):
-    #         node = tuple(node)
-    #         self.nodes[node]['assigned_k'] = ks[i]
-    #         if update_winding_angles:
-    #             self.nodes[node]['winding_angle'] = - ks[i]*360 + self.nodes[node]['winding_angle']
 
     def update_winding_angles(self, nodes, ks, update_winding_angles=False):
         nodes = [tuple(int(node[i]) for i in range(4)) for node in nodes]
@@ -1348,9 +1338,7 @@ class RandomWalkSolver:
         if not continue_walks:
             volume_dict = {starting_node[:3]: {starting_node[3]: 0}}
             nodes = np.array([starting_node], dtype=int)
-            nodes_neighbours_count = np.array([0], dtype=int)
             picked_nrs = np.array([0], dtype=float)
-            pick_prob = np.array([0.0], dtype=float)
             ks = np.array([0])
             old_nodes = None
             old_ks = None
@@ -1378,47 +1366,6 @@ class RandomWalkSolver:
                     volume_dict[node[:3]] = {}
                 volume_dict[node[:3]][node[3]] = i
             picked_nrs = np.zeros(len(nodes))
-            pick_prob = np.zeros(len(nodes))
-            nodes_neighbours_count = np.zeros(len(nodes))
-            # update neighbours count for all nodes
-            for index_node in range(len(nodes)):
-                node = nodes[index_node]
-                for edge in self.graph.nodes[tuple(node)]['edges']:
-                    neighbour_node = edge[0] if edge[0] != tuple(node) else edge[1]
-                    if neighbour_node[:3] in volume_dict and neighbour_node[3] in volume_dict[neighbour_node[:3]]:
-                        index_node_neighbour = volume_dict[neighbour_node[:3]][neighbour_node[3]]
-                        nodes_neighbours_count[index_node_neighbour] += 1
-                        nodes_neighbours_count[index_node] += 1
-
-        # # update selected graph with nodes
-        # # Add new nodes to selected_graph with assigned winding number
-        # print(f"Assigning {len(nodes)} nodes to the selected graph.")
-        # for i in range(len(nodes)):
-        #     node_i = tuple(nodes[i])
-        #     selected_graph.add_node(node_i, self.graph.nodes[node_i]['centroid'], winding_angle=self.graph.nodes[node_i]['winding_angle'])
-        #     # Add assigned_k to the node
-        #     selected_graph.nodes[node_i]['assigned_k'] = ks[i]
-        #     # Add all propper edges to the selected_graph
-        #     for edge in self.graph.nodes[node_i]['edges']:
-        #         edge_ks = self.graph.get_edge_ks(node_i, edge[0] if edge[0] != node_i else edge[1])
-        #         n1, n2 = edge[0], edge[1]
-        #         if (not n1 in selected_graph.nodes) or (not n2 in selected_graph.nodes):
-        #             continue
-        #         n1_k, n2_k = selected_graph.nodes[n1]['assigned_k'], selected_graph.nodes[n2]['assigned_k']
-        #         for edge_k in edge_ks:
-        #             bad_edge = self.graph.edges[edge][edge_k]['bad_edge']
-        #             if bad_edge:
-        #                 continue
-        #             same_edge = self.graph.edges[edge][edge_k]['same_block']
-        #             if same_edge:
-        #                 continue
-        #             if n2_k - n1_k == edge_k:
-        #                 selected_graph.add_edge(n1, n2, self.graph.edges[edge][edge_k]['certainty'], edge_k, self.graph.edges[edge][edge_k]['same_block'])
-
-        # selected_graph.compute_node_edges()
-
-        # # update neighbours count for new nodes
-        # neighbours_count_bfs = selected_graph.update_neighbours_count(nodes, nodes, bfs_depth=3)
 
         nr_walks = 0
         nr_walks_total = 0
@@ -1432,8 +1379,7 @@ class RandomWalkSolver:
         # while nr_walks < max_nr_walks or max_nr_walks < 0:
         while max_nr_walks > 0 and (stop_event is None or not stop_event.is_set()):
             time_start = time.time()
-            sn, sk = self.pick_start_node(nodes, nodes_neighbours_count, ks, picked_nrs, pick_prob)
-            # sn, sk = self.pick_start_node_bfs(nodes, ks, picked_nrs, neighbours_count_bfs)
+            sn, sk = self.pick_start_node(nodes, ks, picked_nrs)
             time_pick += time.time() - time_start
             time_start = time.time()
             walk, k = self.random_walk(sn, sk, volume_dict, nodes, ks, max_steps=max_steps, max_tries=max_tries, min_steps=min_steps)
@@ -1507,53 +1453,11 @@ class RandomWalkSolver:
                     nodes = np.concatenate((nodes, np.array(new_nodes)))
                     ks = np.concatenate((ks, np.array(new_ks)))
                     picked_nrs = np.concatenate((picked_nrs, np.zeros(len(new_nodes))))
-                    pick_prob = np.concatenate((pick_prob, np.zeros(len(new_nodes))))
-                    nodes_neighbours_count = np.concatenate((nodes_neighbours_count, np.zeros(len(new_nodes))))
-
-                    # # Add new nodes to selected_graph with assigned winding number
-                    # for i in range(len(new_nodes)):
-                    #     node_i = tuple(new_nodes[i])
-                    #     selected_graph.add_node(node_i, self.graph.nodes[node_i]['centroid'], winding_angle=self.graph.nodes[node_i]['winding_angle'])
-                    #     # Add assigned_k to the node
-                    #     selected_graph.nodes[node_i]['assigned_k'] = new_ks[i]
-                    #     # Add all propper edges to the selected_graph
-                    #     for edge in self.graph.nodes[node_i]['edges']:
-                    #         edge_ks = self.graph.get_edge_ks(edge[0], edge[1])
-                    #         n1, n2 = edge[0], edge[1]
-                    #         if (not n1 in selected_graph.nodes) or (not n2 in selected_graph.nodes): # one of the nodes of the edge is not in the graph
-                    #             continue
-                    #         n1_k, n2_k = selected_graph.nodes[n1]['assigned_k'], selected_graph.nodes[n2]['assigned_k']
-                    #         for edge_k in edge_ks:
-                    #             bad_edge = self.graph.edges[edge][edge_k]['bad_edge']
-                    #             if bad_edge:
-                    #                 continue
-                    #             same_edge = self.graph.edges[edge][edge_k]['same_block']
-                    #             if same_edge:
-                    #                 continue
-                    #             if n2_k - n1_k == edge_k:
-                    #                 selected_graph.add_edge(n1, n2, self.graph.edges[edge][edge_k]['certainty'], edge_k)
-                    #                 # print("Added edge", n1, n2, edge_k)
-                    
-                    # selected_graph.compute_node_edges(verbose=False)
-
-                    # # update neighbours count for new nodes
-                    # neighbours_count_bfs = selected_graph.update_neighbours_count(new_nodes, nodes, bfs_depth=3)
-
 
                 for new_index in range(len(new_nodes)):
                     if not new_nodes[new_index][:3] in volume_dict:
                         volume_dict[new_nodes[new_index][:3]] = {}
                     volume_dict[new_nodes[new_index][:3]][new_nodes[new_index][3]] = length_nodes + new_index
-                
-                # update neighbours count for new nodes
-                for index_new_node in range(len(new_nodes)):
-                    node = new_nodes[index_new_node]
-                    for edge in self.graph.nodes[node]['edges']:
-                        neighbour_node = edge[0] if edge[0] != node else edge[1]
-                        if neighbour_node[:3] in volume_dict and neighbour_node[3] in volume_dict[neighbour_node[:3]]:
-                            index_node = volume_dict[neighbour_node[:3]][neighbour_node[3]]
-                            nodes_neighbours_count[index_node] += 1
-                            nodes_neighbours_count[length_nodes + index_new_node] += 1
                 
             nr_walks_total += 1
             if nr_walks_total % (max_nr_walks * 2) == 0:
@@ -1962,38 +1866,13 @@ class RandomWalkSolver:
                 return False
         return True
     
-    def pick_start_node(self, nodes, nodes_neighbours_count, ks, picked_nrs, pick_prob):
+    def pick_start_node(self, nodes, ks, picked_nrs):
         mean_ = np.mean(picked_nrs)
         min_ = np.min(picked_nrs)
         min_mean_abs = mean_ - min_
         threshold = min_ + min_mean_abs * 0.25
         mask_threshold = picked_nrs <= threshold
         mask = mask_threshold
-        valid_indices = np.where(mask)[0]  # Get indices where mask is True
-
-        assert valid_indices.shape[0] > 0, "No nodes to pick from."
-
-        rand_index = np.random.choice(valid_indices)
-        node = nodes[rand_index]
-        k = ks[rand_index]
-        picked_nrs[rand_index] += 1
-        return node, k
-    
-    def pick_start_node_bfs(self, nodes, ks, picked_nrs, neighbours_count_bfs):
-        mean_count_bfs = np.mean(neighbours_count_bfs)
-        min_count_bfs = np.min(neighbours_count_bfs)
-        min_mean_abs_count_bfs = mean_count_bfs - min_count_bfs
-        threshold_count_bfs = min_count_bfs + min_mean_abs_count_bfs * 0.25
-        mask_count_bfs = neighbours_count_bfs <= threshold_count_bfs
-
-        mean_ = np.mean(picked_nrs[mask_count_bfs])
-        min_ = np.min(picked_nrs[mask_count_bfs])
-        min_mean_abs = mean_ - min_
-        threshold = min_ + min_mean_abs * 0.25
-        mask_threshold = picked_nrs <= threshold
-
-        mask = np.logical_and(mask_count_bfs, mask_threshold)
-
         valid_indices = np.where(mask)[0]  # Get indices where mask is True
 
         assert valid_indices.shape[0] > 0, "No nodes to pick from."
@@ -2015,7 +1894,7 @@ class RandomWalkSolver:
         # self.graph.save_graph(path.replace("blocks", "graph_RW_solved") + ".pkl")
         print(f"\033[94m[ThaumatoAnakalyptor]:\033[0m Saved")
 
-def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_translation=False, stop_event=None, toy_problem=False):
+def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_translation=False, stop_event=None, toy_problem=False, update_graph=False):
 
     umbilicus_path = os.path.dirname(path) + "/umbilicus.txt"
     start_block, patch_id = find_starting_patch([start_point], path)
@@ -2049,45 +1928,54 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
             np.save(path.replace("blocks", "graph_RW") + "_nodes_cpp_" + str(i) + ".npy", res[i])
         print("Saved cpp translation.")
         
-    solve_graph = True
-    if solve_graph:
+
+    # Graph generation area. CREATE subgraph or LOAD graph
+    if update_graph:
+        scroll_graph = load_graph(recompute_path)
+        scroll_graph.set_overlapp_threshold(overlapp_threshold)
+        scroll_graph.start_block, scroll_graph.patch_id = start_block, patch_id
+        # min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = 575, 775, 625, 825, 700, 900, None # 2x2x2 blocks with middle
+        # min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = 475, 875, 525, 925, 700, 900, None # 4x4x2 blocks with middle
+        min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = 475, 875, 525, 925, 600, 1000, None # 4x4x4 blocks with middle
+        # min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = None, None, None, None, 700, 900, None # all x all x 1 blocks with middle
+        subgraph = scroll_graph.extract_subgraph(min_z=min_z, max_z=max_z, umbilicus_max_distance=umbilicus_max_distance, add_same_block_edges=True, min_x=min_x, max_x=max_x, min_y=min_y, max_y=max_y)
+        subgraph.save_graph(save_path.replace("blocks", "subgraph") + ".pkl")
+        if toy_problem:
+            scroll_graph = subgraph
+    else:
         if toy_problem:
             scroll_graph = load_graph(save_path.replace("blocks", "subgraph") + ".pkl")
         else:
             scroll_graph = load_graph(recompute_path)
-        # scroll_graph = load_graph(recompute_path)
-        # scroll_graph = load_graph(save_path.replace("blocks", "subgraph") + ".pkl")
-        if overlapp_threshold["continue_walks"]:
-            nodes = np.load(save_path.replace("blocks", "graph_RW") + "_nodes.npy")
-            ks = np.load(save_path.replace("blocks", "graph_RW") + "_ks.npy")
-            # scroll_graph = load_graph(save_path.replace("blocks", "graph_RW_solved") + ".pkl")
-        else:
-            nodes = None
-            ks = None
-        scroll_graph.set_overlapp_threshold(overlapp_threshold)
-        scroll_graph.start_block, scroll_graph.patch_id = start_block, patch_id
-        # start_block, patch_id = scroll_graph.start_block, scroll_graph.patch_id
-        starting_node = tuple((*start_block, patch_id))
 
-        solver = RandomWalkSolver(scroll_graph, umbilicus_path)
-        solver.save_overlapp_threshold()
-        
-        # nodes, ks = solver.solve_(path=save_path, starting_node=starting_node, max_nr_walks=overlapp_threshold["max_nr_walks"], max_unchanged_walks=overlapp_threshold["max_unchanged_walks"], max_steps=overlapp_threshold["max_steps"], max_tries=overlapp_threshold["max_tries"], min_steps=overlapp_threshold["min_steps"], min_end_steps=overlapp_threshold["min_end_steps"], continue_walks=overlapp_threshold["continue_walks"], nodes=nodes, ks=ks, stop_event=stop_event)
-        nodes, ks = solver.solve_cpp(starting_node=starting_node)
-        
-        # Update the solved scroll graph with the nodes and ks. Remove unused nodes and update winding angles
-        scroll_graph.remove_unused_nodes(used_nodes=nodes)
-        scroll_graph.update_winding_angles(nodes, ks, update_winding_angles=True)
-
-        # save graph ks and nodes
-        np.save(save_path.replace("blocks", "graph_RW") + "_ks.npy", ks)
-        np.save(save_path.replace("blocks", "graph_RW") + "_nodes.npy", nodes)
-        scroll_graph.save_graph(save_path.replace("blocks", "graph_RW_solved") + ".pkl")
+    if overlapp_threshold["continue_walks"]:
+        nodes = np.load(save_path.replace("blocks", "graph_RW") + "_nodes.npy")
+        ks = np.load(save_path.replace("blocks", "graph_RW") + "_ks.npy")
     else:
-        ks = np.load(path.replace("blocks", "graph_RW") + "_ks.npy")
-        nodes = np.load(path.replace("blocks", "graph_RW") + "_nodes.npy")
-        scroll_graph = load_graph(path.replace("blocks", "graph_RW_solved") + ".pkl")
-        scroll_graph.overlapp_threshold = overlapp_threshold
+        nodes = None
+        ks = None
+    scroll_graph.set_overlapp_threshold(overlapp_threshold)
+    scroll_graph.start_block, scroll_graph.patch_id = start_block, patch_id
+    # start_block, patch_id = scroll_graph.start_block, scroll_graph.patch_id
+    starting_node = tuple((*start_block, patch_id))
+
+    solver = RandomWalkSolver(scroll_graph, umbilicus_path)
+    solver.save_overlapp_threshold()
+    
+    # # Python random walks
+    # nodes, ks = solver.solve_(path=save_path, starting_node=starting_node, max_nr_walks=overlapp_threshold["max_nr_walks"], max_unchanged_walks=overlapp_threshold["max_unchanged_walks"], max_steps=overlapp_threshold["max_steps"], max_tries=overlapp_threshold["max_tries"], min_steps=overlapp_threshold["min_steps"], min_end_steps=overlapp_threshold["min_end_steps"], continue_walks=overlapp_threshold["continue_walks"], nodes=nodes, ks=ks, stop_event=stop_event)
+    # C++ random walks
+    nodes, ks = solver.solve_cpp(starting_node=starting_node)
+    
+    # Update the solved scroll graph with the nodes and ks. Remove unused nodes and update winding angles
+    scroll_graph.remove_unused_nodes(used_nodes=nodes)
+    scroll_graph.update_winding_angles(nodes, ks, update_winding_angles=True)
+
+    # save graph ks and nodes
+    np.save(save_path.replace("blocks", "graph_RW") + "_ks.npy", ks)
+    np.save(save_path.replace("blocks", "graph_RW") + "_nodes.npy", nodes)
+    scroll_graph.save_graph(save_path.replace("blocks", "graph_RW_solved") + ".pkl")
+
 
 def random_walks():
     path = "/media/julian/SSD4TB/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks"
@@ -2104,7 +1992,7 @@ def random_walks():
                           "winding_angle_range": None, "multiple_instances_per_batch_factor": 1.0,
                           "epsilon": 1e-5, "angle_tolerance": 85, "max_threads": 30,
                           "min_points_winding_switch": 1000, "min_winding_switch_sheet_distance": 3, "max_winding_switch_sheet_distance": 10, "winding_switch_sheet_score_factor": 1.5, "winding_direction": 1.0,
-                          "enable_winding_switch": False, "max_same_block_jump_range": 3,
+                          "enable_winding_switch": True, "max_same_block_jump_range": 3,
                           "enable_winding_switch_postprocessing": False,
                           "surrounding_patches_size": 3, "max_sheet_clip_distance": 60, "sheet_z_range": (-5000, 400000), "sheet_k_range": (-1, 2), "volume_min_certainty_total_percentage": 0.0, "max_umbilicus_difference": 30,
                           "walk_aggregation_threshold": 100, "walk_aggregation_max_current": -1,
@@ -2118,13 +2006,12 @@ def random_walks():
     min_steps = 16
     max_tries = 6
     min_end_steps = 4
-    # max_unchanged_walks = 30 * max_nr_walks
-    max_unchanged_walks = 100 * max_nr_walks
+    max_unchanged_walks = 30 * max_nr_walks
     recompute = 0
     compute_cpp_translation = False
     
     # Create an argument parser
-    parser = argparse.ArgumentParser(description='Cut out ThaumatoAnakalyptor Papyrus Sheet')
+    parser = argparse.ArgumentParser(description='Cut out ThaumatoAnakalyptor Papyrus Sheet. TAKE CARE TO SET THE "winding_direction" CORRECTLY!')
     parser.add_argument('--path', type=str, help='Papyrus instance patch path (containing .tar)', default=path)
     parser.add_argument('--recompute', type=int,help='Recompute graph', default=recompute)
     parser.add_argument('--print_scores', type=bool,help='Print scores of patches for sheet', default=overlapp_threshold["print_scores"])
@@ -2151,6 +2038,8 @@ def random_walks():
     parser.add_argument('--walk_aggregation_threshold', type=int,help=f'Number of random walks to aggregate before updating the graph. Default is {overlapp_threshold["walk_aggregation_threshold"]}.', default=int(overlapp_threshold["walk_aggregation_threshold"]))
     parser.add_argument('--walk_aggregation_max_current', type=int,help=f'Maximum number of random walks to aggregate before updating the graph. Default is {overlapp_threshold["walk_aggregation_max_current"]}.', default=int(overlapp_threshold["walk_aggregation_max_current"]))
     parser.add_argument('--toy_problem', help='Create toy subgraph for development', action='store_true')
+    parser.add_argument('--update_graph', help='Update graph', action='store_true')
+    parser.add_argument('--create_graph', help='Create graph', action='store_true')
 
     # Take arguments back over
     args = parser.parse_args()
@@ -2176,10 +2065,6 @@ def random_walks():
     min_steps = args.min_steps
     max_nr_walks = args.max_nr_walks
     min_end_steps = args.min_end_steps
-    # if args.max_unchanged_walks != max_unchanged_walks:
-    #     max_unchanged_walks = args.max_unchanged_walks
-    # else:
-    #     max_unchanged_walks = 30 * max_nr_walks
     overlapp_threshold["volume_min_certainty_total_percentage"] = args.min_certainty_p
     overlapp_threshold["max_umbilicus_difference"] = args.max_umbilicus_dif
     overlapp_threshold["walk_aggregation_threshold"] = args.walk_aggregation_threshold
@@ -2192,9 +2077,22 @@ def random_walks():
     overlapp_threshold["min_steps"] = min_steps
     overlapp_threshold["min_end_steps"] = min_end_steps
 
+    if args.create_graph:
+        save_path = os.path.dirname(path) + f"/{start_point[0]}_{start_point[1]}_{start_point[2]}/" + path.split("/")[-1]
+        nodes = np.load(save_path.replace("blocks", "graph_RW") + "_nodes.npy")
+        ks = np.load(save_path.replace("blocks", "graph_RW") + "_ks.npy")
+        if args.toy_problem:
+            scroll_graph = load_graph(save_path.replace("blocks", "subgraph") + ".pkl")
+        else:
+            scroll_graph = load_graph(path.replace("blocks", "scroll_graph") + ".pkl")
 
-    # Compute
-    compute(overlapp_threshold=overlapp_threshold, start_point=start_point, path=path, recompute=recompute, compute_cpp_translation=compute_cpp_translation, toy_problem=args.toy_problem)
+         # Update the solved scroll graph with the nodes and ks. Remove unused nodes and update winding angles
+        scroll_graph.remove_unused_nodes(used_nodes=nodes)
+        scroll_graph.update_winding_angles(nodes, ks, update_winding_angles=True)
+        scroll_graph.save_graph(save_path.replace("blocks", "graph_RW_solved") + ".pkl")
+    else:
+        # Compute
+        compute(overlapp_threshold=overlapp_threshold, start_point=start_point, path=path, recompute=recompute, compute_cpp_translation=compute_cpp_translation, toy_problem=args.toy_problem, update_graph=args.update_graph)
 
 if __name__ == '__main__':
     random_walks()

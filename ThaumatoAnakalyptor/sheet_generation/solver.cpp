@@ -1870,52 +1870,6 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
     return {nodes, ks};
 }
 
-
-std::pair<std::vector<double>, std::vector<double>> process_array(py::array_t<double> input_array, int some_integer, bool some_boolean) {
-    // Example processing (to be replaced with actual logic)
-    // Assuming the input array is 2D, flattening it into 1D
-    py::buffer_info buf_info = input_array.request();
-    auto *ptr = static_cast<double *>(buf_info.ptr);
-
-    std::vector<double> output1, output2;
-
-    for (int i = 0; i < buf_info.shape[0]; i++) {
-        for (int j = 0; j < buf_info.shape[1]; j++) {
-            double val = ptr[i * buf_info.shape[1] + j];
-            std::cout << val << std::endl;
-            output1.push_back(val * some_integer); // Example operation
-            if (some_boolean) {
-                output2.push_back(val * 2); // Another example operation
-            }
-        }
-        std::cout << "New row" << std::endl;
-    }
-
-    return {output1, output2};
-}
-
-void loadOverlappThreshold(const std::string &filename) {
-    YAML::Node config = YAML::LoadFile(filename);
-
-    // Example of accessing a value
-    if (config["sample_ratio_score"]) {
-        float sampleRatioScore = config["sample_ratio_score"].as<float>();
-        std::cout << "sample_ratio_score: " << sampleRatioScore << std::endl;
-    }
-
-    // Load 'sheet_k_range' as a pair of integers
-    if (config["sheet_k_range"]) {
-        // Assuming 'sheet_k_range' is a sequence of two integers in the YAML file
-        std::pair<int, int> sheetKRange;
-        sheetKRange.first = config["sheet_k_range"][0].as<int>(); // First value
-        sheetKRange.second = config["sheet_k_range"][1].as<int>(); // Second value
-
-        std::cout << "sheet_k_range: (" << sheetKRange.first << ", " << sheetKRange.second << ")" << std::endl;
-    }
-
-    // Add code to load other parameters as needed
-}
-
 std::tuple<py::array_t<int>, py::array_t<int>, std::unordered_map<int, std::unordered_map<K, int>>> solveRandomWalk(
     std::vector<std::vector<int>> start_ids,
     std::vector<int> start_ks,

@@ -53,10 +53,6 @@ class Flatboi:
 
         self.original_uvs = np.array(self.original_uvs).reshape((-1, 3, 2))
         assert len(self.triangles) == len(self.original_uvs), f"Number of triangles and uvs do not match. {len(self.triangles)} != {len(self.original_uvs)}"
-        # filter_list = []
-        # for t in tqdm(self.triangles, desc="Filtering Triangles"):
-        #     filter_list.append(triangle_area(self.vertices[t[0]], self.vertices[t[1]], self.vertices[t[2]]) > area_cutoff)
-        # filter_list = [abs(triangle_area(self.vertices[t[0]], self.vertices[t[1]], self.vertices[t[2]])) > area_cutoff for t in self.triangles]
 
         args = [(self.vertices[t[0]], self.vertices[t[1]], self.vertices[t[2]], area_cutoff) for t in self.triangles]
         with multiprocessing.Pool(multiprocessing.cpu_count()) as pool:
@@ -92,8 +88,6 @@ class Flatboi:
 
         bc = np.zeros((bnd.shape[0],2), dtype=np.float64)
         for i in tqdm(range(bnd.shape[0])):
-            #bc[i] = conformal_flattening[bnd[i]]
-            #bc[i] = vertex_coord[bnd[i]]
             bc[i] = uva[bnd[i]]
 
         return bnd, bc, uva
@@ -139,13 +133,6 @@ class Flatboi:
         bnd_uv = np.zeros((bnd.shape[0], 2), dtype=np.float64)
         for i in range(bnd.shape[0]):
             bnd_uv[i] = uv[bnd[i]]
-
-        # arap = igl.ARAP(self.vertices, self.triangles, 2, bnd, energy_type=igl.ARAP_ENERGY_TYPE_ELEMENTS)
-        # print("ARAP")
-        # for i in range(3):
-        #     uv = arap.solve(bnd_uv, uv)
-        #     assert not np.any(np.isnan(uv))
-        #     assert not np.any(np.isinf(uv))
 
         return np.zeros((0, 1), dtype=np.int32), np.zeros((0,2), dtype=np.float64), uv
     
@@ -201,7 +188,6 @@ class Flatboi:
             if new_energy >= float("inf") or new_energy == float("nan") or np.isnan(new_energy) or np.isinf(new_energy):
                 converged = False
                 break
-                # raise ValueError("SLIM energy is infinite or NaN.")
             elif new_energy < temp_energy:
                 if abs(new_energy - temp_energy) < threshold:
                     converged = True
@@ -324,10 +310,9 @@ class Flatboi:
         min_x, min_y = np.min(uv, axis=0)
         shifted_coords = uv - np.array([min_x, min_y])
         max_x, max_y = np.max(shifted_coords, axis=0)
-        # Create a white image of the determined size
+        # Create a mask image of the determined size
         image_size = (int(round(max_y)) + 1, int(round(max_x)) + 1)
         print(f"Image size: {image_size}")
-        # white_image = np.ones((image_size[0], image_size[1]), dtype=np.uint16) * 65535
 
         mask = np.zeros((image_size[0], image_size[1]), dtype=np.uint8)
         triangles = [[shifted_coords[t_i] for t_i in t] for t in self.triangles]
@@ -339,9 +324,6 @@ class Flatboi:
                 pass
         mask = mask[::-1, :]
         cv2.imwrite(image_path, mask)
-
-        # # Save the grayscale image
-        # Image.fromarray(white_image, mode='L').save(image_path)
 
     def save_mtl(self):
         output_directory = os.path.dirname(self.output_obj)
