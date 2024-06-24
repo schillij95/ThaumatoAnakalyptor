@@ -217,8 +217,8 @@ def main(output_folder, input_mesh, scale_factor, cut_size, delauny):
     obj_paths = []
     # Save each cut piece and adjust the texture if necessary
     for i, (cut_mesh, cut_mesh_texture_size) in enumerate(cut_mesh_list):
-        start_point = input_mesh.split("/")[-2]
-        working_folder = f"working_{start_point}" + (f"_{i}" if i > 0 else "")
+        mesh_name = os.path.basename(input_mesh).split(".")[0]
+        working_folder = f"working_{mesh_name}" + (f"_{i}" if i > 0 else "")
         output_filename = os.path.join(output_folder, working_folder, f"{mesh_filename.split('.')[0]}.obj")
         save_cut(i, output_filename, cut_mesh, cut_mesh_texture_size)
         obj_paths.append(output_filename)

@@ -666,11 +666,16 @@ class ThaumatoAnakalyptor(QMainWindow):
         self.sheetKRangeEndField.setText("1")
         self.sheetZRangeStartField.setText("0")
         self.sheetZRangeEndField.setText("40000")
+        self.windingDirectionField.setText("1")
         self.minStepsField.setText("16")
         self.minEndStepsField.setText("4")
         self.maxNrWalksField.setText("30000")
         self.walkAggregationThresholdField.setText("5")
 
+    def showWindingDirectionInfo(self):
+        QMessageBox.information(self, "Winidng Direction Information",
+                                "Set the winding direction based on your Scrolls orientation. Scroll 1 is oriented with -1, Scroll 3 with 1.")
+        
     def addStitchSheetArea(self, box):
         label = QLabel("Stitch Sheet")
         box.add_widget(label)
@@ -684,6 +689,14 @@ class ThaumatoAnakalyptor(QMainWindow):
         # Sheet Z range fields
         self.addFieldWithLabel(box, "Sheet Z Range Start:", "Enter start for Z range", "sheetZRangeStartField")
         self.addFieldWithLabel(box, "Sheet Z Range End:", "Enter end for Z range", "sheetZRangeEndField")
+
+        # Winding direction field
+        # Create an info button
+        infoButton = QPushButton()
+        infoButton.setIcon(infoButton.style().standardIcon(QStyle.SP_MessageBoxInformation))
+        infoButton.clicked.connect(self.showWindingDirectionInfo)
+        box.add_widget(infoButton) 
+        self.addFieldWithLabel(box, "Winding Direction:", "Enter winding direction", "windingDirectionField")
 
         # Other parameter fields
         self.addFieldWithLabel(box, "Min Steps:", "Enter minimum steps", "minStepsField")
@@ -723,6 +736,42 @@ class ThaumatoAnakalyptor(QMainWindow):
         # Emit the signal on completion
         self.stitchSheetComputationDone.emit()
 
+    def stitchSheetScriptComputation(self, overlapp_threshold, start_point, path, recompute, stop_event):
+        try:
+
+            command = [
+                "python3", "-m", "ThaumatoAnakalyptor.Random_Walks",
+                "--path", path,
+                "--recompute", str(int(recompute)),
+                "--starting_point", str(start_point[0]), str(start_point[1]), str(start_point[2]),
+                "--winding_direction", str(int(overlapp_threshold["winding_direction"])),
+                "--sheet_z_range", str(int(overlapp_threshold["sheet_z_range"][0])), str(int(overlapp_threshold["sheet_z_range"][1])),
+                "--sheet_k_range", str(int(overlapp_threshold["sheet_k_range"][0])), str(int(overlapp_threshold["sheet_k_range"][1])),
+                "--walk_aggregation_threshold", str(overlapp_threshold["walk_aggregation_threshold"]),
+                "--max_nr_walks", str(overlapp_threshold["max_nr_walks"]),
+                "--max_unchanged_walks", str(overlapp_threshold["max_unchanged_walks"]),
+                "--continue_segmentation", str(int(overlapp_threshold["continue_walks"])),
+                "--min_steps", str(overlapp_threshold["min_steps"]),
+                "--min_end_steps", str(overlapp_threshold["min_end_steps"])
+            ]
+            
+            def run():
+                self.process_Random_Walks = subprocess.Popen(command)
+                self.process_Random_Walks.wait()
+                self.stitchSheetComputationDone.emit()  # Emit the signal on completion
+
+            # Start the monitoring thread
+            thread = threading.Thread(target=run)
+
+            thread.start()
+            self.computeStitchSheetButton.setEnabled(False)
+            self.stopStitchSheetButton.setEnabled(True)
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to start the script: {e}")
+            self.computeStitchSheetButton.setEnabled(True)
+            self.stopStitchSheetButton.setEnabled(False)
+
+
     def computeStitchSheet(self):
         try:
             # Fetching values from GUI fields
@@ -730,6 +779,7 @@ class ThaumatoAnakalyptor(QMainWindow):
             start_point = [int(self.xField.text()), int(self.yField.text()), int(self.zField.text())]
             sheet_k_range = (int(self.sheetKRangeStartField.text()), int(self.sheetKRangeEndField.text()))
             sheet_z_range = (int(self.sheetZRangeStartField.text()), int(self.sheetZRangeEndField.text()))
+            winding_direction = int(self.windingDirectionField.text())
             min_steps = int(self.minStepsField.text())
             min_end_steps = int(self.minEndStepsField.text())
             max_nr_walks = int(self.maxNrWalksField.text())
@@ -743,9 +793,12 @@ class ThaumatoAnakalyptor(QMainWindow):
                           "cost_threshold_prediction": 2.5, "min_prediction_threshold": 0.15, "nr_points_min": 200.0, "nr_points_max": 4000.0, "min_patch_points": 300.0, 
                           "winding_angle_range": None, "multiple_instances_per_batch_factor": 1.0,
                           "epsilon": 1e-5, "angle_tolerance": 85, "max_threads": 30,
-                          "min_points_winding_switch": 3800, "min_winding_switch_sheet_distance": 9, "max_winding_switch_sheet_distance": 20, "winding_switch_sheet_score_factor": 1.5, "winding_direction": -1.0, "enable_winding_switch": False, "enable_winding_switch_postprocessing": False,
+                          "min_points_winding_switch": 1000, "min_winding_switch_sheet_distance": 3, "max_winding_switch_sheet_distance": 10, "winding_switch_sheet_score_factor": 1.5, "winding_direction": 1.0,
+                          "enable_winding_switch": True, "max_same_block_jump_range": 3,
+                          "enable_winding_switch_postprocessing": False,
                           "surrounding_patches_size": 3, "max_sheet_clip_distance": 60, "sheet_z_range": (-5000, 400000), "sheet_k_range": (-1, 2), "volume_min_certainty_total_percentage": 0.0, "max_umbilicus_difference": 30,
-                          "walk_aggregation_threshold": 100, "walk_aggregation_max_current": -1
+                          "walk_aggregation_threshold": 100, "walk_aggregation_max_current": -1,
+                          "bad_edge_threshold": 3
                           }
 
             # max_nr_walks = 10000
@@ -757,6 +810,7 @@ class ThaumatoAnakalyptor(QMainWindow):
 
             overlapp_threshold["sheet_z_range"] = [z_range_ /(200.0 / 50.0) for z_range_ in sheet_z_range]
             overlapp_threshold["sheet_k_range"] = sheet_k_range
+            overlapp_threshold["winding_direction"] = winding_direction
             overlapp_threshold["walk_aggregation_threshold"] = walk_aggregation_threshold
             overlapp_threshold["max_nr_walks"] = max_nr_walks
             overlapp_threshold["max_unchanged_walks"] = max_unchanged_walks
@@ -770,7 +824,7 @@ class ThaumatoAnakalyptor(QMainWindow):
             self.stop_event = threading.Event()
 
             # start self.stitchSheetComputation in a new thread
-            self.process_stitching = threading.Thread(target=self.stitchSheetComputation, args=(overlapp_threshold, start_point, path, recompute, self.stop_event))
+            self.process_stitching = threading.Thread(target=self.stitchSheetScriptComputation, args=(overlapp_threshold, start_point, path, recompute, self.stop_event))
             self.process_stitching.start()
 
             self.computeStitchSheetButton.setEnabled(False)
@@ -814,13 +868,12 @@ class ThaumatoAnakalyptor(QMainWindow):
             starting_point = [self.xField.text(), self.yField.text(), self.zField.text()]
             path = os.path.join(self.Config["surface_points_path"], "point_cloud_colorized_verso_subvolume_blocks")
             graph = f"{starting_point[0]}_{starting_point[1]}_{starting_point[2]}/point_cloud_colorized_verso_subvolume_graph_RW_solved.pkl"
-            start_point = f"{starting_point[0]} {starting_point[1]} {starting_point[2]}"
 
             command = [
                 "python3", "-m", "ThaumatoAnakalyptor.graph_to_mesh",
                 "--path", path,
                 "--graph", graph,
-                "--start_point", start_point,
+                "--start_point", str(int(starting_point[0])), str(int(starting_point[1])), str(int(starting_point[2])),
                 "--scale_factor", f"{abs(self.Config['downsample_factor']):f}"
             ]
             
@@ -923,102 +976,18 @@ class ThaumatoAnakalyptor(QMainWindow):
         self.stopSwapVolumeButton.setEnabled(False)
         print("Computation process stopped.")
 
-    def addRendering(self, layout):
-        # TODO: switch rendering to large_mesh_to_surface
-        
+    def addRendering(self, layout):        
         # Main Collapsible Box for Rendering
-        renderingBox = CollapsibleBox("Rendering (in renovation)")
-
-        # PPM Area
-        ppmBox = CollapsibleBox("PPM (not working)")
-        self.addPpmArea(ppmBox)
-        renderingBox.add_widget(ppmBox)
+        renderingBox = CollapsibleBox("Rendering")
 
         # Texturing Area
-        texturingBox = CollapsibleBox("Texturing (not working)")
-        self.addTexturingArea(texturingBox)
-        renderingBox.add_widget(texturingBox)
+        self.addTexturingArea(renderingBox)
 
         layout.addWidget(renderingBox)
 
-    def addPpmArea(self, box):
-        label = QLabel("PPM")
-        self.computePpmButton = QPushButton("Compute")
-        self.stopPpmButton = QPushButton("Stop")
-        self.stopPpmButton.setEnabled(False)
-
-        self.computePpmButton.clicked.connect(self.computePPM)
-        self.stopPpmButton.clicked.connect(self.stopPPM)
-
-        box.add_widget(label)
-        box.add_widget(self.computePpmButton)
-        box.add_widget(self.stopPpmButton)
-
-        # Connect the signal to the slot method
-        self.ppmComputationDone.connect(self.onPpmComputationDone)
-
-    def computePPM(self):
-        try:
-            starting_point = [self.xField.text(), self.yField.text(), self.zField.text()]
-
-            original_2d_tiffs = self.Config.get("original_2d_tiffs", None)
-            if original_2d_tiffs is None:
-                QMessageBox.critical(self, "Error", f"Please specify the 2D Tiff files path")
-                return
-            # volpkg is original_2d_tiffs without last two folders
-            base_path = self.Config.get("surface_points_path", None)
-            if base_path is None:
-                QMessageBox.critical(self, "Error", f"Please specify the surface points path")
-                return
-            base_path = os.path.join(base_path, "working")
-            
-            working_directories = [dir_ for dir_ in os.listdir(base_path) if dir_.startswith(f"working_{starting_point[0]}_{starting_point[1]}_{starting_point[2]}")]
-
-            self.computePpmButton.setEnabled(False)
-            self.stopPpmButton.setEnabled(True)
-
-            for working_directory in working_directories:
-                ppm_path = base_path + f"/{working_directory}/thaumato.ppm"
-                obj_path = base_path + f"/{working_directory}/point_cloud_colorized_verso_subvolume_blocks_uv_flatboi.obj"
-                print("ppm paths:", obj_path, ppm_path)
-
-                command = [
-                    "/volume-cartographer-papyrus/build/bin/vc_generate_ppm",
-                    "--input-mesh", obj_path,
-                    "--output-ppm", ppm_path,
-                    "--uv-reuse"
-                ]
-                
-                def run():
-                    self.process_ppm = subprocess.Popen(command)
-                    self.process_ppm.wait()
-                    self.ppmComputationDone.emit()
-                
-                # Start the monitoring thread
-                thread = threading.Thread(target=run)
-
-                thread.start()
-
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to start the script: {e}")
-            self.computePpmButton.setEnabled(True)
-            self.stopPpmButton.setEnabled(False)
-
-    def stopPPM(self):
-        if self.process_ppm and self.process_ppm.poll() is None:
-            self.process_ppm.kill()
-            self.process_ppm = None
-            self.ppmComputationDone.emit()
-
-    def onPpmComputationDone(self):
-        self.computePpmButton.setEnabled(True)
-        self.stopPpmButton.setEnabled(False)
-        print("Computation process stopped.")
-
     def addTexturingArea(self, box):
         label = QLabel("Texturing")
-        self.useVcCheckbox = QCheckBox("Allways Use Volume Cartographer")
-        self.useVcCheckbox.setChecked(False)
+        self.addFieldWithLabel(box, "Output Format:", "Enter format", "formatRenderField", value="jpg")
         self.computeTexturingButton = QPushButton("Compute")
         self.stopTexturingButton = QPushButton("Stop")
         self.stopTexturingButton.setEnabled(False)
@@ -1027,7 +996,6 @@ class ThaumatoAnakalyptor(QMainWindow):
         self.stopTexturingButton.clicked.connect(self.stopTexturing)
 
         box.add_widget(label)
-        box.add_widget(self.useVcCheckbox)
         box.add_widget(self.computeTexturingButton)
         box.add_widget(self.stopTexturingButton)
 
@@ -1037,60 +1005,23 @@ class ThaumatoAnakalyptor(QMainWindow):
     def computeTexturing(self):
         try:
             starting_point = [self.xField.text(), self.yField.text(), self.zField.text()]
+            meshes_path = os.path.join(self.Config["surface_points_path"], f"{int(starting_point[0])}_{int(starting_point[1])}_{int(starting_point[2])}", "point_cloud_colorized_verso_subvolume_blocks", "windowed_mesh")
+            # Get all *_flatboi.obj files in the meshes_path
+            obj_files = [f for f in os.listdir(meshes_path) if f.endswith("_flatboi.obj")]
+            print(f"obj_files: {obj_files}")
 
-            original_2d_tiffs = self.Config.get("original_2d_tiffs", None)
-            if original_2d_tiffs is None:
-                QMessageBox.critical(self, "Error", f"Please specify the 2D Tiff files path")
-                return
-            # volpkg is original_2d_tiffs without last two folders
-            volpkg_path = os.path.dirname(os.path.dirname(original_2d_tiffs)) + "/"
-            volume = os.path.basename(original_2d_tiffs)
-            base_path = self.Config.get("surface_points_path", None)
-            if base_path is None:
-                QMessageBox.critical(self, "Error", f"Please specify the surface points path")
-                return
-            base_path = os.path.join(base_path, "working")
-            
-            working_directories = [dir_ for dir_ in os.listdir(base_path) if dir_.startswith(f"working_{starting_point[0]}_{starting_point[1]}_{starting_point[2]}")]
-
-            self.computeTexturingButton.setEnabled(False)
-            self.stopTexturingButton.setEnabled(True)
-
-            for working_directory in working_directories:
-
-                layers_path = base_path + f"/{working_directory}/layers/"
-                ppm_path = base_path + f"/{working_directory}/thaumato.ppm"
-                obj_path = base_path + f"/{working_directory}/point_cloud_colorized_verso_subvolume_blocks_uv_flatboi.obj"
-                print("texturing paths:", volpkg_path, volume, obj_path, ppm_path)
-
-                command_gpu_downscaled_1 = [
-                    "python3", "-m", "ThaumatoAnakalyptor.ppm_to_layers",
-                    ppm_path, 
-                    self.Config["downsampled_3d_grids"],
-                    "--r", "32",
-                    "--max_workers", str(self.Config["num_threads_texturing"]),
-                    "--gpus", str(self.Config["gpus"])
+            for obj in obj_files:
+                mesh_path = os.path.join(meshes_path, obj)
+                print(mesh_path)
+                command_gpu = [
+                    "python3", "-m", "ThaumatoAnakalyptor.large_mesh_to_surface",
+                    "--input_mesh", mesh_path,
+                    "--scroll", self.Config.get("original_render_volume", None),
+                    "--gpus", str(self.Config["gpus"]),
+                    "--format", self.formatRenderField.text(),
+                    "--display"
                 ]
 
-                command_2d_tiffs = [
-                    "/volume-cartographer-papyrus/build/bin/vc_layers_from_ppm",
-                    "-v", volpkg_path,
-                    "--volume", volume,
-                    "-p", ppm_path,
-                    "--output-dir",layers_path,
-                    "-f", "tif",
-                    "-r", "32",
-                    "--cache-memory-limit", "8G"
-                ]
-
-                use_VC = self.useVcCheckbox.isChecked()
-                if use_VC or (abs(self.Config["downsample_factor"]) != 1):
-                    print("Using volume cartographer to render from 2D tiffs")
-                    command = command_2d_tiffs
-                else:
-                    print("Using ThaumatoAnakalyptor GPU render from grid cells to texture layers")
-                    command = command_gpu_downscaled_1
-                
                 # Prepare the environment variable
                 env = os.environ.copy()
                 env["MAX_TILE_SIZE"] = "4294967295"  # Set maximum CV io image size for tiff files
@@ -1099,14 +1030,15 @@ class ThaumatoAnakalyptor(QMainWindow):
                 
                 def run():
                     # Run the command with the specified environment variables
-                    self.process_texturing = subprocess.Popen(command, env=env)
+                    self.process_texturing = subprocess.Popen(command_gpu, env=env)
                     self.process_texturing.wait()
-                    self.texturingComputationDone.emit()
 
                 # Start the monitoring thread
                 thread = threading.Thread(target=run)
 
                 thread.start()
+
+            self.texturingComputationDone.emit()
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to start the script: {e}")
