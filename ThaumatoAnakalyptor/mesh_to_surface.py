@@ -17,6 +17,7 @@ from torch.nn.functional import normalize
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import BasePredictionWriter
 from .rendering_utils.interpolate_image_3d import extract_from_image_4d
+from .finalize_mesh import surface_image_size
 from PIL import Image
 Image.MAX_IMAGE_PIXELS = None
 import tifffile
@@ -333,6 +334,10 @@ class MeshDataset(Dataset):
     def load_mesh(self, path):
         """Load the mesh from the given path and extract the vertices, normals, triangles, and UV coordinates."""
         # Get the working path and base name
+        print(f"Loading mesh from {path}", end="\n")
+        self.mesh = o3d.io.read_triangle_mesh(path)
+        print(f"Loaded mesh from {path}", end="\n")
+
         working_path = os.path.dirname(path)
         base_name = os.path.splitext(os.path.basename(path))[0]
 
@@ -369,12 +374,10 @@ class MeshDataset(Dataset):
             with Image.open(image_path) as img:
                 # Get dimensions
                 y_size, x_size = img.size
+        else:
+            y_size, x_size = surface_image_size(self.mesh)
         print(f"Y-size: {y_size}, X-size: {x_size}", end="\n")
 
-        print(f"Loading mesh from {path}", end="\n")
-        mesh = o3d.io.read_triangle_mesh(path)
-        self.mesh = mesh
-        print(f"Loaded mesh from {path}", end="\n")
 
         self.vertices = np.asarray(self.mesh.vertices)
         self.normals = np.asarray(self.mesh.vertex_normals)

@@ -4,45 +4,68 @@ import open3d as o3d
 import numpy as np
 import argparse
 import os
+import os.path
 from PIL import Image
 # max image size None
 Image.MAX_IMAGE_PIXELS = None
 
-def copy_obj(path: str, output_folder: str):
+
+def surface_image_size(mesh):
     """
-    Copy the .obj file and the texture image to the output folder.
+    Compute the size of a surface image for a one-to-one resolution ratio with
+    the scan. The uvs aspect ratio must be correct, i.e. not stretched.
     """
-    # Copy the .obj file
-    obj_filename = os.path.basename(path)
-    output_obj_path = os.path.join(output_folder, obj_filename)
-    os.makedirs(output_folder, exist_ok=True)
-    os.system(f"cp {path} {output_obj_path}")
-    print(f"Copied {path} to {output_obj_path}")
+    A = mesh.get_surface_area()
+    uvs = np.asarray(mesh.triangle_uvs)
+    x_size_uv = np.max(uvs[:, 0]) - np.min(uvs[:, 0])
+    y_size_uv = np.max(uvs[:, 1]) - np.min(uvs[:, 1])
+    uvs = uvs.reshape(-1, 3, 2)
+    p1 = uvs[:, 0, :]
+    p2 = uvs[:, 1, :]
+    p3 = uvs[:, 2, :]
+    A_uv = np.sum(0.5 * np.abs(np.cross(p2 - p1, p3 - p1)))
+    s = np.sqrt(A/A_uv)
+    # TODO: Resolve the small discretization error introduced by ceil.
+    # We can account for it if we know how the rendering code handles it.
+    y_size = int(np.ceil(s*y_size_uv))
+    x_size = int(np.ceil(s*x_size_uv))
+    return y_size, x_size
 
-    # Copy the texture image
-    # png 
-    path_png = path[:-4] + "_0.png"
-    output_png_path = os.path.join(output_folder, obj_filename[:-4] + "_0.png")
-    os.system(f"cp {path_png} {output_png_path}")
-    print(f"Copied {path_png} to {output_png_path}")
-
-    return output_obj_path, output_png_path
-
-def load_obj(path: str, delauny=False) -> o3d.geometry.TriangleMesh:
+def load_mesh(input_path, output_folder, delauny, make_texture_image=False):
     """
     Load an .obj file and return the TriangleMesh object.
     """
+    # Copy the .obj file.
+    input_filename = os.path.basename(input_path)
+    path = os.path.join(output_folder, input_filename)
+    os.makedirs(output_folder, exist_ok=True)
+    os.system(f"cp {input_path} {path}")
+    print(f"Copied {input_path} to {path}")
+
+    # Load the mesh.
     print(f"Loading mesh from {path}", end="\n")
     mesh = o3d.io.read_triangle_mesh(path)
 
-    # png 
-    path_png = path[:-4] + "_0.png"
-    if delauny:
-        path_png = path_png.replace("delauny", "uv")
-    texture = Image.open(path_png)
+    # Get or compute texture_size
+    input_path_png = input_path[:-4] + "_0.png"
+    if os.path.isfile(input_path_png) and not make_texture_image:
+        # Copy the texture image png.
+        path_png = os.path.join(output_folder, input_filename[:-4] + "_0.png")
+        os.system(f"cp {input_path_png} {path_png}")
+        print(f"Copied {input_path_png} to {path_png}")
 
-    # Get the size of the image from disk
-    texture_size = np.array(texture.size)
+        # Get the size of the image from disk
+        path_png = path[:-4] + "_0.png"
+        if delauny:
+            path_png = path_png.replace("delauny", "uv")
+        texture = Image.open(path_png)
+        texture_size = np.array(texture.size)
+    else:
+        y_size, x_size = surface_image_size(mesh)
+        print(f"Computed texture_size == ({y_size}, {x_size})")
+        texture_size = np.array([y_size, x_size])
+        # TODO: Must we create the image too?
+
     return mesh, texture_size
 
 def create_mtl_file(mtl_path, texture_image_name):
@@ -200,11 +223,8 @@ def main(output_folder, input_mesh, scale_factor, cut_size, delauny):
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
-    # Copy mesh and png to 
-    obj_path, _ = copy_obj(input_mesh, output_folder)
-
     # Load mesh
-    mesh, texture_size = load_obj(obj_path, delauny)
+    mesh, texture_size = load_mesh(input_mesh, output_folder, delauny)
     mesh_filename = os.path.basename(input_mesh)
 
     # Scale mesh
