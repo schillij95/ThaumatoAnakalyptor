@@ -1434,7 +1434,7 @@ class WalkToSheet():
 
         self.save_mesh(mesh, uv_image, mesh_path)
 
-        split_mesh_paths = self.split(mesh_path, split_width=self.split_width, fresh_start=False)
+        split_mesh_paths = self.split(mesh_path, split_width=self.split_width, fresh_start=True)
 
         # Flatten mesh
         args = [(self.save_path, split_mesh_path) for split_mesh_path in split_mesh_paths]
