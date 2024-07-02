@@ -9,6 +9,8 @@ Image.MAX_IMAGE_PIXELS = None
 import glob
 import argparse
 import os
+# temp file
+import tempfile
 
 def load_transform(transform_path):
     with open(transform_path, 'r') as file:
@@ -24,7 +26,15 @@ def combine_transforms(transform_a, transform_b):
     return np.dot(transform_b, transform_a)
 
 def apply_transform_to_mesh(mesh_path, transform_matrix):
-    mesh = o3d.io.read_triangle_mesh(mesh_path)
+    # copy mesh to tempfile
+    with tempfile.NamedTemporaryFile(suffix=".obj") as temp_file:
+        # copy mesh to tempfile
+        temp_path = temp_file.name
+        # os copy
+        os.system(f"cp {mesh_path} {temp_path}")
+        # load mesh
+        mesh = o3d.io.read_triangle_mesh(temp_path)
+    
     mesh.vertices = o3d.utility.Vector3dVector(np.asarray(mesh.vertices) @ transform_matrix[:3, :3].T + transform_matrix[:3, 3])
     normals = np.asarray(mesh.vertex_normals) @ transform_matrix[:3, :3].T
     # Normalize Normals
@@ -49,7 +59,13 @@ def parse_mtl_for_texture_filenames(mtl_filepath):
                     texture_filenames.append(parts[1])  # The second part is the filename
     return texture_filenames
 
-def compute(transform_path, original_volume_id, target_volume_id, mesh_path):
+def compute(transform_path, original_volume_id, target_volume_id, mesh_path, scale_factor):
+    # Load scale transformation
+    scale_transform = np.eye(4)
+    scale_transform[0, 0] = scale_factor
+    scale_transform[1, 1] = scale_factor
+    scale_transform[2, 2] = scale_factor
+
     # Load transform from original to canonical
     if not (original_volume_id is None):
         transform_to_canonical_path = glob.glob(f"{transform_path}/*-to-{original_volume_id}.json")
@@ -65,7 +81,7 @@ def compute(transform_path, original_volume_id, target_volume_id, mesh_path):
     else:
         inverted_transform_to_canonical = np.eye(4)
     
-    is_canonical = len(glob.glob(f"{transform_path}/{target_volume_id}-to-*.json")[0]) > 0
+    is_canonical = len(glob.glob(f"{transform_path}/{target_volume_id}-to-*.json")) > 0
     if not is_canonical:
         # Load transform from canonical to target
         transform_to_target_path = glob.glob(f"{transform_path}/*-to-{target_volume_id}.json")[0]
@@ -74,7 +90,8 @@ def compute(transform_path, original_volume_id, target_volume_id, mesh_path):
         transform_to_target = np.eye(4)
     
     # Combine the transformations
-    combined_transform = combine_transforms(inverted_transform_to_canonical, transform_to_target)
+    combined_transform = combine_transforms(scale_transform, inverted_transform_to_canonical)
+    combined_transform = combine_transforms(combined_transform, transform_to_target)
     
     # Paths and application of transforms
     segment_name = str(os.path.basename(mesh_path)[:-4])
@@ -113,8 +130,9 @@ if __name__ == "__main__":
     parser.add_argument("--original_volume_id", type=str, required=True, help="Volume ID of the original scroll volume for the input mesh")
     parser.add_argument("--target_volume_id", type=str, required=True, help="Volume ID of the target scroll volume to transform the input mesh to")
     parser.add_argument("--obj_path", type=str, required=True, help="Path to your .obj file")
+    parser.add_argument("--scale_factor", type=float, default=1.0, help="Scale factor for the input mesh")
 
     args = parser.parse_args()
 
     print(f"Processing from {args.original_volume_id} to {args.target_volume_id}")
-    compute(args.transform_path, args.original_volume_id, args.target_volume_id, args.obj_path)
+    compute(args.transform_path, args.original_volume_id, args.target_volume_id, args.obj_path, args.scale_factor)

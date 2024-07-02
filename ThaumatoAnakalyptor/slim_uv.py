@@ -52,19 +52,21 @@ class Flatboi:
         len_before = len(self.triangles)
 
         self.original_uvs = np.array(self.original_uvs).reshape((-1, 3, 2))
-        assert len(self.triangles) == len(self.original_uvs), f"Number of triangles and uvs do not match. {len(self.triangles)} != {len(self.original_uvs)}"
 
         args = [(self.vertices[t[0]], self.vertices[t[1]], self.vertices[t[2]], area_cutoff) for t in self.triangles]
         with multiprocessing.Pool(multiprocessing.cpu_count()) as pool:
             filter_list = list(tqdm(pool.imap(triangle_area_multiprocessing, args), total=len(args), desc="Filtering Triangles"))
 
         # Filter original uvs
-        self.original_uvs = np.array([self.original_uvs[i] for i in range(len(self.triangles)) if filter_list[i]])
+        # assert len(self.triangles) == len(self.original_uvs), f"Number of triangles and uvs do not match. {len(self.triangles)} != {len(self.original_uvs)}"
+        if len(self.original_uvs) == len(self.triangles):
+            self.original_uvs = np.array([self.original_uvs[i] for i in range(len(self.triangles)) if filter_list[i]])
+            self.original_uvs = np.array(self.original_uvs).reshape((-1, 2))
         # Filter triangles
         self.triangles = np.array([self.triangles[i] for i in range(len(self.triangles)) if filter_list[i]])
         print(f"Filtered out {len_before - len(self.triangles)} triangles with 0 area of total {len_before} triangles.")
-        assert len(self.triangles) == len(self.original_uvs), f"Number of triangles and uvs do not match. {len(self.triangles)} != {len(self.original_uvs)}"
-        self.original_uvs = np.array(self.original_uvs).reshape((-1, 2))
+        # assert len(self.triangles) == len(self.original_uvs), f"Number of triangles and uvs do not match. {len(self.triangles)} != {len(self.original_uvs)}"
+
 
     def generate_boundary(self):
         res = igl.boundary_loop(self.triangles)
@@ -84,6 +86,8 @@ class Flatboi:
         uv = igl.harmonic(self.vertices, self.triangles, bnd, bnd_uv, 1)
         arap = igl.ARAP(self.vertices, self.triangles, 2, np.zeros(0))
         print("ARAP")
+        for i in tqdm(range(10), desc="ARAP"):
+            uv = arap.solve(np.zeros((0, 0)), uv)
         uva = arap.solve(np.zeros((0, 0)), uv)
 
         bc = np.zeros((bnd.shape[0],2), dtype=np.float64)
@@ -194,6 +198,9 @@ class Flatboi:
                     break
                 else:
                     converged = True
+            elif new_energy == temp_energy:
+                converged = True
+                break
             else:
                 converged = False
                 break

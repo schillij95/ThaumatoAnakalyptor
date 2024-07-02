@@ -131,6 +131,7 @@ def sanity_check_vertex_normals(mesh):
     vertex_normals_norm = np.linalg.norm(vertex_normals, axis=1)
     print(f"Min and max vertex normal norm: {np.min(vertex_normals_norm)}, {np.max(vertex_normals_norm)}")
     assert np.allclose(vertex_normals_norm, 1.0)
+    print("Assert done, sanity check passed.")
 
 def save_obj(path: str, mesh: o3d.geometry.TriangleMesh):
     """
@@ -334,10 +335,15 @@ class MeshFlattener:
         processing = [False] * self.vertices_np.shape[0]
         uv_coordinates = {}
 
-        bfs_queue.append((start_vertex_idx, 0.0))
+        # Set the start vertex and angle
+        start_index_angle = self.angle_between_vertices(np.array([0.0, 0.0, 0.0]), self.vertices_np[start_vertex_idx])
+        bfs_queue.append((start_vertex_idx, start_index_angle))
 
         i = 0
+        # tqdm progress bar
+        pbar = tqdm(total=self.vertices_np.shape[0], desc="BFS Angle Calculation Progress")
         while bfs_queue:
+            pbar.update(1)
             i += 1
             vertex_idx, current_angle = bfs_queue.popleft()
             
@@ -473,29 +479,63 @@ class MeshFlattener:
         addition_offset = 0
         processed_vertices = set()
         new_vertices = deepcopy(self.vertices_np)
+
+        # Sort vertices by x-coordinate
+        sorted_indices = np.argsort(self.vertices_np[:, 0])
+        self.sorted_vertices_np = self.vertices_np[sorted_indices]
+
         y_offsets = []
         x_additions = []
         
-        window_start = min_x
-        while window_start <= max_x:
-            vertices_mask = (self.vertices_np[:, 0] >= window_start) & (self.vertices_np[:, 0] < window_start + window_size)
-            vertices_mask_offset = (self.vertices_np[:, 0] >= window_start-offset_window_average) & (self.vertices_np[:, 0] < window_start + window_size+offset_window_average)
-            y_values_in_window = self.vertices_np[vertices_mask_offset, 1]
+        # window_start = min_x
+        # while window_start <= max_x:
+        window_start_index = 0
+        window_end_index = 0
+        window_start_offset_index = 0
+        window_end_offset_index = 0
+        num_vertices = len(self.vertices_np)
+        stop_x_ind = int(np.floor((max_x - min_x) / window_size)) + 1
+        for window_start_ind in tqdm(range(stop_x_ind)):
+            window_start = window_start_ind * window_size
 
-            avg_y_distance = np.mean(y_values_in_window) if y_values_in_window.size else 0
+            # Move window_start_index to the start of the window
+            while window_start_index < num_vertices and self.vertices_np[window_start_index, 0] < window_start:
+                window_start_index += 1
+
+            # Move window_end_index to the end of the window
+            window_end_index = window_start_index
+            while window_end_index < num_vertices and self.vertices_np[window_end_index, 0] <= window_start + window_size:
+                window_end_index += 1
+
+            # Move window_start_offset_index to the start of the window with offset
+            while window_start_offset_index < num_vertices and self.vertices_np[window_start_offset_index, 0] < window_start - offset_window_average:
+                window_start_offset_index += 1
+            
+            # Move window_end_offset_index to the end of the window with offset
+            window_end_offset_index = window_start_offset_index
+            while window_end_offset_index < num_vertices and self.vertices_np[window_end_offset_index, 0] <= window_start + window_size + offset_window_average:
+                window_end_offset_index += 1
+
+            # vertices_mask = (self.vertices_np[:, 0] >= window_start) & (self.vertices_np[:, 0] < window_start + window_size)
+            # vertices_mask_offset = (self.vertices_np[:, 0] >= window_start-offset_window_average) & (self.vertices_np[:, 0] < window_start + window_size+offset_window_average)
+            # y_values_in_window = self.vertices_np[vertices_mask_offset, 1]
+
+            # avg_y_distance = np.mean(y_values_in_window) if y_values_in_window.size else 0
+            avg_y_distance = np.mean(self.vertices_np[window_start_offset_index:window_end_offset_index, 1]) if window_end_offset_index > window_start_offset_index else 0
             x_addition_scale = (window_size / 360.0) * avg_y_distance * 2 * pi
             y_offsets.append(avg_y_distance)
             x_additions.append(x_addition_scale)
 
-            indices_in_window = np.where(vertices_mask)
-            for idx in indices_in_window[0]:
+            # indices_in_window = np.where(vertices_mask)
+            # for idx in indices_in_window[0]:
+            for idx in range(window_start_index, window_end_index):
                 if idx not in processed_vertices:
                     new_vertices[idx, 0] = addition_offset + ((self.vertices_np[idx, 0] - window_start) / window_size) * x_addition_scale
                     new_vertices[idx, 1] -= avg_y_distance
                     processed_vertices.add(idx)
 
             addition_offset += x_addition_scale
-            window_start += window_size
+            # window_start += window_size
 
         self.vertices_np = new_vertices
 
@@ -544,6 +584,7 @@ class MeshFlattener:
         flattened_mesh = flattened_mesh.compute_triangle_normals()
         flattened_mesh.orient_triangles()
         self.flattened_mesh = flattened_mesh
+        print("Flattened mesh created.")
     
     def remove_unaligned_triangles(self):
         """
@@ -615,7 +656,7 @@ class MeshFlattener:
         else:
             ray_vectors = [[0, -1, 0]]
         mask_unoccluded = np.zeros(self.vertices_np.shape[0], dtype=bool)
-        for ray_vector in ray_vectors:
+        for ray_vector in tqdm(ray_vectors, desc="Raycasting"):
             mask_ = self.unoccluded_vertices(ray_vector)
             mask_unoccluded = np.logical_or(mask_unoccluded, mask_)
         return mask_unoccluded
@@ -895,18 +936,20 @@ class OrthographicUVMapper:
 
     def add_tif(self, size):
         self.size = size
-        # white tif of size
-        tif = np.ones((int(np.ceil(1)), int(np.ceil(1)), 3), dtype=np.uint8)
+        # # white tif of size
+        # tif = np.ones((int(np.ceil(1)), int(np.ceil(1)), 3), dtype=np.uint8)
         
-        # Convert the numpy array to an Open3D Image and assign it as the mesh texture
-        texture = o3d.geometry.Image(tif)
-        self.original_mesh.textures = [texture]
+        # # Convert the numpy array to an Open3D Image and assign it as the mesh texture
+        # texture = o3d.geometry.Image(tif)
+        # self.original_mesh.textures = [texture]
 
-    def compute(self, path):
+    def compute(self, path, skip_underformation_step=False):
         """
         Computes UV coordinates for the original mesh by orthographically
         projecting its vertices onto the XZ plane.
         """
+
+        print("Starting to compute UV orthographic coordinates...")
 
         for idx, vertex in enumerate(self.flattened_vertices_np):
             u = vertex[0]  # x-coordinate
@@ -929,7 +972,8 @@ class OrthographicUVMapper:
 
         max_u = np.ceil(np.max(triangle_uvs[:, 0])) + 1
         max_v = np.ceil(np.max(triangle_uvs[:, 1])) + 1
-        self.uv_undeformation_map(triangle_uvs, [max_u, max_v])
+        if not skip_underformation_step:
+            self.uv_undeformation_map(triangle_uvs, [max_u, max_v])
         
         # Adjust to 0,0 origin
         min_u = np.min(triangle_uvs[:, 0])
@@ -961,7 +1005,8 @@ class OrthographicUVMapper:
         self.original_mesh = orient_normals_towards_umbilicus_mesh(self.original_mesh, self.umbilicus_func)
         self.original_mesh = self.original_mesh.compute_triangle_normals()
         self.original_mesh = self.original_mesh.normalize_normals()
-        self.original_mesh = smooth_mesh_normals(self.original_mesh, self.flattened_mesh)
+        if not skip_underformation_step:
+            self.original_mesh = smooth_mesh_normals(self.original_mesh, self.flattened_mesh)
         self.save(path)
 
         mesh = o3d.geometry.TriangleMesh()
@@ -1081,28 +1126,8 @@ class OrderedPointSet:
         os.makedirs(path_id, exist_ok=True)
         write_ordered_point_set_binary(path_id, pointsets)
         create_meta_json(path_id, name, scroll1_id)
-        
 
-def main():
-    cut = ""
-    path = f'/media/julian/SSD4TB/scroll3_surface_points/{cut}point_cloud_colorized_verso_subvolume_blocks.obj'
-    umbilicus_path = '/media/julian/HDD8TB/PHerc0332.volpkg/volumes/2dtifs_8um_grids/umbilicus.txt'
-
-    import argparse
-    # Create an argument parser
-    parser = argparse.ArgumentParser(description='Add UV coordinates to a ThaumatoAnakalyptor papyrus surface mesh (.obj). output mesh has addition "_uv.obj" in name.')
-    parser.add_argument('--path', type=str, help='Path of .obj Mesh', default=path)
-    parser.add_argument('--umbilicus_path', type=str, help='Path of center umbilicus positions for the mesh scroll', default=umbilicus_path)
-    parser.add_argument('--enable_delauny', action='store_true', help='Flag, enables the mesh refinement step with delauny mesh reconstruction from 2D flattening')
-
-    # Take arguments back over
-    args = parser.parse_args()
-    print(f"Mesh to UV arguments: {args}")
-
-    path = args.path
-    umbilicus_path = args.umbilicus_path
-    enable_delauny = args.enable_delauny
-
+def compute(path, umbilicus_path, enable_delauny, skip_underformation_step=False):
     print(f"Adding UV coordinates to mesh {path}")
 
     mesh = load_obj(path)
@@ -1122,7 +1147,32 @@ def main():
 
     ortho_mapper = OrthographicUVMapper(mesh, flattened_mesh, x_heightmap, kernel_size=75, gradient_factor=-10.00, heatmap_path=path.replace(".obj", "_heatmap.png"), umbilicus_path=umbilicus_path)
     path_uv = path.replace(".obj", "_uv.obj")
-    ortho_mapper.compute(path_uv)
+    ortho_mapper.compute(path_uv, skip_underformation_step=skip_underformation_step)
+    return path_uv
+        
+def main():
+    cut = ""
+    path = f'/media/julian/SSD4TB/scroll3_surface_points/{cut}point_cloud_colorized_verso_subvolume_blocks.obj'
+    umbilicus_path = '/media/julian/HDD8TB/PHerc0332.volpkg/volumes/2dtifs_8um_grids/umbilicus.txt'
+
+    import argparse
+    # Create an argument parser
+    parser = argparse.ArgumentParser(description='Add UV coordinates to a ThaumatoAnakalyptor papyrus surface mesh (.obj). output mesh has addition "_uv.obj" in name.')
+    parser.add_argument('--path', type=str, help='Path of .obj Mesh', default=path)
+    parser.add_argument('--umbilicus_path', type=str, help='Path of center umbilicus positions for the mesh scroll', default=umbilicus_path)
+    parser.add_argument('--enable_delauny', action='store_true', help='Flag, enables the mesh refinement step with delauny mesh reconstruction from 2D flattening')
+    parser.add_argument('--skip_underformation_step', action='store_true', help='Flag, skips the underformation step')
+
+    # Take arguments back over
+    args = parser.parse_args()
+    print(f"Mesh to UV arguments: {args}")
+
+    path = args.path
+    umbilicus_path = args.umbilicus_path
+    enable_delauny = args.enable_delauny
+    skip_underformation_step = args.skip_underformation_step
+    # Compute UV coordinates for the mesh
+    compute(path, umbilicus_path, enable_delauny, skip_underformation_step)
 
 if __name__ == '__main__':
     main()

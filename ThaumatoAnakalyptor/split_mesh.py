@@ -77,8 +77,8 @@ class MeshSplitter:
         adjacent_dict = {}
         for triangle in tqdm(np.array(self.mesh.triangles)):
             for i in range(3):
-                vertex = triangle[i]
-                adjacent = triangle[(i + 1) % 3]
+                vertex = int(triangle[i])
+                adjacent = int(triangle[(i + 1) % 3])
                 if vertex not in adjacent_dict:
                     adjacent_dict[vertex] = set()
                 adjacent_dict[vertex].add(adjacent)
@@ -88,6 +88,7 @@ class MeshSplitter:
 
         vertices = np.array(self.mesh.vertices)
         for vertex in range(vertices.shape[0]):
+            vertex = int(vertex)
             if vertex not in adjacent_dict:
                 adjacent_dict[vertex] = []
             else:
@@ -101,7 +102,7 @@ class MeshSplitter:
             print("Generating adjacency list...")
             self.compute_adjacency_list()  # Compute the adjacency list if it doesn't exist
         # Get and return adjacent vertex indices directly
-        adjacent = self.adjacency_list[vertex_idx]
+        adjacent = self.adjacency_list[int(vertex_idx)]
         return adjacent
 
     def compute_uv_with_bfs(self, start_vertex_idx):
@@ -113,11 +114,13 @@ class MeshSplitter:
         processing = set()
         uv_coordinates = {}
 
-        bfs_queue.append((start_vertex_idx, 0.0))
+        # Set the start vertex and angle
+        start_index_angle = self.angle_between_vertices(np.array([0.0, 0.0, 0.0]), self.vertices_np[start_vertex_idx])
+        bfs_queue.append((start_vertex_idx, start_index_angle))
 
         i = 0
         # tqdm progress bar
-        pbar = tqdm(total=self.vertices_np.shape[0])
+        pbar = tqdm(total=self.vertices_np.shape[0], desc="BFS Angle Calculation Progress")
         while bfs_queue:
             pbar.update(1)
             i += 1
@@ -136,6 +139,11 @@ class MeshSplitter:
             uv_coordinates[vertex_idx] = (current_angle, distance)
             adjacent_vertex_indices = self.get_adjacent_vertices(vertex_idx)
             for next_vertex_idx in adjacent_vertex_indices:
+                # if next_vertex_idx in self.visited_vertices:
+                #     angle_diff = self.angle_between_vertices(self.vertices_np[vertex_idx], self.vertices_np[next_vertex_idx])
+                #     next_angle, _ = uv_coordinates[next_vertex_idx]
+                #     assert abs(next_angle - angle_diff - current_angle) < 1e-6, f"Angle difference is not correct: {next_angle} != {angle_diff + current_angle}, current angle: {current_angle}"
+
                 if next_vertex_idx in processing:
                     continue
                 angle_diff = self.angle_between_vertices(self.vertices_np[vertex_idx], self.vertices_np[next_vertex_idx])
@@ -144,7 +152,7 @@ class MeshSplitter:
 
         pbar.close()
         
-        for vertex_idx, (u, v) in tqdm(uv_coordinates.items()):
+        for vertex_idx, (u, v) in tqdm(uv_coordinates.items(), desc="UV Coordinates Assignment Progress"):
             self.vertices_np[vertex_idx, 0] = u
             self.vertices_np[vertex_idx, 1] = v
         

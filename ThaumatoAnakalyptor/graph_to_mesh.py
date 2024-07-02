@@ -1455,8 +1455,6 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    print(f"Arguments: {args}")
-
     graph_path = os.path.join(os.path.dirname(args.path), args.graph)
     graph = load_graph(graph_path)
     # graph = None

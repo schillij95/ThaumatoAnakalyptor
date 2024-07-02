@@ -25,6 +25,7 @@ import subprocess
 
 import signal
 import numpy as np
+import open3d as o3d
 
 from ThaumatoAnakalyptor.sheet_to_mesh import umbilicus_xy_at_z
 
@@ -76,6 +77,7 @@ class ThaumatoAnakalyptor(QMainWindow):
         self.process_ink_detection = None
         
         self.isSelectingStartingPoint = False
+        self.display_points = False
         self.points = []
         self.loadConfig()
         self.initUI()
@@ -174,6 +176,11 @@ class ThaumatoAnakalyptor(QMainWindow):
         self.indexBox.returnPressed.connect(self.jumpToTifIndex)
         navigationLayout.addWidget(self.indexBox)
 
+        # Checkbox Display Points
+        self.displayPointsCheckbox = QCheckBox("Display Points")
+        self.displayPointsCheckbox.stateChanged.connect(self.toggleDisplayPoints)
+        navigationLayout.addWidget(self.displayPointsCheckbox)
+
         # Add the navigation layout to the main layout
         layout.addLayout(navigationLayout)
 
@@ -224,43 +231,34 @@ class ThaumatoAnakalyptor(QMainWindow):
             if len(self.points) > 0:
                 point_np = umbilicus_xy_at_z(self.points, np.array([index]))
                 x, y = point_np[0][0], point_np[0][1]
-                # Convert to scene coordinates
-                sceneX = x / self.image_width * self.image_width
-                sceneY = y / self.image_height * self.image_height
-                # Size of point unchanged in display no matter the zoom
                 size_display = 10
                 # Size of point in image coordinates
                 size_image = size_display / self.tifView.transform().m11()
-                sceneX -= size_image / 2
-                sceneY -= size_image / 2
-                self.tifScene.addEllipse(sceneX, sceneY, size_image, size_image, QPen(Qt.red), QBrush(Qt.red))
+                self.tifScene.addEllipse(x - size_image / 2, y - size_image / 2, size_image, size_image, QPen(Qt.red), QBrush(Qt.red))
 
                 # Draw a cone from the point to the bottom of the image with cone angle 45 degrees
                 # calculate bottom x point (just bottom of the image)
                 cone_line_left_y = self.image_height
                 cone_line_right_y = self.image_height
-                # calculate 45 degree angle line between scene xy and cone line x to get cone line y
-                cone_line_left_x = sceneX + (cone_line_left_y - sceneY) * np.tan(np.deg2rad(45))
-                cone_line_right_x = sceneX - (cone_line_right_y - sceneY) * np.tan(np.deg2rad(45))
-                # Draw the lines
-                self.tifScene.addLine(sceneX, sceneY, cone_line_left_x, cone_line_left_y, QPen(Qt.green))
-                self.tifScene.addLine(sceneX, sceneY, cone_line_right_x, cone_line_right_y, QPen(Qt.green))
+                cone_line_left_x = x + (cone_line_left_y - y) * np.tan(np.deg2rad(45))
+                cone_line_right_x = x - (cone_line_right_y - y) * np.tan(np.deg2rad(45))
+                self.tifScene.addLine(x, y, cone_line_left_x, cone_line_left_y, QPen(Qt.green))
+                self.tifScene.addLine(x, y, cone_line_right_x, cone_line_right_y, QPen(Qt.green))
                 self.tifScene.addLine(cone_line_left_x, cone_line_left_y, cone_line_right_x, cone_line_right_y, QPen(Qt.green))
 
             # Draw green starting point on the z index image
             if hasattr(self, "xField") and hasattr(self, "yField") and hasattr(self, "zField") and self.zField.text() == str(index):
                 x = int(self.xField.text())
                 y = int(self.yField.text())
-                # Convert to scene coordinates
-                sceneX = x / self.image_width * self.image_width
-                sceneY = y / self.image_height * self.image_height
                 # Size of point unchanged in display no matter the zoom
                 size_display = 10
                 # Size of point in image coordinates
                 size_image = size_display / self.tifView.transform().m11()
-                sceneX -= size_image / 2
-                sceneY -= size_image / 2
-                self.tifScene.addEllipse(sceneX, sceneY, size_image, size_image, QPen(Qt.green), QBrush(Qt.green))
+                self.tifScene.addEllipse(x - size_image / 2, y - size_image / 2, size_image, size_image, QPen(Qt.green), QBrush(Qt.green))
+
+            if self.display_points:
+                # Draw Pointclouds from .ply files
+                self.draw_pointcloud()
             
         else:
             print(f"Index {index} out of range")
@@ -270,10 +268,40 @@ class ThaumatoAnakalyptor(QMainWindow):
             self.tifScene.clear()
             self.tifScene.addPixmap(pixmap)
 
+    def draw_pointcloud(self):
+        # Find all .ply files in the directory
+        pointcloud_path = os.path.join(self.Config["surface_points_path"], "point_cloud_verso")
+        ply_files = [f for f in os.listdir(pointcloud_path) if f.endswith('.ply')]
+        adjusted_tiff_index = 500 + self.currentTifIndex
+        z_index_cell = adjusted_tiff_index // 200
+        # pad to 6 digits
+        z_index_cell_string = str(z_index_cell).zfill(3)
+        # filter all cell_yxz_*_{z_index_cell_string}_*.ply files
+        ply_files = [f for f in ply_files if f.split("_")[4] == z_index_cell_string+".ply"]
+        points = []
+        nr_valid_points = 0
+        for ply_file in ply_files:
+            # load the ply files
+            pcd = o3d.io.read_point_cloud(os.path.join(pointcloud_path, ply_file))
+            points_pcd = np.array(pcd.points)
+            # find the points in the cell that are +- 1 in z away from the current z index
+            valid_points = points_pcd[np.where(np.abs(points_pcd[:, 1] - adjusted_tiff_index) <= 1)]
+            nr_valid_points += len(valid_points)
+            points.append(valid_points)
+
+        # Draw the points
+        for pointcloud in points:
+            for point in pointcloud:
+                y, z, x = point
+                self.tifScene.addEllipse(x-500, y-500, 2, 2, QPen(Qt.blue), QBrush(Qt.blue))
 
     def jumpToTifIndex(self):
         index = int(self.indexBox.text())
         self.loadTifImage(index)
+
+    def toggleDisplayPoints(self):
+        self.display_points = self.displayPointsCheckbox.isChecked()
+        self.loadTifImage(self.currentTifIndex)
 
     def onTifMousePress(self, event):
         # print(f"Clicked position in image coordinates: ({int(scenePos.x())}, {int(scenePos.y())}, {self.currentTifIndex})")

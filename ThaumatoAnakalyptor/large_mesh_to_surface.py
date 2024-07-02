@@ -13,7 +13,7 @@ if __name__ == "__main__":
     parser.add_argument("--input_mesh", type=str, required=True, help="Path to the input mesh file")
     parser.add_argument('--scroll', type=str, required=True, help='Path to the grid cells')
     parser.add_argument('--format', type=str, default='jpg')
-    parser.add_argument("--cut_size", type=int, help="Size of each cut piece along the X axis", default=15000)
+    parser.add_argument("--cut_size", type=int, help="Size of each cut piece along the X axis", default=40000)
     parser.add_argument("--output_folder", type=str, help="Folder to save the cut meshes", default=None)
     parser.add_argument('--gpus', type=int, default=1)
     parser.add_argument('--r', type=int, default=32)
