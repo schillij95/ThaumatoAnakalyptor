@@ -4,6 +4,7 @@ import multiprocessing
 import open3d as o3d
 import argparse
 import os
+import tempfile
 import numpy as np
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -372,7 +373,14 @@ class MeshDataset(Dataset):
         print(f"Y-size: {y_size}, X-size: {x_size}", end="\n")
 
         print(f"Loading mesh from {path}", end="\n")
-        mesh = o3d.io.read_triangle_mesh(path)
+        # copy mesh to tempfile
+        with tempfile.NamedTemporaryFile(suffix=".obj") as temp_file:
+            # copy mesh to tempfile
+            temp_path = temp_file.name
+            # os copy
+            os.system(f"cp {path} {temp_path}")
+            # load mesh
+            mesh = o3d.io.read_triangle_mesh(temp_path)
         self.mesh = mesh
         print(f"Loaded mesh from {path}", end="\n")
 
