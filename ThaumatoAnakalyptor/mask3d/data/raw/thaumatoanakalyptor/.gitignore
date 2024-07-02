@@ -4,3 +4,5 @@ train/
 train_/
 validation/
 validation_/
+zipped_data/
+zipped_data.zip
