@@ -116,17 +116,26 @@ def generate_training_samples_from_annotations(src_folder, dest_folder, volume_f
     all_folders = os.listdir(src_folder)
 
     # Create a multiprocessing Pool and execute function on multiple processes
-    with multiprocessing.Pool(processes=1) as pool:
+    num_threads = max(1, multiprocessing.cpu_count() // 2)
+    with multiprocessing.Pool(processes=num_threads) as pool:
         pool.map(partial(process_folder, src_folder=src_folder, dest_folder=dest_folder, volume_folder=volume_folder), all_folders)
 
 if __name__ == "__main__":
     src_folder = 'ren 60 images'  # Replace with your source folder path
     volume_folder = None # 'point_cloud_Ren_run'  # Replace with your original volume folder path # Volume to extract original PointCloud from. Run integrity checks on human annotations
-    dest_folder = 'annotations_Ren'  # Replace with your destination folder path
+    dest_folder = None  # Replace with your destination folder path
 
     parser = argparse.ArgumentParser(description='Generate training samples from annotations')
-    parser.add_argument('--src_folder', type=str, default=src_folder, help='Source folder path')
+    parser.add_argument('--src_folder', type=str, required=True, help='Source folder path')
     parser.add_argument('--dest_folder', type=str, default=dest_folder, help='Destination folder path')
     parser.add_argument('--volume_folder', type=str, default=volume_folder, help='Volume folder path, runs integrity checks on human annotations')
+
+    args = parser.parse_args()
+
+    src_folder = args.src_folder
+    dest_folder = args.dest_folder
+    if dest_folder is None:
+        dest_folder = src_folder + "_formatted"
+    volume_folder = args.volume_folder
 
     generate_training_samples_from_annotations(src_folder, dest_folder, volume_folder)

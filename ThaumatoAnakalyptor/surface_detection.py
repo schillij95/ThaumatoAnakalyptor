@@ -178,10 +178,11 @@ def scale_to_0_1(tensor):
     # Scale the tensor to the range [0,1]
     tensor_min = torch.min(clipped_tensor)
     tensor_max = torch.max(clipped_tensor)
-    tensor_scale = torch.max(torch.abs(tensor_min), torch.abs(tensor_max)) + 0.000001
+    tensor_scale = torch.max(torch.abs(tensor_min), torch.abs(tensor_max))
+    if tensor_scale < 1e-8:
+        tensor_scale = 1e-8
     scaled_tensor = clipped_tensor / tensor_scale
     return scaled_tensor
-
 
 # Function that convolutes a 3D Volume of vectors to find their mean indiscriminative vector
 def vector_convolution(input_tensor, window_size=20, stride=20, device=None):
@@ -308,10 +309,7 @@ def surface_detection(volume, global_reference_vector, blur_size=3, sobel_chunks
     # Check where the second derivative is zero and the first derivative is above a threshold
     points_to_mark = torch.where(mask)
 
-    # Subsample the points to mark
-    #subsample_nr = 2000000
     coords = torch.stack(points_to_mark, dim=1)
-    #coords = subsample_uniform(coords, subsample_nr)
     
     # Cluster the surface points
     coords_normals = adjusted_vectors_interp[coords[:, 0], coords[:, 1], coords[:, 2]]

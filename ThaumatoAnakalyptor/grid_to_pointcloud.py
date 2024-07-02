@@ -85,9 +85,13 @@ def load_grid(path_template, cords, grid_block_size=500, cell_block_size=500, ui
                     # print(f"File {path} does not exist.")
                     continue
 
-                # Read the image
-                with tifffile.TiffFile(path) as tif:
-                    images = tif.asarray()
+                try:
+                    # Read the image
+                    with tifffile.TiffFile(path) as tif:
+                        images = tif.asarray()
+                except Exception as e:
+                    print(f"Error loading {path}: {e}")
+                    continue
 
                 if uint8:
                     images = np.uint8(images//256)

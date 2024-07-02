@@ -335,10 +335,15 @@ class MeshFlattener:
         processing = [False] * self.vertices_np.shape[0]
         uv_coordinates = {}
 
-        bfs_queue.append((start_vertex_idx, 0.0))
+        # Set the start vertex and angle
+        start_index_angle = self.angle_between_vertices(np.array([0.0, 0.0, 0.0]), self.vertices_np[start_vertex_idx])
+        bfs_queue.append((start_vertex_idx, start_index_angle))
 
         i = 0
+        # tqdm progress bar
+        pbar = tqdm(total=self.vertices_np.shape[0], desc="BFS Angle Calculation Progress")
         while bfs_queue:
+            pbar.update(1)
             i += 1
             vertex_idx, current_angle = bfs_queue.popleft()
             
