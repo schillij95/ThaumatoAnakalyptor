@@ -934,7 +934,7 @@ class ScrollGraph(Graph):
         count_res = 0
         patches_centroids = {}
         # Process results from each worker
-        for score_sheets, score_switching_sheets, score_bad_edges, volume_centroids in results:
+        for score_sheets, score_switching_sheets, score_bad_edges, volume_centroids in tqdm(results, desc="Processing results"):
             count_res += len(score_sheets)
             # Calculate scores, add patches edges to graph, etc.
             self.build_other_block_edges(score_sheets)
