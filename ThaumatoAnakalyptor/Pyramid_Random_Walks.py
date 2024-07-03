@@ -9,7 +9,7 @@ import tarfile
 import tempfile
 import open3d as o3d
 import json
-from multiprocessing import Pool
+from multiprocessing import Pool, cpu_count
 import time
 import argparse
 import yaml
@@ -2641,7 +2641,7 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
     # Build graph
     if recompute:
         scroll_graph = ScrollGraph(overlapp_threshold, umbilicus_path)
-        num_processes = max(1, multiprocessing.cpu_count() - 2)
+        num_processes = max(1, cpu_count() - 2)
         start_block, patch_id = scroll_graph.build_graph(path, num_processes=num_processes, start_point=start_point, prune_unconnected=False)
         print("Saving built graph...")
         scroll_graph.save_graph(recompute_path)
