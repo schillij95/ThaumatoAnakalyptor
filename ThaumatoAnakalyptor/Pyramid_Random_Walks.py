@@ -1822,7 +1822,7 @@ class RandomWalkSolver:
         # when reaching the pyramid top, the graph is expanded again with the help of the landmarks. the top pyramid node is the starting node.
         # expanding the pyramid iteratively and setting the landmark nodes as fixed k values which were calculated in the last pyramid down iteration
 
-        fresh_pyramid = False
+        fresh_pyramid = True
         if fresh_pyramid:
             graph = self.graph
             graphs = [graph]
@@ -1889,7 +1889,7 @@ class RandomWalkSolver:
             fixed_ks = [0]
             # pyramid down
             for i in tqdm(range(len(graphs)-1, -1, -1), desc="Pyramid Down"):
-                # skip last 2 graph steps, because this graph has too much noise in its nodes. the sheets are allready found earlier in the pyramid
+                # skip last 1 graph steps, because this graph has too much noise in its nodes. the sheets are already found earlier in the pyramid
                 if i < 1:
                     continue
                 graph = graphs[i]
@@ -1910,9 +1910,10 @@ class RandomWalkSolver:
         if production_run:
             # last pass over it with solve cpp random walks
             # fixed_nodes, fixed_ks = self.solve_cpp(path, fixed_nodes, fixed_ks, 8, 4, new_node_usage=False)
-            graph = self.graph.graph_selected_nodes(fixed_nodes, fixed_ks, other_block_edges_only=False)
-            graph.largest_connected_component(delete_nodes=True)
-            fixed_nodes, fixed_ks = graph.get_nodes_and_ks()
+            # TODO: implement a sensible filtering (maybe 2-distance linkage) to remove the noise from the graph
+            # graph = self.graph.graph_selected_nodes(fixed_nodes, fixed_ks, other_block_edges_only=False)
+            # graph.largest_connected_component(delete_nodes=True)
+            # fixed_nodes, fixed_ks = graph.get_nodes_and_ks()
             fixed_nodes, fixed_ks = self.solve_cpp(path, fixed_nodes, fixed_ks, 8, 4, new_node_usage=True)
 
         return np.array(fixed_nodes), np.array(fixed_ks)
@@ -2640,7 +2641,8 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
     # Build graph
     if recompute:
         scroll_graph = ScrollGraph(overlapp_threshold, umbilicus_path)
-        start_block, patch_id = scroll_graph.build_graph(path, num_processes=30, start_point=start_point, prune_unconnected=False)
+        num_processes = max(1, multiprocessing.cpu_count() - 2)
+        start_block, patch_id = scroll_graph.build_graph(path, num_processes=num_processes, start_point=start_point, prune_unconnected=False)
         print("Saving built graph...")
         scroll_graph.save_graph(recompute_path)
 
