@@ -1511,11 +1511,11 @@ AggregatedConnections solveUp(
     }
     precompute_pick(std::cref(picked_nrs), valid_indices);
 
-    int nr_unchanged_walks = 0;
+    size_t nr_unchanged_walks = 0;
     NodeUsageCount node_usage_count; // Map to track node usage count with specific k values
-    int walk_aggregation_count = 0;
-    int total_walks = 0;
-    int nrWalks = walksPerThread * numThreads;
+    size_t walk_aggregation_count = 0;
+    size_t total_walks = 0;
+    size_t nrWalks = walksPerThread * numThreads;
 
     // numm threads gens
     std::vector<std::mt19937> gen_;
@@ -1702,12 +1702,12 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
         // Add start_node to volume_dict
     }
 
-    int nr_unchanged_walks = 0;
+    size_t nr_unchanged_walks = 0;
     NodeUsageCount node_usage_count; // Map to track node usage count with specific k values
-    int walk_aggregation_count = 0;
-    int total_walks = 0;
-    int nrWalks = walksPerThread * numThreads;
-    int nr_node_walks = nr_walks_per_node * graph_n;
+    size_t walk_aggregation_count = 0;
+    size_t total_walks = 0;
+    size_t nrWalks = walksPerThread * numThreads;
+    size_t nr_node_walks = nr_walks_per_node * graph_n;
 
     // numm threads gens
     std::vector<std::mt19937> gen_;
