@@ -743,3 +743,5 @@ def main():
     
 if __name__ == "__main__":
     main()
+
+# Example: python3 -m ThaumatoAnakalyptor.pointcloud_to_instances --path /scroll.volpkg/working/scroll3_surface_points --dest /scroll.volpkg/working/scroll3_surface_points --umbilicus_path /scroll.volpkg/working/scroll3_surface_points/umbilicus.txt --main_drive "" --alternative_ply_drives "" "" --batch_size 2 --gpus 1
