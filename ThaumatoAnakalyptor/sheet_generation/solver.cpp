@@ -1511,6 +1511,7 @@ AggregatedConnections solveUp(
         picked_nrs.push_back(0);
     }
     precompute_pick(std::cref(picked_nrs), valid_indices);
+    precompute_pick_frontier(std::cref(nodes));
 
     size_t nr_unchanged_walks = 0;
     size_t good_walks_nr = 0;

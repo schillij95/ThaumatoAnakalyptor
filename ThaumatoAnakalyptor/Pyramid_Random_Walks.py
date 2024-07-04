@@ -2686,8 +2686,8 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
     scroll_graph.set_overlapp_threshold(overlapp_threshold)
     scroll_graph.start_block, scroll_graph.patch_id = start_block, patch_id
     
-    scroll_graph.flip_winding_direction()
-    scroll_graph.save_graph(recompute_path)
+    # scroll_graph.flip_winding_direction()
+    # scroll_graph.save_graph(recompute_path)
 
     print(f"Number of nodes in the graph: {len(scroll_graph.nodes)}")
 
