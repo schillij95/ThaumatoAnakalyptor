@@ -2023,7 +2023,7 @@ class RandomWalkSolver:
         # print(f"Aggregated Connections: {aggregated_connections_cpp}")
 
         aggregated_connections = {}
-        for start_node_index, end_node_index, k in aggregated_connections_cpp:
+        for start_node_index, end_node_index, k in tqdm(aggregated_connections_cpp, desc="Translating Aggregating connections"):
             start_node = tuple(landmark_ids[start_node_index])
             end_node = tuple(landmark_ids[end_node_index])
             # print(start_node, end_node, k, aggregated_connections_cpp[(start_node_index, end_node_index, k)])

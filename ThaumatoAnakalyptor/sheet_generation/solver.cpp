@@ -1513,6 +1513,7 @@ AggregatedConnections solveUp(
     precompute_pick(std::cref(picked_nrs), valid_indices);
 
     size_t nr_unchanged_walks = 0;
+    size_t good_walks_nr = 0;
     NodeUsageCount node_usage_count; // Map to track node usage count with specific k values
     size_t walk_aggregation_count = 0;
     size_t total_walks = 0;
@@ -1549,6 +1550,7 @@ AggregatedConnections solveUp(
                 std::cout << "\033[1;36m" << "  \"" << pair.first << "\": " << pair.second << "\033[0m" << std::endl;
             }
             std::cout << "\033[1;32m" << "[ThaumatoAnakalyptor]: Starting " << total_walks * nrWalks << "th random walk of " << max_nr_walks * landmark_nodes.size() << " . Nr good nodes: " << nodes.size() << "\033[0m" << std::endl;
+            std::cout << "\033[1;32m" << "[ThaumatoAnakalyptor]: Good Walks Nr: " << good_walks_nr << "\033[0m" << std::endl;
             std::cout << "\033[1;32m" << "[ThaumatoAnakalyptor]: Duration 1: " << duration1 / count_durations << " ms" << "\033[0m" << std::endl;
             std::cout << "\033[1;32m" << "[ThaumatoAnakalyptor]: Duration 2: " << duration2 / count_durations << " ms" << "\033[0m" << std::endl;
             std::cout << "\033[1;32m" << "[ThaumatoAnakalyptor]: Duration 3_0: " << duration3_0 / count_durations << " ms" << "\033[0m" << std::endl;
@@ -1632,7 +1634,7 @@ AggregatedConnections solveUp(
             }
 
             walk_aggregate_connections(walk, walk_ks, aggregated_connections);
-
+            good_walks_nr++;
             nr_unchanged_walks = 0;
         }
 
