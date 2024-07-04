@@ -1834,6 +1834,7 @@ class RandomWalkSolver:
             pyramid_index = 0
             pyramid_up_path = os.path.join(path, "pyramid_up.pkl")
             pyramid_up_initial_landmark_aggregated_connections_path = os.path.join(path, "pyramid_up_initial_landmark_aggregated_connections.pkl")
+            pyramid_up_initial_landmark_aggregated_connections_path_temp = os.path.join(path, "pyramid_up_initial_landmark_aggregated_connections_temp.pkl")
             # create folder if not exists
             os.makedirs(os.path.dirname(pyramid_up_path), exist_ok=True)
 
@@ -1857,8 +1858,10 @@ class RandomWalkSolver:
                         aggregated_connections = self.solve_pyramid_up_cpp(graph, landmark_nodes, max_nr_walks=pyramid_up_nr_average_, max_steps=max_steps_, max_tries=max_tries, min_steps=min_steps_, stop_event=stop_event)
                         if len(graphs) == 1:
                             # save the initial landmark aggregated_connections
-                            with open(pyramid_up_initial_landmark_aggregated_connections_path, 'wb') as file:
+                            with open(pyramid_up_initial_landmark_aggregated_connections_path_temp, 'wb') as file:
                                 pickle.dump(aggregated_connections, file)
+                            # Move the temp file to the final file
+                            os.rename(pyramid_up_initial_landmark_aggregated_connections_path_temp, pyramid_up_initial_landmark_aggregated_connections_path)
                     else:
                         # load the initial landmark aggregated_connections
                         with open(pyramid_up_initial_landmark_aggregated_connections_path, 'rb') as file:
