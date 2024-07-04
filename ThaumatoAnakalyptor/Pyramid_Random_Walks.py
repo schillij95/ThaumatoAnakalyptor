@@ -1842,7 +1842,7 @@ class RandomWalkSolver:
             fresh_pyramid_up = True
             if fresh_pyramid_up:
                 while True:
-                    recompute_initial_landmark_aggregated_connections = False
+                    recompute_initial_landmark_aggregated_connections = True
                     if recompute_initial_landmark_aggregated_connections or len(graphs) > 1:
                         # sample landmark nodes
                         landmark_nodes = self.sample_landmark_nodes(graph, percentage=0.5)
