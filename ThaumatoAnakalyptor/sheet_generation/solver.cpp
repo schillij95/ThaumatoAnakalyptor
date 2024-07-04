@@ -542,6 +542,39 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::vector<int>> pick_start_no
     return {std::move(start_nodes), std::move(start_ks), std::move(start_indices)};
 }
 
+std::tuple<std::vector<NodePtr>, std::vector<K>, std::vector<int>> pick_start_nodes_precomputed_up(
+    const std::vector<NodePtr>& nodes, 
+    const std::vector<K>& ks, 
+    const std::vector<int>& valid_indices,
+    size_t nr_walks
+    )
+{
+    std::vector<NodePtr> start_nodes;
+    std::vector<K> start_ks;
+    std::vector<int> start_indices;
+
+    start_nodes.reserve(nr_walks);  // Reserving space to avoid multiple reallocations
+    start_ks.reserve(nr_walks);
+    start_indices.reserve(nr_walks);
+
+    for (size_t i = 0; i < nr_walks; ++i) {
+        int rand_index = valid_indices[dist_pick(gen)];
+
+        NodePtr node = nodes[rand_index];
+        K k = ks[rand_index];
+
+        if (node->index != rand_index) {
+            std::cout << "Bug in pick_start_nodes_precomputed_up" << std::endl;
+        }
+
+        start_nodes.push_back(node);
+        start_ks.push_back(k);
+        start_indices.push_back(rand_index);
+    }
+
+    return {std::move(start_nodes), std::move(start_ks), std::move(start_indices)};
+}
+
 std::tuple<std::vector<NodePtr>, std::vector<K>, std::vector<int>> pick_start_nodes_precomputed_pyramid_down(
     std::uniform_int_distribution<>& distrib,
     const std::vector<NodePtr>& landmark_nodes,
@@ -1511,7 +1544,7 @@ AggregatedConnections solveUp(
         picked_nrs.push_back(0);
     }
     precompute_pick(std::cref(picked_nrs), valid_indices);
-    precompute_pick_frontier(std::cref(nodes));
+    // precompute_pick_frontier(std::cref(nodes)); // frontier precomputation
 
     size_t nr_unchanged_walks = 0;
     size_t good_walks_nr = 0;
@@ -1571,7 +1604,8 @@ AggregatedConnections solveUp(
         std::vector<NodePtr> sns;
         std::vector<K> sks;
         std::vector<int> indices_s;
-        std::tie(sns, sks, indices_s) = pick_start_nodes_precomputed(std::cref(nodes), std::cref(ks), std::cref(valid_indices), nrWalks); // initial version used valid_indices instead of frontier distribution. maybe change back if it doesnt give good results like so
+        std::tie(sns, sks, indices_s) = pick_start_nodes_precomputed_up(std::cref(nodes), std::cref(ks), std::cref(valid_indices), nrWalks); // changed back
+        // std::tie(sns, sks, indices_s) = pick_start_nodes_precomputed(std::cref(nodes), std::cref(ks), std::cref(valid_indices), nrWalks); // initial version used valid_indices instead of frontier distribution. maybe change back if it doesnt give good results like so
 
         auto end2 = std::chrono::high_resolution_clock::now();
 
