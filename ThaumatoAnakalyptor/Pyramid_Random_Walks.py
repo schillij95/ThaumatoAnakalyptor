@@ -1749,7 +1749,7 @@ class RandomWalkSolver:
 
         # delete all nodes with too little certainty
         certainty_min_threshold = 0.33
-        certainty_min_threshold = 0.00
+        # certainty_min_threshold = 0.00
         nodes = list(aggregated_connections.keys())
         for start_node in tqdm(nodes, desc="Removing nodes with too little certainty"):
             end_nodes = list(aggregated_connections[start_node].keys())
