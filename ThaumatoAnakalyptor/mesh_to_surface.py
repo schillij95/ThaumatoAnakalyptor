@@ -614,7 +614,7 @@ class MeshDataset(Dataset):
             grid_cell = tif.asarray()
 
         if uint8:
-            grid_cell = np.uint8(grid_cell//255)
+            grid_cell = np.uint8(grid_cell//256)
         return grid_cell
     
     def load_grid_zarr(self, grid_index, uint8=False):
@@ -629,7 +629,7 @@ class MeshDataset(Dataset):
         grid_cell[:zarr_grid.shape[0], :zarr_grid.shape[1], :zarr_grid.shape[2]] = zarr_grid
 
         if uint8:
-            grid_cell = np.uint8(grid_cell//255)
+            grid_cell = np.uint8(grid_cell//256)
         return grid_cell
     
     def __len__(self):
