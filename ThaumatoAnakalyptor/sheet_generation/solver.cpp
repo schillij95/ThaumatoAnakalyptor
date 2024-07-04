@@ -1571,7 +1571,7 @@ AggregatedConnections solveUp(
         std::vector<NodePtr> sns;
         std::vector<K> sks;
         std::vector<int> indices_s;
-        std::tie(sns, sks, indices_s) = pick_start_nodes_precomputed(std::cref(nodes), std::cref(ks), std::cref(valid_indices), nrWalks);
+        std::tie(sns, sks, indices_s) = pick_start_nodes_precomputed(std::cref(nodes), std::cref(ks), std::cref(valid_indices), nrWalks); // initial version used valid_indices instead of frontier distribution. maybe change back if it doesnt give good results like so
 
         auto end2 = std::chrono::high_resolution_clock::now();
 

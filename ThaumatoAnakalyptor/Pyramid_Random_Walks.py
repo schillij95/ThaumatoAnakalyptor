@@ -1818,7 +1818,6 @@ class RandomWalkSolver:
         
         return contracted_graph
 
-    # def solve_pyramid(self, path, pyramid_up_nr_average=1000, max_nr_walks=100, nr_walks_per_node=100, max_unchanged_walks=10000, max_steps=100, max_tries=6, min_steps=10, min_end_steps=4, l=7, l_subsequent=6, n=4, stop_event=None):
     def solve_pyramid(self, path, pyramid_up_nr_average=1000, max_nr_walks=100, nr_walks_per_node=100, max_unchanged_walks=10000, max_steps=100, max_tries=6, min_steps=10, min_end_steps=4, l=7, l_subsequent=6, n=4, stop_event=None):
         # pyramid solution utilizing random walks to deduct the nodes connections
         # samples landmarks and computing their connection certainties iteratively while contracting the graph with the help of the landmarks
@@ -1851,6 +1850,8 @@ class RandomWalkSolver:
                         assert len(landmark_nodes) > 0, "No landmark nodes sampled."
                         print(f"Pyramid Index is {pyramid_index}. Remaining Landmark Nodes: {len(landmark_nodes)}")
                         # compute landmark nodes connections
+                        # max_steps_ = max_steps if len(graphs) == 1 else max_steps - 1
+                        # min_steps_ = min_steps if len(graphs) == 1 else min_steps - 1
                         max_steps_ = max_steps
                         min_steps_ = 10 if len(graphs) == 1 else 9
                         pyramid_up_nr_average_ = pyramid_up_nr_average if len(graphs) == 1 else pyramid_up_nr_average * 2
