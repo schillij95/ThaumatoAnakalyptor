@@ -1696,13 +1696,14 @@ class RandomWalkSolver:
         return list(landmark_nodes)
     
     def contract_graph(self, graph, aggregated_connections, l=7, l_subsequent=5, n=5):
+        print("Contracting graph...")
         # contract the graph with the aggregated connections
         contracted_graph = ScrollGraph(graph.overlapp_threshold, graph.umbilicus_path)
 
         # count all certainties for each start (node, end node) pair
         certainties_total = {}
         certainties_max = {}
-        for start_node in aggregated_connections:
+        for start_node in tqdm(aggregated_connections, desc="Aggregating connections"):
             if start_node not in certainties_total:
                 certainties_total[start_node] = {}
             if start_node not in certainties_max:
@@ -1750,7 +1751,7 @@ class RandomWalkSolver:
         certainty_min_threshold = 0.33
         certainty_min_threshold = 0.00
         nodes = list(aggregated_connections.keys())
-        for start_node in nodes:
+        for start_node in tqdm(nodes, desc="Removing nodes with too little certainty"):
             end_nodes = list(aggregated_connections[start_node].keys())
             for end_node in end_nodes:
                 certainty = certainties_max[start_node][end_node]["certainty"]/certainties_total[start_node][end_node]
@@ -1761,7 +1762,7 @@ class RandomWalkSolver:
         max_walks = 10
         # only take the top n edges for each node
         nodes = list(aggregated_connections.keys())
-        for start_node in nodes:
+        for start_node in tqdm(nodes, desc="Taking top n edges for each node"):
             # sort end nodes by certainty total from largest certainty to lowest
             n_ = min(n, len(aggregated_connections[start_node]))
             end_nodes1 = sorted(aggregated_connections[start_node], key=lambda x: certainties_max[start_node][x]["certainty"], reverse=True)[:n_]
@@ -1783,7 +1784,7 @@ class RandomWalkSolver:
 
         # add all landmark connection edges
         added_nodes = set()
-        for start_node in aggregated_connections:
+        for start_node in tqdm(aggregated_connections, desc="Adding landmark connection edges"):
             for end_node in aggregated_connections[start_node]:
                 max_certainty = certainties_max[start_node][end_node]["certainty"]
                 max_k = certainties_max[start_node][end_node]["k"]
@@ -1799,7 +1800,7 @@ class RandomWalkSolver:
                     added_nodes.add(end_node)
 
         # add all nodes
-        for node in added_nodes:
+        for node in tqdm(added_nodes, desc="Adding nodes"):
             contracted_graph.add_node(node, graph.nodes[node]['centroid'], winding_angle=graph.nodes[node]['winding_angle'])
         
         # check for at least one node, else use backup node
@@ -1818,7 +1819,7 @@ class RandomWalkSolver:
         return contracted_graph
 
     # def solve_pyramid(self, path, pyramid_up_nr_average=1000, max_nr_walks=100, nr_walks_per_node=100, max_unchanged_walks=10000, max_steps=100, max_tries=6, min_steps=10, min_end_steps=4, l=7, l_subsequent=6, n=4, stop_event=None):
-    def solve_pyramid(self, path, pyramid_up_nr_average=1000, max_nr_walks=100, nr_walks_per_node=100, max_unchanged_walks=10000, max_steps=100, max_tries=6, min_steps=10, min_end_steps=4, l=5, l_subsequent=4, n=2, stop_event=None):
+    def solve_pyramid(self, path, pyramid_up_nr_average=1000, max_nr_walks=100, nr_walks_per_node=100, max_unchanged_walks=10000, max_steps=100, max_tries=6, min_steps=10, min_end_steps=4, l=5, l_subsequent=4, n=6, stop_event=None):
         # pyramid solution utilizing random walks to deduct the nodes connections
         # samples landmarks and computing their connection certainties iteratively while contracting the graph with the help of the landmarks
         # when reaching the pyramid top, the graph is expanded again with the help of the landmarks. the top pyramid node is the starting node.
