@@ -1850,10 +1850,10 @@ class RandomWalkSolver:
                         assert len(landmark_nodes) > 0, "No landmark nodes sampled."
                         print(f"Pyramid Index is {pyramid_index}. Remaining Landmark Nodes: {len(landmark_nodes)}")
                         # compute landmark nodes connections
-                        # max_steps_ = max_steps if len(graphs) == 1 else max_steps - 1
-                        # min_steps_ = min_steps if len(graphs) == 1 else min_steps - 1
-                        max_steps_ = max_steps
-                        min_steps_ = 10 if len(graphs) == 1 else 9
+                        max_steps_ = max_steps if len(graphs) == 1 else max_steps - 1
+                        min_steps_ = min_steps if len(graphs) == 1 else min_steps - 1
+                        # max_steps_ = max_steps
+                        # min_steps_ = 10 if len(graphs) == 1 else 9
                         pyramid_up_nr_average_ = pyramid_up_nr_average if len(graphs) == 1 else pyramid_up_nr_average * 2
                         # aggregated_connections = self.solve_pyramid_up(graph, landmark_nodes, max_nr_walks=pyramid_up_nr_average_, max_steps=max_steps_, max_tries=max_tries, min_steps=min_steps_, stop_event=stop_event)
                         aggregated_connections = self.solve_pyramid_up_cpp(graph, landmark_nodes, max_nr_walks=pyramid_up_nr_average_, max_steps=max_steps_, max_tries=max_tries, min_steps=min_steps_, stop_event=stop_event)
