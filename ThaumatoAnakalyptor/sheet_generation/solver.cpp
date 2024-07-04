@@ -404,7 +404,7 @@ std::pair<std::vector<NodePtr>, std::vector<NodePtr>> initializeNodes(
 std::pair<py::array_t<int>, py::array_t<int>> process_result(std::vector<NodePtr>& final_nodes, std::vector<K>& final_ks)
 {
     // Correctly specify the shape for the 2D numpy array
-    py::array_t<int> result_ids(py::array::ShapeContainer({static_cast<long int>(final_nodes.size()), 4}));
+    py::array_t<int> result_ids(py::array::ShapeContainer({static_cast<size_t>(final_nodes.size()), 4}));
     py::array_t<int> result_ks(final_ks.size()); // 1D array for result_ks
 
     auto r_ids = result_ids.mutable_unchecked<2>(); // Now correctly a 2D array
@@ -413,7 +413,7 @@ std::pair<py::array_t<int>, py::array_t<int>> process_result(std::vector<NodePtr
     K max_ks = *std::max_element(final_ks.begin(), final_ks.end());
     std::cout << "Min k: " << min_ks << " Max k: " << max_ks << std::endl;
 
-    for (int i = 0; i < final_nodes.size(); ++i) {
+    for (size_t i = 0; i < final_nodes.size(); ++i) {
         NodePtr node = final_nodes[i];
         K k = final_ks[i];
 
@@ -512,7 +512,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::vector<int>> pick_start_no
     const std::vector<NodePtr>& nodes, 
     const std::vector<K>& ks, 
     const std::vector<int>& valid_indices,
-    int nr_walks
+    size_t nr_walks
     )
 {
     std::vector<NodePtr> start_nodes;
@@ -523,9 +523,9 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::vector<int>> pick_start_no
     start_ks.reserve(nr_walks);
     start_indices.reserve(nr_walks);
 
-    for (int i = 0; i < nr_walks; ++i) {
+    for (size_t i = 0; i < nr_walks; ++i) {
         // int rand_index = valid_indices[dist_pick(gen)];
-        int rand_index = dist_frontier(gen);
+        size_t rand_index = dist_frontier(gen);
 
         NodePtr node = nodes[rand_index];
         K k = ks[rand_index];
@@ -594,9 +594,9 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::vector<int>> pick_start_no
 void precompute_pick(const std::vector<long>& picked_nrs, std::vector<int>& valid_indices) {
     double mean_ = 0.0;
     double min_ = std::numeric_limits<double>::max();
-    int count = 0;
+    size_t count = 0;
     valid_indices.clear();
-    for (int i = 0; i < picked_nrs.size(); ++i) {
+    for (size_t i = 0; i < picked_nrs.size(); ++i) {
         // Update mean and min statistics
         mean_ += (double)picked_nrs[i];
         count++;
@@ -611,7 +611,7 @@ void precompute_pick(const std::vector<long>& picked_nrs, std::vector<int>& vali
     double threshold = min_ + min_mean_abs * 0.25;
     // std::cout << "Mean: " << mean_ << " Min: " << min_ << " Threshold: " << threshold << std::endl;
 
-    for (int i = 0; i < picked_nrs.size(); ++i) {
+    for (size_t i = 0; i < picked_nrs.size(); ++i) {
         if ((double)picked_nrs[i] <= threshold) {
             valid_indices.push_back(i);
         }
@@ -1009,7 +1009,7 @@ std::tuple<int, bool> walk_aggregation_func(
     std::vector<NodePtr> aggregated_nodes;
     std::vector<K> aggregated_ks;
 
-    for (int i = 0; i < walk.size(); ++i) {
+    for (size_t i = 0; i < walk.size(); ++i) {
         NodePtr node = walk[i];
         K k = ks[i];
 
@@ -1019,6 +1019,7 @@ std::tuple<int, bool> walk_aggregation_func(
 
         // Aggregate node if it meets criteria and hasn't been aggregated before
         if (count >= walk_aggregation_threshold) {
+            node_usage_count[node][k] = walk_aggregation_threshold;
             // Check if the node is already in volume_dict
             bool isAlreadyAggregated = exists(std::cref(volume_dict), node->volume_id, node->patch_id);
             if (isAlreadyAggregated) {
@@ -1077,17 +1078,17 @@ void walk_aggregate_connections(
 {
     NodePtr start_node = walk[0];
     K start_k = ks[0];
-    int start_index = start_node->index;
+    size_t start_index = start_node->index;
 
     assert(start_node->is_landmark && "First node in walk must be a landmark");
 
     int nr_landmarks_direction1 = 0;
-    int i = 1;
+    size_t i = 1;
     for (; i < walk.size(); ++i) {
         NodePtr end_node = walk[i];
         K k = ks[i];
         K k_inv = -k;
-        int end_index = end_node->index;
+        size_t end_index = end_node->index;
         AggregateKey key = {start_index, end_index, k};
         AggregateKey key_inv = {end_index, start_index, k_inv};
         if (!(end_node->is_landmark)) {
@@ -1137,7 +1138,7 @@ void walk_aggregate_connections(
     }
 }
 
-inline void update_picked_nr(const std::vector<NodePtr>& nodes, std::vector<long>& picked_nrs, int index, int value) {
+inline void update_picked_nr(const std::vector<NodePtr>& nodes, std::vector<long>& picked_nrs, size_t index, int value) {
     if (index < 0) {
         return;
     }
@@ -1543,7 +1544,7 @@ AggregatedConnections solveUp(
         // Display message counts at the end of solve function
         if (total_walks++ % 100 == 0)
         {
-            std::cout << "\033[1;36m" << "[ThaumatoAnakalyptor]: Random Walk Messages Summary:" << "\033[0m" << std::endl;
+            std::cout << "\033[1;36m" << "[ThaumatoAnakalyptor]: Random Walk Up Messages Summary:" << "\033[0m" << std::endl;
             for (const auto& pair : message_count) {
                 std::cout << "\033[1;36m" << "  \"" << pair.first << "\": " << pair.second << "\033[0m" << std::endl;
             }
@@ -1572,7 +1573,7 @@ AggregatedConnections solveUp(
         auto end2 = std::chrono::high_resolution_clock::now();
 
         std::vector<std::future<ThreadResult>> futures(numThreads);
-        for (int i = 0; i < numThreads; ++i) {
+        for (size_t i = 0; i < numThreads; ++i) {
             auto start_nodes = std::vector<NodePtr>(sns.begin() + i * walksPerThread, sns.begin() + (i + 1) * walksPerThread);
             auto start_ks = std::vector<K>(sks.begin() + i * walksPerThread, sks.begin() + (i + 1) * walksPerThread);
             futures[i] = std::async(std::launch::async, threadRandomWalk, walksPerThread, start_nodes, start_ks, std::cref(volume_dict), std::cref(sheet_z_range), std::cref(sheet_k_range), max_umbilicus_difference, max_same_block_jump_range, max_steps, max_tries, min_steps, enable_winding_switch);
@@ -1591,7 +1592,7 @@ AggregatedConnections solveUp(
                     // Safe to get the future since it's ready and being accessed first time
                     auto [walks_, walk_ks_, successes_, new_nodes_] = it->get();
 
-                    for (int j = 0; j < walks_.size(); ++j) {
+                    for (size_t j = 0; j < walks_.size(); ++j) {
                         walks_futures.push_back(std::move(walks_[j]));
                         walk_ks_futures.push_back(std::move(walk_ks_[j]));
                         successes_futures.push_back(successes_[j]);
@@ -1612,7 +1613,7 @@ AggregatedConnections solveUp(
         auto end3 = std::chrono::high_resolution_clock::now();
 
         // Loop over all the walks by iterating trough them
-        for (int i = 0; i < walks_futures.size(); ++i) {
+        for (size_t i = 0; i < walks_futures.size(); ++i) {
             auto& walk = walks_futures[i];
             auto& walk_ks = walk_ks_futures[i];
             bool success = successes_futures[i];
@@ -1688,7 +1689,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
     std::vector<int> valid_indices;
 
     if (!continue_walks) {
-        for (int i = 0; i < start_nodes.size(); ++i) {
+        for (size_t i = 0; i < start_nodes.size(); ++i) {
             NodePtr start_node = start_nodes[i];
             K start_k = start_ks[i];
             start_node->is_landmark = true;
@@ -1735,7 +1736,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
         // Display message counts at the end of solve function
         if (total_walks++ % 100 == 0)
         {
-            std::cout << "\033[1;36m" << "[ThaumatoAnakalyptor]: Random Walk Messages Summary:" << "\033[0m" << std::endl;
+            std::cout << "\033[1;36m" << "[ThaumatoAnakalyptor]: Random Walk Down Messages Summary:" << "\033[0m" << std::endl;
             for (const auto& pair : message_count) {
                 std::cout << "\033[1;36m" << "  \"" << pair.first << "\": " << pair.second << "\033[0m" << std::endl;
             }
@@ -1755,7 +1756,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
         if (nr_unchanged_walks > max_unchanged_walks && walk_aggregation_count != 0) { //  && (/* More checks*/)
             nr_unchanged_walks = 0;
             // set picked_nrs to 0
-            for (int i = 0; i < picked_nrs.size(); ++i) {
+            for (size_t i = 0; i < picked_nrs.size(); ++i) {
                 picked_nrs[i] = 0;
             }
             precompute_pick(std::cref(picked_nrs), valid_indices);
@@ -1769,14 +1770,14 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
         std::vector<int> indices_s;
         int nrWalks = walksPerThread * numThreads;
         std::tie(sns, sks, indices_s) = pick_start_nodes_precomputed_pyramid_down(dist, std::cref(start_nodes), std::cref(start_ks), std::cref(nodes), std::cref(ks), std::cref(valid_indices), nrWalks);
-        for (int i = 0; i < indices_s.size(); ++i) {
+        for (size_t i = 0; i < indices_s.size(); ++i) {
             update_picked_nr(std::cref(nodes), picked_nrs, indices_s[i], 1);
         }
 
         auto end2 = std::chrono::high_resolution_clock::now();
 
         std::vector<std::future<ThreadResult>> futures(numThreads);
-        for (int i = 0; i < numThreads; ++i) {
+        for (size_t i = 0; i < numThreads; ++i) {
             auto start_nodes = std::vector<NodePtr>(sns.begin() + i * walksPerThread, sns.begin() + (i + 1) * walksPerThread);
             auto start_ks = std::vector<K>(sks.begin() + i * walksPerThread, sks.begin() + (i + 1) * walksPerThread);
             futures[i] = std::async(std::launch::async, threadRandomWalk, walksPerThread, start_nodes, start_ks, std::cref(volume_dict), std::cref(sheet_z_range), std::cref(sheet_k_range), max_umbilicus_difference, max_same_block_jump_range, max_steps, max_tries, min_steps, enable_winding_switch);
@@ -1795,7 +1796,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
                     // Safe to get the future since it's ready and being accessed first time
                     auto [walks_, walk_ks_, successes_, new_nodes_] = it->get();
 
-                    for (int j = 0; j < walks_.size(); ++j) {
+                    for (size_t j = 0; j < walks_.size(); ++j) {
                         walks_futures.push_back(std::move(walks_[j]));
                         walk_ks_futures.push_back(std::move(walk_ks_[j]));
                         successes_futures.push_back(successes_[j]);
@@ -1817,7 +1818,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
 
         // Loop over all the walks by iterating trough them
         bool total_aggregation_success = false;
-        for (int i = 0; i < walks_futures.size(); ++i) {
+        for (size_t i = 0; i < walks_futures.size(); ++i) {
             auto& walk = walks_futures[i];
             auto& walk_ks = walk_ks_futures[i];
             bool success = successes_futures[i];
@@ -1947,7 +1948,7 @@ AggregatedConnections solvePyramidRandomWalkUp(
     const int numThreads = std::max((int)(1), (int)((std::thread::hardware_concurrency() * 4) / 5));
     AggregatedConnections agg_con = solveUp(start_nodes, config, numThreads);
 
-    std::cout << "Solve done" << std::endl;
+    std::cout << "Solve UP done" << std::endl;
 
     return agg_con;
 }
@@ -1996,7 +1997,7 @@ std::pair<py::array_t<int>, py::array_t<int>> solvePyramidRandomWalkDown(
     const int numThreads = std::max((int)(1), (int)((std::thread::hardware_concurrency() * 4) / 5));
     auto [final_nodes, final_ks] = solveDown(nodes.size(), landmark_nodes, landmark_ks, config, nr_walks_per_node, numThreads);
 
-    std::cout << "Solve done" << std::endl;
+    std::cout << "Solve DOWN done" << std::endl;
 
     // Convert final_nodes and final_ks to a format suitable for Python
     return process_result(final_nodes, final_ks);

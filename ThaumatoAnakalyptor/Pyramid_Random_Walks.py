@@ -1642,7 +1642,7 @@ class RandomWalkSolver:
         node_usage_path = os.path.join(path, "node_usage.pkl")
         try:
             # Optionally load translation from .pkl instead of recomputing
-            fresh_start = False
+            fresh_start = True
             if fresh_start:
                 translation = self.translate_data_to_cpp_v2(self.graph, overlapp_threshold)
                 # save the translation as .pkl
@@ -1748,6 +1748,7 @@ class RandomWalkSolver:
 
         # delete all nodes with too little certainty
         certainty_min_threshold = 0.33
+        certainty_min_threshold = 0.00
         nodes = list(aggregated_connections.keys())
         for start_node in nodes:
             end_nodes = list(aggregated_connections[start_node].keys())
@@ -1816,7 +1817,8 @@ class RandomWalkSolver:
         
         return contracted_graph
 
-    def solve_pyramid(self, path, pyramid_up_nr_average=1000, max_nr_walks=100, nr_walks_per_node=100, max_unchanged_walks=10000, max_steps=100, max_tries=6, min_steps=10, min_end_steps=4, l=7, l_subsequent=6, n=4, stop_event=None):
+    # def solve_pyramid(self, path, pyramid_up_nr_average=1000, max_nr_walks=100, nr_walks_per_node=100, max_unchanged_walks=10000, max_steps=100, max_tries=6, min_steps=10, min_end_steps=4, l=7, l_subsequent=6, n=4, stop_event=None):
+    def solve_pyramid(self, path, pyramid_up_nr_average=1000, max_nr_walks=100, nr_walks_per_node=100, max_unchanged_walks=10000, max_steps=100, max_tries=6, min_steps=10, min_end_steps=4, l=5, l_subsequent=4, n=2, stop_event=None):
         # pyramid solution utilizing random walks to deduct the nodes connections
         # samples landmarks and computing their connection certainties iteratively while contracting the graph with the help of the landmarks
         # when reaching the pyramid top, the graph is expanded again with the help of the landmarks. the top pyramid node is the starting node.
@@ -1838,7 +1840,7 @@ class RandomWalkSolver:
             fresh_pyramid_up = True
             if fresh_pyramid_up:
                 while True:
-                    recompute_initial_landmark_aggregated_connections = True
+                    recompute_initial_landmark_aggregated_connections = False
                     if recompute_initial_landmark_aggregated_connections or len(graphs) > 1:
                         # sample landmark nodes
                         landmark_nodes = self.sample_landmark_nodes(graph, percentage=0.5)
