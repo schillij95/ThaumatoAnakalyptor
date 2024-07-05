@@ -1771,7 +1771,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
     double duration4 = 0;
     int count_durations = 0;
 
-    while (((total_walks < 1000) || (total_walks * nrWalks < nr_node_walks)) && (max_nr_walks > 0))
+    while (((total_walks < 1000) || (total_walks * nrWalks < nr_node_walks)) && (max_nr_walks > 0) && (graph_n * 0.6 > nodes.size()))
     {
         auto start = std::chrono::high_resolution_clock::now();
         // std::cout << "\033[1;32m" << "[ThaumatoAnakalyptor]: Starting " << nr_unchanged_walks << " random walk. Nr good nodes: " << nodes.size() << "\033[0m" << std::endl;
