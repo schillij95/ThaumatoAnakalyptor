@@ -596,7 +596,12 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::vector<int>> pick_start_no
     for (int i = 0; i < nr_walks; ++i) {
         int p = distrib(gen) % 100;
         if (p < 15) {
-            int rand_index = std::abs(distrib(gen) % landmark_nodes.size());
+            int rand_index = distrib(gen) % landmark_nodes.size();
+            if (rand_index < 0)
+            {
+                rand_index = - rand_index;
+            }
+            
             NodePtr node = landmark_nodes[rand_index];
             K k = landmark_ks[rand_index];
 
