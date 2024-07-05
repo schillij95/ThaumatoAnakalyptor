@@ -1838,7 +1838,7 @@ class RandomWalkSolver:
             os.makedirs(os.path.dirname(pyramid_up_path), exist_ok=True)
 
             # pyramid up
-            fresh_pyramid_up = True
+            fresh_pyramid_up = False
             if fresh_pyramid_up:
                 while True:
                     recompute_initial_landmark_aggregated_connections = True
