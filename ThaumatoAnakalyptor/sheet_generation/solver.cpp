@@ -1116,17 +1116,17 @@ void walk_aggregate_connections(
 {
     NodePtr start_node = walk[0];
     K start_k = ks[0];
-    size_t start_index = start_node->index;
+    int start_index = start_node->index;
 
     assert(start_node->is_landmark && "First node in walk must be a landmark");
 
     int nr_landmarks_direction1 = 0;
-    size_t i = 1;
+    int i = 1;
     for (; i < walk.size(); ++i) {
         NodePtr end_node = walk[i];
         K k = ks[i];
         K k_inv = -k;
-        size_t end_index = end_node->index;
+        int end_index = end_node->index;
         AggregateKey key = {start_index, end_index, k};
         AggregateKey key_inv = {end_index, start_index, k_inv};
         if (!(end_node->is_landmark)) {
@@ -1176,7 +1176,7 @@ void walk_aggregate_connections(
     }
 }
 
-inline void update_picked_nr(const std::vector<NodePtr>& nodes, std::vector<long>& picked_nrs, size_t index, int value) {
+inline void update_picked_nr(const std::vector<NodePtr>& nodes, std::vector<long>& picked_nrs, int index, int value) {
     if (index < 0) {
         return;
     }
@@ -1731,7 +1731,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
     std::vector<int> valid_indices;
 
     if (!continue_walks) {
-        for (size_t i = 0; i < start_nodes.size(); ++i) {
+        for (int i = 0; i < start_nodes.size(); ++i) {
             NodePtr start_node = start_nodes[i];
             K start_k = start_ks[i];
             start_node->is_landmark = true;
