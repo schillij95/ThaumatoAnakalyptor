@@ -1690,7 +1690,7 @@ AggregatedConnections solveUp(
 }
 
 std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
-    int graph_n,
+    size_t graph_n,
     std::vector<NodePtr> start_nodes,
     std::vector<K> start_ks,
     Config& config,
@@ -1750,7 +1750,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
     size_t walk_aggregation_count = 0;
     size_t total_walks = 0;
     size_t nrWalks = walksPerThread * numThreads;
-    size_t nr_node_walks = nr_walks_per_node * graph_n;
+    size_t nr_node_walks = static_cast<size_t>(nr_walks_per_node) * graph_n;
 
     // numm threads gens
     std::vector<std::mt19937> gen_;
