@@ -595,8 +595,9 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::vector<int>> pick_start_no
 
     for (int i = 0; i < nr_walks; ++i) {
         int p = distrib(gen) % 100;
-        if (p < 15) {
-            int rand_index = distrib(gen) % landmark_nodes.size();
+        if (p < 50) {
+            // int rand_index = distrib(gen) % landmark_nodes.size();
+            int rand_index = valid_indices[dist_pick(gen)];
             if (rand_index < 0)
             {
                 rand_index = - rand_index;
@@ -1741,6 +1742,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
             picked_nrs.push_back(0);
             volume_dict[start_node->volume_id][start_node->patch_id] = std::make_pair(start_node, start_k);
         }
+        precompute_pick_frontier(std::cref(nodes));
         precompute_pick(std::cref(picked_nrs), valid_indices);
         // Add start_node to volume_dict
     }
@@ -1771,7 +1773,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
     double duration4 = 0;
     int count_durations = 0;
 
-    while (((total_walks < 1000) || (total_walks * nrWalks < nr_node_walks)) && (max_nr_walks > 0) && (graph_n * 0.6 > nodes.size()))
+    while (((total_walks < 1000) || (total_walks * nrWalks < nr_node_walks)) && (max_nr_walks > 0)) //  && (graph_n * 0.6 > nodes.size())
     {
         auto start = std::chrono::high_resolution_clock::now();
         // std::cout << "\033[1;32m" << "[ThaumatoAnakalyptor]: Starting " << nr_unchanged_walks << " random walk. Nr good nodes: " << nodes.size() << "\033[0m" << std::endl;
@@ -1797,11 +1799,6 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
         }
         if (nr_unchanged_walks > max_unchanged_walks && walk_aggregation_count != 0) { //  && (/* More checks*/)
             nr_unchanged_walks = 0;
-            // set picked_nrs to 0
-            for (size_t i = 0; i < picked_nrs.size(); ++i) {
-                picked_nrs[i] = 0;
-            }
-            precompute_pick(std::cref(picked_nrs), valid_indices);
         }
 
         auto end1 = std::chrono::high_resolution_clock::now();
@@ -1899,7 +1896,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
         }
         // Update valid_indices from picked_nrs
         if (total_aggregation_success) {
-            precompute_pick(std::cref(picked_nrs), valid_indices);
+            precompute_pick_frontier(std::cref(nodes));
         }
         
         auto end4 = std::chrono::high_resolution_clock::now();
