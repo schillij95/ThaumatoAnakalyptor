@@ -1894,6 +1894,7 @@ class RandomWalkSolver:
             assert len(landmark_nodes) <= min_pyramid_nodes, f"More than {min_pyramid_nodes} landmark node left."
             fixed_nodes = [tuple(landmark_nodes[0])]
             fixed_ks = [0]
+            min_steps_pyramid_down = 8
             # pyramid down
             for i in tqdm(range(len(graphs)-1, -1, -1), desc="Pyramid Down"):
                 # skip last 1 graph steps, because this graph has too much noise in its nodes. the sheets are already found earlier in the pyramid
@@ -1904,7 +1905,7 @@ class RandomWalkSolver:
                 small_addition = 0
                 if i > len(graphs) - 4:
                     small_addition = 2 * nr_walks_per_node + abs(i - (len(graphs) - 4))*nr_walks_per_node
-                min_steps_ = min(max(4, len(graph.nodes) // 3), min_steps)
+                min_steps_ = min(max(4, len(graph.nodes) // 3), min_steps_pyramid_down)
                 min_end_steps_ = min_steps_
                 # compute pyramid down
                 # fixed_nodes, fixed_ks = self.solve_pyramid_down(graph, fixed_nodes, fixed_ks, path, max_nr_walks=max_nr_walks, nr_walks_per_node=nr_walks_per_node + small_addition, max_unchanged_walks=max_unchanged_walks/4000 * (len(graph.nodes)), max_steps=max_steps, max_tries=max_tries, min_steps=min_steps, min_end_steps=min_end_steps, stop_event=stop_event)
