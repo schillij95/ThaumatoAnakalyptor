@@ -1904,9 +1904,11 @@ class RandomWalkSolver:
                 small_addition = 0
                 if i > len(graphs) - 4:
                     small_addition = 2 * nr_walks_per_node + abs(i - (len(graphs) - 4))*nr_walks_per_node
+                min_steps_ = min(max(4, len(graph.nodes) // 3), min_steps)
+                min_end_steps_ = min_steps_
                 # compute pyramid down
                 # fixed_nodes, fixed_ks = self.solve_pyramid_down(graph, fixed_nodes, fixed_ks, path, max_nr_walks=max_nr_walks, nr_walks_per_node=nr_walks_per_node + small_addition, max_unchanged_walks=max_unchanged_walks/4000 * (len(graph.nodes)), max_steps=max_steps, max_tries=max_tries, min_steps=min_steps, min_end_steps=min_end_steps, stop_event=stop_event)
-                fixed_nodes, fixed_ks = self.solve_pyramid_down_cpp(graph, fixed_nodes, fixed_ks, path, max_nr_walks=max_nr_walks, nr_walks_per_node=nr_walks_per_node + small_addition, max_unchanged_walks=max_unchanged_walks/4000 * (len(graph.nodes)), max_steps=max_steps, max_tries=max_tries, min_steps=16, min_end_steps=16, stop_event=stop_event)
+                fixed_nodes, fixed_ks = self.solve_pyramid_down_cpp(graph, fixed_nodes, fixed_ks, path, max_nr_walks=max_nr_walks, nr_walks_per_node=nr_walks_per_node + small_addition, max_unchanged_walks=max_unchanged_walks/4000 * (len(graph.nodes)), max_steps=max_steps, max_tries=max_tries, min_steps=min_steps_, min_end_steps=min_end_steps_, stop_event=stop_event)
                 self.save_solution(path, np.array(fixed_nodes), np.array(fixed_ks))
         else:
             print ("Loading pyramid and continuing at production run.")
