@@ -1824,6 +1824,7 @@ class RandomWalkSolver:
         # when reaching the pyramid top, the graph is expanded again with the help of the landmarks. the top pyramid node is the starting node.
         # expanding the pyramid iteratively and setting the landmark nodes as fixed k values which were calculated in the last pyramid down iteration
 
+        max_steps_pyramid = 30
         fresh_pyramid = True
         if fresh_pyramid:
             graph = self.graph
@@ -1838,7 +1839,7 @@ class RandomWalkSolver:
             os.makedirs(os.path.dirname(pyramid_up_path), exist_ok=True)
 
             # pyramid up
-            fresh_pyramid_up = False
+            fresh_pyramid_up = True
             if fresh_pyramid_up:
                 while True:
                     recompute_initial_landmark_aggregated_connections = True
@@ -1898,7 +1899,7 @@ class RandomWalkSolver:
             # pyramid down
             for i in tqdm(range(len(graphs)-1, -1, -1), desc="Pyramid Down"):
                 # skip last 1 graph steps, because this graph has too much noise in its nodes. the sheets are already found earlier in the pyramid
-                if i < 1:
+                if i < 0: # < 1
                     continue
                 graph = graphs[i]
                 print(f"Pyramid Down Index: {i}, nr nodes in graph: {len(graph.nodes)}")
@@ -1909,7 +1910,7 @@ class RandomWalkSolver:
                 min_end_steps_ = min_steps_
                 # compute pyramid down
                 # fixed_nodes, fixed_ks = self.solve_pyramid_down(graph, fixed_nodes, fixed_ks, path, max_nr_walks=max_nr_walks, nr_walks_per_node=nr_walks_per_node + small_addition, max_unchanged_walks=max_unchanged_walks/4000 * (len(graph.nodes)), max_steps=max_steps, max_tries=max_tries, min_steps=min_steps, min_end_steps=min_end_steps, stop_event=stop_event)
-                fixed_nodes, fixed_ks = self.solve_pyramid_down_cpp(graph, fixed_nodes, fixed_ks, path, max_nr_walks=max_nr_walks, nr_walks_per_node=nr_walks_per_node + small_addition, max_unchanged_walks=max_unchanged_walks/4000 * (len(graph.nodes)), max_steps=max_steps, max_tries=max_tries, min_steps=min_steps_, min_end_steps=min_end_steps_, stop_event=stop_event)
+                fixed_nodes, fixed_ks = self.solve_pyramid_down_cpp(graph, fixed_nodes, fixed_ks, path, max_nr_walks=max_nr_walks, nr_walks_per_node=nr_walks_per_node + small_addition, max_unchanged_walks=max_unchanged_walks/4000 * (len(graph.nodes)), max_steps=max_steps_pyramid, max_tries=max_tries, min_steps=min_steps_, min_end_steps=min_end_steps_, stop_event=stop_event)
                 self.save_solution(path, np.array(fixed_nodes), np.array(fixed_ks))
         else:
             print ("Loading pyramid and continuing at production run.")
@@ -2403,13 +2404,15 @@ class RandomWalkSolver:
                 k_factor = - 1.0
             if tuple(node_[:3]) != tuple(next_volume[:3]):
                 continue
+
+            graph_edge = graph.edges[edge]
             if not next_volume[3] is None:
                 max_certainty_k = next_volume[3]
                 k = k_factor*max_certainty_k
                 if not k in graph.edges[edge]:
                     continue
-                certainty = graph.edges[edge][k]['certainty']
-                bad_edge = graph.edges[edge][k]['bad_edge']
+                certainty = graph_edge[k]['certainty']
+                bad_edge = graph_edge[k]['bad_edge']
                 if bad_edge:
                     continue
             else:
@@ -2417,10 +2420,11 @@ class RandomWalkSolver:
                 max_certainty = 0.0
                 max_certainty_k = 0.0
                 for k in ks:
-                    bad_edge = graph.edges[edge][k]['bad_edge']
+                    graph_edge_k = graph_edge[k]
+                    bad_edge = graph_edge_k['bad_edge']
                     if bad_edge:
                         continue
-                    certainty = graph.edges[edge][k]['certainty']
+                    certainty = graph_edge_k['certainty']
                     if certainty > max_certainty:
                         max_certainty = certainty
                         max_certainty_k = k
@@ -2725,7 +2729,7 @@ def random_walks():
                           "epsilon": 1e-5, "angle_tolerance": 85, "max_threads": 30,
                           "min_points_winding_switch": 1000, "min_winding_switch_sheet_distance": 3, "max_winding_switch_sheet_distance": 10, "winding_switch_sheet_score_factor": 1.5, "winding_direction": 1.0,
                           "enable_winding_switch": True, "max_same_block_jump_range": 3,
-                          "pyramid_up_nr_average": 3000, "nr_walks_per_node":15000,
+                          "pyramid_up_nr_average": 3000, "nr_walks_per_node":5000,
                           "enable_winding_switch_postprocessing": False,
                           "surrounding_patches_size": 3, "max_sheet_clip_distance": 60, "sheet_z_range": (-5000, 400000), "sheet_k_range": (-1000000, 2000000), "volume_min_certainty_total_percentage": 0.0, "max_umbilicus_difference": 30,
                           "walk_aggregation_threshold": 100, "walk_aggregation_max_current": -1,
@@ -2831,3 +2835,5 @@ def random_walks():
 
 if __name__ == '__main__':
     random_walks()
+
+# Example command: python3 -m ThaumatoAnakalyptor.Pyramid_Random_Walks --path /scroll.volpkg/working/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks
