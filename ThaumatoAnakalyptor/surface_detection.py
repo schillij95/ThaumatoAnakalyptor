@@ -21,8 +21,8 @@ def sobel_filter_3d(input, chunks=4, overlap=3, device=None):
          [[ 1, 0, -1], [ 2, 0, -2], [ 1, 0, -1]]],
     ], dtype=torch.float16).to(device)
 
-    sobel_y = sobel_x.transpose(2, 3)
-    sobel_z = sobel_x.transpose(1, 3)
+    sobel_y = sobel_x.transpose(1, 3)
+    sobel_z = sobel_x.transpose(2, 3)
 
     # Add an extra dimension for the input channels
     sobel_x = sobel_x[None, ...]
@@ -66,7 +66,7 @@ def sobel_filter_3d(input, chunks=4, overlap=3, device=None):
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
-    return vectors.squeeze(0).squeeze(0).to(device)
+    return vectors.squeeze(0).squeeze(0).to(device, dtype=torch.float16)
 
 ## own code
 
@@ -95,43 +95,50 @@ def uniform_blur3d(channels=1, size=3, device=None):
 
 # Function to normalize vectors to unit length
 def normalize(vectors):
-    return vectors / vectors.norm(dim=-1, keepdim=True)
+    # Find 0 vectors and make them 1, 0, 0
+    # vectors_norm = vectors.norm(dim=-1, keepdim=True).expand(vectors.shape)
+    # zero_vectors = vectors_norm == 0
+    # vectors[zero_vectors] = torch.tensor([1.0, 0.0, 0.0], device=vectors.device, dtype=vectors.dtype)
+
+    return vectors / vectors.norm(dim=-1, keepdim=True).expand(vectors.shape)
 
 # Function to calculate angular distance between vectors
 def angular_distance(v1, v2):
     v1 = v1.unsqueeze(0) if v1.dim() == 1 else v1
     v2 = v2.unsqueeze(0) if v2.dim() == 1 else v2
-    return torch.acos(torch.clamp((v1 * v2).sum(-1), -1.0, 1.0))
+    dot_v1_v2 = (v1 * v2).sum(-1)
+    # print(f"Dot product: {dot_v1_v2}")
+    return torch.acos(torch.clamp(dot_v1_v2, -1.0, 1.0))
 
 # Mean indiscriminative Loss function for a batch of candidate vectors and a batch of input vectors
 def loss(candidates, vectors):
-    vector_normed = normalize(vectors)
-    pos_distance = angular_distance(candidates[:, None, :], vector_normed[None, :, :])
-    neg_distance = angular_distance(-candidates[:, None, :], vector_normed[None, :, :])
+    # Prepare for pairwise loss
+    candidates_expanded = candidates.unsqueeze(1).expand(-1, vectors.shape[0], -1)
+    vectors_expanded = vectors.unsqueeze(0).expand(candidates.shape[0], -1, -1)
+    # pairwise angulare distance
+    pos_distance = torch.abs(angular_distance(candidates_expanded, vectors_expanded))
+    neg_distance = torch.abs(angular_distance(-candidates_expanded, vectors_expanded))
+    # Find the minimum loss for each candidate-vector pair (flipping the candidate vector)
     losses = torch.min(torch.stack((pos_distance, neg_distance), dim=-1), dim=-1)[0]
-    
-    # calculate the norm of the vectors and use it to scale the losses
-    vector_norms = torch.norm(vectors, dim=-1)
-    scaled_losses = losses * vector_norms
-    
-    return scaled_losses
+    # Reduce to get total loss per candidate
+    summed_loss = losses.sum(dim=-1)    
+    return summed_loss
 
 # Function to find the vector that is the propper mean vector for the input vectors vs when -v = v
 def find_mean_indiscriminative_vector(vectors, n, device):
-    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # Normalize the input vectors
-    vectors = normalize(vectors)
-    
     # Generate n random unit vectors
     random_vectors = torch.randn(n, 3, device=device)
+    # Normalize the input vectors
     random_vectors = normalize(random_vectors)
+    vectors = normalize(vectors)    
 
     # Compute the total loss for each candidate
-    total_loss = loss(random_vectors, vectors).sum(dim=-1)
+    total_loss = loss(random_vectors, vectors)
+    # Pick the candidate with the smallest loss over all vectors
+    argmin_loss = torch.argmin(total_loss)
 
     # Find the best candidate
-    best_vector = random_vectors[torch.argmin(total_loss)]
-
+    best_vector = random_vectors[argmin_loss]
     return best_vector
 
 # Function to adjust the amplitude of the mean vector to the mean amplitude of the input vectors
@@ -142,7 +149,7 @@ def adjust_mean_vector_amplitude(mean_vector, vectors):
 
 # Function that  projects vector a onto vector b
 def vector_projection(a, b):
-    return (a * b).sum(-1, keepdim=True) * b / b.norm(dim=-1, keepdim=True)**2
+    return (a * b).sum(-1, keepdim=True).expand(b.shape) * b / b.norm(dim=-1, keepdim=True).expand(b.shape)**2
 
 # Function that adjusts the norm of vector a to the norm of vector b based on their direction
 def adjusted_norm(a, b):
@@ -150,13 +157,14 @@ def adjusted_norm(a, b):
     projection = vector_projection(a, b)
     
     # Compute the dot product of the projected vector and the original vector b
-    dot_product = (projection * b).sum(-1, keepdim=True)
+    dot_product = (projection * b).sum(-1)
     
     # Compute the norm of the projection
     projection_norm = projection.norm(dim=-1)
     
     # Adjust the norm based on the sign of the dot product
-    adjusted_norm = torch.sign(dot_product.squeeze()) * projection_norm
+    adjusted_norm = torch.sign(dot_product) * projection_norm
+    # print(f"shape adjusted_norm: {adjusted_norm.shape}")
     
     return adjusted_norm
 
@@ -171,9 +179,10 @@ def scale_to_0_1(tensor):
     tensor_min = torch.min(clipped_tensor)
     tensor_max = torch.max(clipped_tensor)
     tensor_scale = torch.max(torch.abs(tensor_min), torch.abs(tensor_max))
+    if tensor_scale < 1e-8:
+        tensor_scale = 1e-8
     scaled_tensor = clipped_tensor / tensor_scale
     return scaled_tensor
-
 
 # Function that convolutes a 3D Volume of vectors to find their mean indiscriminative vector
 def vector_convolution(input_tensor, window_size=20, stride=20, device=None):
@@ -195,9 +204,16 @@ def vector_convolution(input_tensor, window_size=20, stride=20, device=None):
                 # extract the vectors within the window
                 window_vectors = input_tensor[i:i+window_size, j:j+window_size, k:k+window_size]
                 window_vectors = window_vectors.reshape(-1, 3)  # flatten the 3D window into a 2D tensor
+
+                all_zeros = torch.all(window_vectors == 0)
+                if not all_zeros:
+                    window_vectors_mask = torch.any(window_vectors != 0, dim=-1)
+                    window_vectors = window_vectors[window_vectors_mask]
                 
-                # calculate the closest vector
-                best_vector = find_mean_indiscriminative_vector(window_vectors, 100, device)  # adjust the second parameter as needed
+                    # calculate the closest vector
+                    best_vector = find_mean_indiscriminative_vector(window_vectors, 100, device)  # adjust the second parameter as needed
+                else:
+                    best_vector = torch.tensor([1.0, 0.0, 0.0], device=device)
                 # check if the indices are within the output_tensor's dimension
                 if i//stride < output_tensor.shape[0] and j//stride < output_tensor.shape[1] and k//stride < output_tensor.shape[2]:
                     # store the result in the output tensor
@@ -214,10 +230,14 @@ def interpolate_to_original(input_tensor, output_tensor):
     input_tensor = input_tensor.permute(3, 0, 1, 2)
 
     # Use 3D interpolation to resize output_tensor to match the shape of input_tensor.
-    interpolated_tensor = F.interpolate(output_tensor.unsqueeze(0), size=input_tensor.shape[1:], mode='trilinear', align_corners=False)
+    interpolated_tensor = F.interpolate(output_tensor.unsqueeze(0), size=input_tensor.shape[1:], mode='trilinear', align_corners=True).squeeze(0) # add and remove one dimension for batch, channels, spatial 1, spatial 2, spatial 3
+
 
     # Return the tensor to its original shape.
-    interpolated_tensor = interpolated_tensor.squeeze(0).permute(1, 2, 3, 0)
+    interpolated_tensor = interpolated_tensor.permute(1, 2, 3, 0)
+
+    # Normalize the interpolated tensor
+    interpolated_tensor = normalize(interpolated_tensor)
 
     return interpolated_tensor
 
@@ -225,6 +245,7 @@ def interpolate_to_original(input_tensor, output_tensor):
 def adjust_vectors_to_global_direction(input_tensor, global_reference_vector):
     # Compute dot product of each vector in the input tensor with the global reference vector.
     # The resulting tensor will have the same shape as the input tensor, but with the last dimension squeezed out.
+    global_reference_vector = global_reference_vector.unsqueeze(0).unsqueeze(0).unsqueeze(0).expand(input_tensor.shape)
     dot_products = (input_tensor * global_reference_vector).sum(dim=-1, keepdim=True)
     # Create a mask of the same shape as the dot products tensor, 
     # with True wherever the dot product is negative.
@@ -232,6 +253,7 @@ def adjust_vectors_to_global_direction(input_tensor, global_reference_vector):
     
     # Expand the mask to have the same shape as the input tensor
     mask = mask.expand(input_tensor.shape)
+    # print(f"Input tensor shape: {input_tensor.shape}, dot products shape: {dot_products.shape}, mask shape: {mask.shape}")
 
     # Negate all vectors in the input tensor where the mask is True.
     adjusted_tensor = input_tensor.clone()
@@ -272,7 +294,6 @@ def surface_detection(volume, global_reference_vector, blur_size=3, sobel_chunks
 
     # Project the Sobel result onto the adjusted vectors and calculate the norm
     first_derivative = adjusted_norm(sobel_vectors, adjusted_vectors_interp)
-    fshape = first_derivative.shape
     
     first_derivative = scale_to_0_1(first_derivative)
 
@@ -288,10 +309,7 @@ def surface_detection(volume, global_reference_vector, blur_size=3, sobel_chunks
     # Check where the second derivative is zero and the first derivative is above a threshold
     points_to_mark = torch.where(mask)
 
-    # Subsample the points to mark
-    #subsample_nr = 2000000
     coords = torch.stack(points_to_mark, dim=1)
-    #coords = subsample_uniform(coords, subsample_nr)
     
     # Cluster the surface points
     coords_normals = adjusted_vectors_interp[coords[:, 0], coords[:, 1], coords[:, 2]]

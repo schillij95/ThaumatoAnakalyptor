@@ -85,9 +85,13 @@ def load_grid(path_template, cords, grid_block_size=500, cell_block_size=500, ui
                     # print(f"File {path} does not exist.")
                     continue
 
-                # Read the image
-                with tifffile.TiffFile(path) as tif:
-                    images = tif.asarray()
+                try:
+                    # Read the image
+                    with tifffile.TiffFile(path) as tif:
+                        images = tif.asarray()
+                except Exception as e:
+                    print(f"Error loading {path}: {e}")
+                    continue
 
                 if uint8:
                     images = np.uint8(images//256)
@@ -519,14 +523,24 @@ class GridDataset(Dataset):
     def get_writer(self):
         return self.writer
     
+    # def get_reference_vector(self, corner_coords):
+    #     block_point = np.array(corner_coords) + self.grid_block_size//2 # y, x, z
+    #     umbilicus_point = umbilicus_xz_at_y(self.umbilicus_points, block_point[2]) # x, z, y
+    #     umbilicus_point = umbilicus_point[[0, 2, 1]] # ply to corner coords # x, y, z
+    #     umbilicus_normal = block_point - umbilicus_point 
+    #     # umbilicus_normal = umbilicus_normal[[2, 0, 1]] # corner coords to tif 
+    #     umbilicus_normal = umbilicus_normal[[2, 1, 0]] # corner coords to tif 
+    #     unit_umbilicus_normal = umbilicus_normal / np.linalg.norm(umbilicus_normal)
+    #     return unit_umbilicus_normal # y, z, x
+
     def get_reference_vector(self, corner_coords):
-        block_point = np.array(corner_coords) + self.grid_block_size//2
-        umbilicus_point = umbilicus_xz_at_y(self.umbilicus_points, block_point[2])
-        umbilicus_point = umbilicus_point[[0, 2, 1]] # ply to corner coords
-        umbilicus_normal = block_point - umbilicus_point
-        umbilicus_normal = umbilicus_normal[[2, 0, 1]] # corner coords to tif
+        block_point = np.array(corner_coords) + self.grid_block_size//2 # y, x, z
+        block_point = block_point[[0, 2, 1]] # y, z, x
+        umbilicus_point = umbilicus_xz_at_y(self.umbilicus_points, block_point[1]) # y, z, x
+        umbilicus_normal = (block_point - umbilicus_point).astype(np.float32)
         unit_umbilicus_normal = umbilicus_normal / np.linalg.norm(umbilicus_normal)
-        return unit_umbilicus_normal
+        unit_umbilicus_normal = unit_umbilicus_normal[[2, 1, 0]]
+        return unit_umbilicus_normal.astype(np.float32) # y, z, x
     
     def __len__(self):
         return len(self.blocks_to_process)
@@ -542,7 +556,7 @@ class GridDataset(Dataset):
         
         # Convert NumPy arrays to PyTorch tensors
         block_tensor = torch.from_numpy(block).float()  # Convert to float32 tensor
-        reference_vector_tensor = torch.from_numpy(reference_vector).float()
+        reference_vector_tensor = torch.from_numpy(reference_vector).to(dtype=torch.float16)
         
         return block_tensor, reference_vector_tensor, corner_coords, self.grid_block_size, padding
     
@@ -580,7 +594,7 @@ class PointCloudModel(pl.LightningModule):
         for grid_volume, reference_vector, corner_coords, grid_block_size, padding in zip(grid_volumes, reference_vectors, corner_coordss, grid_block_sizes, paddings):
             # Perform surface detection for this block block
             recto_tensor_tuple, verso_tensor_tuple = surface_detection(grid_volume, reference_vector, blur_size=11, window_size=9, stride=1, threshold_der=0.075, threshold_der2=0.002, convert_to_numpy=False)
-            points_r_tensor, normals_r_tensor = recto_tensor_tuple
+            points_r_tensor, normals_r_tensor = recto_tensor_tuple # z, y, x
             points_v_tensor, normals_v_tensor = verso_tensor_tuple
             # Extract actual volume size from the oversized input block
             points_r_tensor, normals_r_tensor = extract_size_tensor(points_r_tensor, normals_r_tensor, padding, grid_block_size+padding) # 0, 0, 0 is the minimum corner of the grid block
@@ -589,7 +603,7 @@ class PointCloudModel(pl.LightningModule):
             ### Adjust the 3D coordinates of the points based on their position in the larger volume
 
             # permute the axes to match the original volume
-            points_r_tensor = points_r_tensor[:, [1, 0, 2]]
+            points_r_tensor = points_r_tensor[:, [1, 0, 2]] # y, z, x
             normals_r_tensor = normals_r_tensor[:, [1, 0, 2]]
             points_v_tensor = points_v_tensor[:, [1, 0, 2]]
             normals_v_tensor = normals_v_tensor[:, [1, 0, 2]]
@@ -639,18 +653,18 @@ def compute(disk_load_save, base_path, volume_subpath, pointcloud_subpath, maxim
     pointcloud_subpath_recto = pointcloud_subpath + "_recto"
     pointcloud_subpath_verso = pointcloud_subpath + "_verso"
     pointcloud_subpath_colorized = pointcloud_subpath + "_colorized"
-    src_dir = base_path + "/" + volume_subpath + "/"
+    src_dir = os.path.join(base_path, volume_subpath)
     dest_dir_r = src_dir.replace(volume_subpath, pointcloud_subpath_recto).replace(disk_load_save[0], disk_load_save[1])
     dest_dir_v = src_dir.replace(volume_subpath, pointcloud_subpath_verso).replace(disk_load_save[0], disk_load_save[1])
 
     # Cleanup temp files
     cleanup_temp_files(dest_dir_r)
     cleanup_temp_files(dest_dir_v)
-    path_template = src_dir + "cell_yxz_{:03}_{:03}_{:03}.tif"
+    path_template = os.path.join(src_dir, "cell_yxz_{:03}_{:03}_{:03}.tif")
     save_template_r = path_template.replace(".tif", ".ply").replace(volume_subpath, pointcloud_subpath_recto).replace(disk_load_save[0], disk_load_save[1])
     save_template_v = path_template.replace(".tif", ".ply").replace(volume_subpath, pointcloud_subpath_verso).replace(disk_load_save[0], disk_load_save[1])
 
-    umbilicus_path = src_dir + "umbilicus.txt"
+    umbilicus_path = os.path.join(src_dir, "umbilicus.txt")
     save_umbilicus_path = umbilicus_path.replace(".txt", ".ply").replace(disk_load_save[0], disk_load_save[1])
     save_umbilicus_path = save_umbilicus_path.replace(volume_subpath, pointcloud_subpath)
 
@@ -672,18 +686,19 @@ def compute(disk_load_save, base_path, volume_subpath, pointcloud_subpath, maxim
 
     if fix_umbilicus:
         # Load old umbilicus
-        umbilicus_path_old = src_dir + "umbilicus_old.txt"
+        umbilicus_path_old = os.path.join(src_dir, "umbilicus_old.txt")
         # Usage
         umbilicus_raw_points_old = load_xyz_from_file(umbilicus_path_old)
         umbilicus_points_old = umbilicus(umbilicus_raw_points_old)
     else:
         umbilicus_points_old = None
+        umbilicus_raw_points_old = None
 
     # Starting grid block at corner (3000, 4000, 2000) to match cell_yxz_006_008_004
     # (2600, 2200, 5000)
     if not skip_surface_blocks:
         # compute_surface_for_block_multiprocessing(start_block, pointcloud_base, path_template, save_template_v, save_template_r, umbilicus_points, grid_block_size=200, recompute=recompute, fix_umbilicus=fix_umbilicus, umbilicus_points_old=umbilicus_points_old, maximum_distance=maximum_distance)
-        grid_inference(pointcloud_base, start_block, path_template, save_template_v, save_template_r, umbilicus_points, umbilicus_points_old, grid_block_size=200, recompute=recompute, fix_umbilicus=fix_umbilicus, maximum_distance=maximum_distance, batch_size=1*int(CFG['GPUs']))
+        grid_inference(pointcloud_base, start_block, path_template, save_template_v, save_template_r, umbilicus_raw_points, umbilicus_raw_points_old, grid_block_size=200, recompute=recompute, fix_umbilicus=fix_umbilicus, maximum_distance=maximum_distance, batch_size=1*int(CFG['GPUs']))
     else:
         print("Skipping surface block computation.")
 
