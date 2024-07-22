@@ -329,7 +329,7 @@ class MeshDataset(Dataset):
             except:
                 pass
         mask = mask[::-1, :]
-        cv2.imwrite(os.path.join(os.path.dirname(self.path), os.path.basename(self.path) + "_mask.png"), mask)
+        cv2.imwrite(os.path.join(os.path.dirname(self.path), os.path.basename(self.path).split(".")[0] + "_mask.png"), mask)
         
     def load_mesh(self, path):
         """Load the mesh from the given path and extract the vertices, normals, triangles, and UV coordinates."""
