@@ -30,7 +30,7 @@ if __name__ == "__main__":
         obj_paths = finalize_mesh_main(args.output_folder, args.input_mesh, 1.0, args.cut_size, False)
     else:
         # Find all .obj files in the input directory
-        input_objs = glob(os.path.join(args.input_mesh, '*.obj'))
+        input_objs = glob(os.path.join(args.input_mesh, '*_flatboi.obj'))
         # Copy input meshes to the output folder
         obj_paths = []
         for input_obj in input_objs:
