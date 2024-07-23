@@ -1090,7 +1090,7 @@ public:
             umbilicus_points_vector.push_back(umbilicus_point);
         }
 
-        auto result = this->rolledOrderedPointset(umbilicus_points_vector, processed_points, processed_normals, static_cast<int>(std::thread::hardware_concurrency()), true, angleStep, z_spacing, max_eucledian_distance);
+        auto result = this->rolledOrderedPointset(umbilicus_points_vector, processed_points, processed_normals, std::max(1, static_cast<int>(std::thread::hardware_concurrency() - 2)), true, angleStep, z_spacing, max_eucledian_distance);
 
         return std::move(result);
     }
