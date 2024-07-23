@@ -304,9 +304,12 @@ class MeshDataset(Dataset):
 
     def load_zarr(self, dirname):
         stack_array = zarr.open(dirname, mode="r")
-        print("Contents of the group:", list(stack_array.groups()))
-        print("Arrays in the group:", list(stack_array.arrays()))
-        stack_array = stack_array[0]
+        try:
+            print("Contents of the group:", list(stack_array.groups()))
+            print("Arrays in the group:", list(stack_array.arrays()))
+            stack_array = stack_array[0]
+        except Exception as e:
+            print(e)
         print(f"zarr shape: {stack_array.shape}")
         return stack_array
 
