@@ -1218,7 +1218,7 @@ class RandomWalkSolver:
         umbilicus_data = scale_points(umbilicus_data, 50.0/200.0, axis_offset=0)
         # Define a wrapper function for umbilicus_xz_at_y
         self.umbilicus_func = lambda z: umbilicus_xz_at_y(umbilicus_data, z)
-
+    
     def translate_data_to_cpp_v2(self, graph, overlapp_threshold):
         """
         Prepares graph data, solver parameters, and overlap threshold for C++ processing.
@@ -1234,16 +1234,20 @@ class RandomWalkSolver:
         same_block = []
         umbilicusDirections = []
         centroids = []
+        nodes_next_subvolumes = {}
         for node in tqdm(graph.nodes, desc="Translating data to C++"):
-            node_next_nodes = []
-            node_k_values = []
-            node_same_block = []
+            nodes_next_subvolumes[tuple(node)] = {}
+        
+        for node in tqdm(graph.nodes, desc="Translating data to C++"):
             graph_node = graph.nodes[node]
             edges = graph_node['edges']
             for edge in edges:
                 graph_edge = graph.edges[edge]
                 flip_k = edge[0] != node
                 next_node = edge[0] if edge[0] != node else edge[1]
+                if next_node not in graph.nodes:
+                    print(f"Node {next_node} not in graph.")
+                    continue
                 ks = graph.get_edge_ks(node, next_node)
                 # get k of ks with max certainty
                 k = max(ks, key=lambda k: graph_edge[-k if flip_k else k]['certainty'])
@@ -1251,10 +1255,58 @@ class RandomWalkSolver:
                 # continue if bad edge
                 if graph_edge[k_edge]['bad_edge']:
                     continue
+                if graph_edge[k_edge]['certainty'] <= 0:
+                    continue
 
+                certainty_ = graph_edge[k_edge]['certainty']
+                same_block_ = graph_edge[k_edge]['same_block']
+                if same_block_: # Add same block edges allways
+                    nodes_next_subvolumes[tuple(node)][tuple(next_node)] = (next_node, k, certainty_, same_block_)
+                    nodes_next_subvolumes[tuple(next_node)][tuple(node)] = (node, -k, certainty_, same_block_)
+                else:
+                    if tuple(next_node[:3]) not in nodes_next_subvolumes[tuple(node)]: # Add other block edges only if not already added
+                        nodes_next_subvolumes[tuple(node)][tuple(next_node[:3])] = (next_node, k, certainty_, same_block_)
+                    elif nodes_next_subvolumes[tuple(node)][tuple(next_node[:3])][2] < certainty_: # Find the edge into a subvolume with the highest certainty
+                        nodes_next_subvolumes[tuple(node)][tuple(next_node[:3])] = (next_node, k, certainty_, same_block_)
+
+                    if tuple(node[:3]) not in nodes_next_subvolumes[tuple(next_node)]: # Add other block edges only if not already added
+                        nodes_next_subvolumes[tuple(next_node)][tuple(node[:3])] = (node, -k, certainty_, same_block_)
+                    elif nodes_next_subvolumes[tuple(next_node)][tuple(node[:3])][2] < certainty_: # Find the edge into a subvolume with the highest certainty
+                        nodes_next_subvolumes[tuple(next_node)][tuple(node[:3])] = (node, -k, certainty_, same_block_)
+
+        # Remove edges that are not reciprocal, ie are not in both direction the one with maximum certainty
+        count_good = 0
+        count_bad = 0
+        for node in tqdm(nodes_next_subvolumes, desc="Removing non-reciprocal edges"):
+            to_remove_keys = []
+            for next_subvolume in nodes_next_subvolumes[tuple(node)]:
+                next_node, k, certainty_, same_block_ = nodes_next_subvolumes[tuple(node)][next_subvolume]
+                node_key = tuple(node[:3]) if not same_block_ else tuple(node)
+                if node_key not in nodes_next_subvolumes[tuple(next_node)]:
+                    # remove next subvolume from nodes_next_subvolumes[tuple(node)]
+                    to_remove_keys.append((tuple(node), next_subvolume))
+                    count_bad += 1
+                else:
+                    # check if the edge is reciprocal
+                    next_node_, k_, certainty__, same_block__ = nodes_next_subvolumes[tuple(next_node)][node_key]
+                    if next_node_ != node or k_ != -k or certainty__ != certainty_ or same_block__ != same_block_: # remove the edge if not reciprocal
+                        to_remove_keys.append((tuple(node), next_subvolume))
+                        count_bad += 1
+                    else:
+                        count_good += 1
+            for key1, key2 in to_remove_keys:
+                del nodes_next_subvolumes[key1][key2]
+        print(f"Good edges: {count_good}, Bad edges: {count_bad}")
+
+        for node in tqdm(graph.nodes, desc="Translating data to C++"):
+            graph_node = graph.nodes[node]
+            node_next_nodes = []
+            node_k_values = []
+            node_same_block = []
+            for next_subvolume in nodes_next_subvolumes[tuple(node)]:
+                next_node, k, certainty_, same_block_ = nodes_next_subvolumes[tuple(node)][next_subvolume]
                 node_next_nodes.append([int(n) for n in next_node])
                 node_k_values.append(int(k))
-                same_block_ = graph_edge[k_edge]['same_block']
                 node_same_block.append(bool(same_block_))
 
             next_nodes.append(node_next_nodes)
@@ -1269,90 +1321,6 @@ class RandomWalkSolver:
             yaml.dump(overlapp_threshold, file)
 
         return overlapp_threshold_filename, nodes, next_nodes, k_values, same_block, umbilicusDirections, centroids 
-
-    def translate_data_to_cpp(self, recompute_translation=True):
-        """
-        Prepares graph data, solver parameters, and overlap threshold for C++ processing.
-
-        :param graph: A graph object with nodes and edges.
-        :param solver_parameters: Dictionary of solver parameters like max_nr_walks, max_steps, etc.
-        :param overlapp_threshold: Dictionary of overlap threshold parameters.
-        :return: Data structures suitable for C++ processing.
-        """
-        if not recompute_translation and hasattr(self.graph, "cpp_translation"):
-
-            res = [self.graph.overlapp_threshold_filename]
-            for i in range(1, 7):
-                path_numpy_array = self.graph.cpp_translation.replace("blocks", "graph_RW") + "_nodes_cpp_" + str(i) + ".npy"
-                print("load path:", path_numpy_array)
-                numpy_array = np.load(path_numpy_array)
-                res.append(numpy_array)
-            return res
-        
-        # Prepare nodes data
-        ids = []
-        centroids = []
-        umbilicusDirections = []
-        next_nodes = []
-        k_values = []
-        validIndices = []
-        for node, attributes in tqdm(self.graph.nodes.items()):
-            next_ns = {}
-            valid_volumes = self.get_next_valid_volumes(node, volume_min_certainty_total_percentage=self.graph.overlapp_threshold["volume_min_certainty_total_percentage"])
-            valid_volumes = [tuple(volume[:3]) for volume in valid_volumes]
-            for edge in attributes['edges']:
-                if edge[0][:3] == edge[1][:3]: # disregard loopback volume edges
-                    continue
-                other_node = edge[0] if edge[0] != node else edge[1]
-                if not tuple(other_node[:3]) in valid_volumes: # only look at valid next volumes
-                    continue
-                k = self.graph.get_edge_k(node, other_node)
-                certainty = self.graph.edges[edge]['certainty']
-                if certainty <= 0:
-                    continue
-                if not other_node[:3] in next_ns:
-                    next_ns[other_node[:3]] = (other_node, certainty, k)
-                elif next_ns[other_node[:3]][1] < certainty:
-                    next_ns[other_node[:3]] = (other_node, certainty, k)
-
-            k_vals = [next_ns[key][2] for key in next_ns]
-            next_ns = [list(next_ns[key][0]) for key in next_ns]
-            validIndices.append(len(next_ns))
-            if len(next_ns) < 6:
-                next_ns = next_ns + [[-1, -1, -1, -1]] * (6 - len(next_ns))
-                k_vals = k_vals + [0.0] * (6 - len(k_vals))
-
-            assert len(next_ns) == 6, f"Number of next nodes must be 6. Got {len(next_ns)}."
-            for nens in next_ns:
-                assert len(nens) == 4, f"Each next node must have 4 values. Got {len(nens)}."
-            assert len(k_vals) == 6, f"Number of k values must be 6. Got {len(k_vals)}."
-
-            ids.append(list(node))
-            centroids.append(attributes['centroid'])
-            umbilicusDirections.append(self.centroid_vector(self.graph.nodes[node]))
-            next_nodes.append(next_ns)
-            k_values.append(k_vals)
-
-        ids_array = np.array(ids).astype(int)
-        centroids_array = np.array(centroids).astype(float)
-        umbilicusDirections_array = np.array(umbilicusDirections, dtype=np.float64).astype(float)
-        next_nodes_array = np.array(next_nodes).astype(int)
-        k_values_array = np.array(k_values).astype(int)
-        validIndices_array = np.array(validIndices).astype(int)
-
-        assert ids_array.shape[0] == len(self.graph.nodes), f"Number of nodes must be {len(self.graph.nodes)}. Got {ids_array.shape[0]}."
-        assert centroids_array.shape[0] == len(self.graph.nodes), f"Number of nodes must be {len(self.graph.nodes)}. Got {centroids_array.shape[0]}."
-        assert umbilicusDirections_array.shape[0] == len(self.graph.nodes), f"Number of nodes must be {len(self.graph.nodes)}. Got {umbilicusDirections_array.shape[0]}."
-        assert next_nodes_array.shape[0] == len(self.graph.nodes), f"Number of nodes must be {len(self.graph.nodes)}. Got {next_nodes_array.shape[0]}."
-        assert k_values_array.shape[0] == len(self.graph.nodes), f"Number of nodes must be {len(self.graph.nodes)}. Got {k_values_array.shape[0]}."
-        assert validIndices_array.shape[0] == len(self.graph.nodes), f"Number of nodes must be {len(self.graph.nodes)}. Got {validIndices_array.shape[0]}."
-
-        # Save overlap_threshold to a YAML file
-        overlapp_threshold_filename = 'overlapp_threshold.yaml'
-        self.graph.overlapp_threshold_filename = overlapp_threshold_filename
-        self.save_overlapp_threshold()
-
-        return overlapp_threshold_filename, ids_array, next_nodes_array, validIndices_array, k_values_array, umbilicusDirections_array, centroids_array
 
     def save_overlapp_threshold(self):
         with open(self.graph.overlapp_threshold_filename, 'w') as file:
@@ -1736,10 +1704,11 @@ class RandomWalkSolver:
                 if len_start_node < l:
                     end_nodes = list(aggregated_connections[start_node].keys())
                     for end_node in end_nodes:
+                        assert start_node != end_node, f"Start node and end node must be different. Got {start_node} and {end_node}."
                         del aggregated_connections[start_node][end_node]
                         del aggregated_connections[end_node][start_node]
                         deleted_nodes = True
-            # nothing deleted
+            # nothing deleted, finishing nodes selection
             if False or (not deleted_nodes):
                 for start_node in nodes:
                     if len(aggregated_connections[start_node]) == 0:
@@ -1758,7 +1727,7 @@ class RandomWalkSolver:
                 if certainty < certainty_min_threshold:
                     del aggregated_connections[start_node][end_node]
 
-        min_walks = 0
+        min_walks = 1
         max_walks = 10
         # only take the top n edges for each node
         nodes = list(aggregated_connections.keys())
@@ -1839,7 +1808,7 @@ class RandomWalkSolver:
             os.makedirs(os.path.dirname(pyramid_up_path), exist_ok=True)
 
             # pyramid up
-            fresh_pyramid_up = False
+            fresh_pyramid_up = True
             if fresh_pyramid_up:
                 while True:
                     recompute_initial_landmark_aggregated_connections = True
@@ -1851,10 +1820,10 @@ class RandomWalkSolver:
                         assert len(landmark_nodes) > 0, "No landmark nodes sampled."
                         print(f"Pyramid Index is {pyramid_index}. Remaining Landmark Nodes: {len(landmark_nodes)}")
                         # compute landmark nodes connections
-                        max_steps_ = max_steps if len(graphs) == 1 else max_steps - 1
-                        min_steps_ = min_steps if len(graphs) == 1 else min_steps - 1
-                        # max_steps_ = max_steps
-                        # min_steps_ = 10 if len(graphs) == 1 else 9
+                        # max_steps_ = max_steps if len(graphs) == 1 else max_steps - 1
+                        # min_steps_ = min_steps if len(graphs) == 1 else min_steps - 1
+                        max_steps_ = max_steps
+                        min_steps_ = 10 if len(graphs) == 1 else 9
                         pyramid_up_nr_average_ = pyramid_up_nr_average if len(graphs) == 1 else pyramid_up_nr_average * 2
                         # aggregated_connections = self.solve_pyramid_up(graph, landmark_nodes, max_nr_walks=pyramid_up_nr_average_, max_steps=max_steps_, max_tries=max_tries, min_steps=min_steps_, stop_event=stop_event)
                         aggregated_connections = self.solve_pyramid_up_cpp(graph, landmark_nodes, max_nr_walks=pyramid_up_nr_average_, max_steps=max_steps_, max_tries=max_tries, min_steps=min_steps_, stop_event=stop_event)
@@ -2638,7 +2607,7 @@ class RandomWalkSolver:
         # self.graph.save_graph(path.replace("blocks", "graph_RW_solved") + ".pkl")
         print(f"\033[94m[ThaumatoAnakalyptor]:\033[0m Saved")
 
-def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_translation=False, stop_event=None, toy_problem=False, update_graph=False):
+def compute(overlapp_threshold, start_point, path, recompute=False, stop_event=None, toy_problem=False, update_graph=False, flip_winding_direction=False):
 
     umbilicus_path = os.path.dirname(path) + "/umbilicus.txt"
     start_block, patch_id = find_starting_patch([start_point], path)
@@ -2659,19 +2628,6 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
         start_block, patch_id = scroll_graph.build_graph(path, num_processes=num_processes, start_point=start_point, prune_unconnected=False)
         print("Saving built graph...")
         scroll_graph.save_graph(recompute_path)
-
-    if recompute and compute_cpp_translation:
-        scroll_graph = load_graph(recompute_path)
-        solver = RandomWalkSolver(scroll_graph, umbilicus_path)
-        print("Computing cpp translation...")
-        res = solver.translate_data_to_cpp(recompute_translation=True)
-        # Save data to graph object
-        solver.graph.cpp_translation = path
-        solver.graph.save_graph(recompute_path)
-        for i in range(1, len(res)):
-            # save np
-            np.save(path.replace("blocks", "graph_RW") + "_nodes_cpp_" + str(i) + ".npy", res[i])
-        print("Saved cpp translation.")
     
     # Graph generation area. CREATE subgraph or LOAD graph
     if update_graph:
@@ -2680,8 +2636,9 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
         scroll_graph.start_block, scroll_graph.patch_id = start_block, patch_id
         # min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = 575, 775, 625, 825, 700, 900, None # 2x2x2 blocks with middle
         # min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = 475, 875, 525, 925, 700, 900, None # 4x4x2 blocks with middle
-        min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = 475, 875, 525, 925, 600, 1000, None # 4x4x4 blocks with middle
-        # min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = None, None, None, None, 700, 900, None # all x all x 1 blocks with middle
+        # min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = 475, 875, 525, 925, 600, 1000, None # 4x4x4 blocks with middle
+        # min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = None, None, None, None, 700, 900, None # all x all x 2 blocks with middle
+        min_x, max_x, min_y, max_y, min_z, max_z, umbilicus_max_distance = None, None, None, None, 700, 1300, None # all x all x 6 blocks with middle
         subgraph = scroll_graph.extract_subgraph(min_z=min_z, max_z=max_z, umbilicus_max_distance=umbilicus_max_distance, add_same_block_edges=True, min_x=min_x, max_x=max_x, min_y=min_y, max_y=max_y)
         subgraph.save_graph(save_path.replace("blocks", "subgraph") + ".pkl")
         if toy_problem:
@@ -2693,9 +2650,17 @@ def compute(overlapp_threshold, start_point, path, recompute=False, compute_cpp_
             scroll_graph = load_graph(recompute_path)
     scroll_graph.set_overlapp_threshold(overlapp_threshold)
     scroll_graph.start_block, scroll_graph.patch_id = start_block, patch_id
+
+    # min max centroid[1]
+    min_z = min([scroll_graph.nodes[node]["centroid"][1] for node in scroll_graph.nodes])
+    max_z = max([scroll_graph.nodes[node]["centroid"][1] for node in scroll_graph.nodes])
+    print(f"Min z: {min_z}, Max z: {max_z}")
     
-    # scroll_graph.flip_winding_direction()
-    # scroll_graph.save_graph(recompute_path)
+    if flip_winding_direction:
+        print("Flipping winding direction ...")
+        scroll_graph.flip_winding_direction()
+        scroll_graph.save_graph(recompute_path)
+        print("Done flipping winding direction.")
 
     print(f"Number of nodes in the graph: {len(scroll_graph.nodes)}")
 
@@ -2745,7 +2710,6 @@ def random_walks():
     max_tries = 6
     max_unchanged_walks = 30 * max_nr_walks # 30 * max_nr_walks
     recompute = 0
-    compute_cpp_translation = False
     
     # Create an argument parser
     parser = argparse.ArgumentParser(description='Cut out ThaumatoAnakalyptor Papyrus Sheet. TAKE CARE TO SET THE "winding_direction" CORRECTLY!')
@@ -2778,6 +2742,7 @@ def random_walks():
     parser.add_argument('--toy_problem', help='Create toy subgraph for development', action='store_true')
     parser.add_argument('--update_graph', help='Update graph', action='store_true')
     parser.add_argument('--create_graph', help='Create graph', action='store_true')
+    parser.add_argument('--flip_winding_direction', help='Flip winding direction', action='store_true')
 
     # Take arguments back over
     args = parser.parse_args()
@@ -2831,7 +2796,7 @@ def random_walks():
         scroll_graph.save_graph(save_path.replace("blocks", "graph_RW_solved") + ".pkl")
     else:
         # Compute
-        compute(overlapp_threshold=overlapp_threshold, start_point=start_point, path=path, recompute=recompute, compute_cpp_translation=compute_cpp_translation, toy_problem=args.toy_problem, update_graph=args.update_graph)
+        compute(overlapp_threshold=overlapp_threshold, start_point=start_point, path=path, recompute=recompute, toy_problem=args.toy_problem, update_graph=args.update_graph, flip_winding_direction=args.flip_winding_direction)
 
 if __name__ == '__main__':
     random_walks()

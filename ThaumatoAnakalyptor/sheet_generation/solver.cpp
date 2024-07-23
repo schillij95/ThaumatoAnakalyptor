@@ -248,7 +248,7 @@ std::pair<std::unordered_set<NodePtr>, int> frontier_bfs(NodePtr node, int max_d
     q.push({node, 0});
     // visited set
     std::unordered_set<NodePtr> visited;
-    int nr_unassigned = 0;
+    int nr_unassigned = -1;
     while (!q.empty()) {
         // Get the current node and depth
         auto [current_node, depth] = q.front();
@@ -263,6 +263,7 @@ std::pair<std::unordered_set<NodePtr>, int> frontier_bfs(NodePtr node, int max_d
         if (current_node->index == -1) {
             nr_unassigned++;
         }
+
         int next_depth = depth + 1;
         // If the depth is greater than max_depth, skip
         if (next_depth > max_depth) {
@@ -290,9 +291,12 @@ void decrement_frontiers(NodePtr node, int max_depth = 3) {
     auto [visited, nr_unassigned] = frontier_bfs(node, max_depth);
     // Decrement the frontier_nr for all the visited nodes
     for (const auto& visited_node : visited) {
-        visited_node->frontier_nr--;
+        if (node == visited_node) {
+            continue;
+        }
+        visited_node->frontier_nr = visited_node->frontier_nr - 1;
         if (visited_node->frontier_nr < 0) {
-            std::cout << "Frontier nr is negative" << std::endl;
+            std::cout << "Frontier nr is negative: " << visited_node->frontier_nr << std::endl;
         }
     }
 }
@@ -332,6 +336,9 @@ std::pair<std::vector<NodePtr>, std::vector<NodePtr>> initializeNodes(
         
         // Add node to volume_dict
         volume_dict[node->volume_id][node->patch_id] = std::make_pair(node, -1);
+        if (getNode(std::cref(volume_dict), node->volume_id, node->patch_id) != node) {
+            std::cout << "Node not found in volume_dict" << std::endl;
+        }
 
         nodes.push_back(node);
     }
@@ -360,6 +367,38 @@ std::pair<std::vector<NodePtr>, std::vector<NodePtr>> initializeNodes(
     }
     std::cout << "Second pass done" << std::endl;
 
+    // check that the graph is undirected
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < nodes[i]->next_nodes.size(); ++j) {
+            NodePtr nextNode = nodes[i]->next_nodes[j];
+            if (nextNode) {
+                bool reciprocal = std::any_of(std::begin(nextNode->next_nodes), std::end(nextNode->next_nodes),
+                                            [&nodes, i](const NodePtr n) {
+                                                return n != nullptr && 
+                                                n->volume_id.x == nodes[i]->volume_id.x && 
+                                                n->volume_id.y == nodes[i]->volume_id.y && 
+                                                n->volume_id.z == nodes[i]->volume_id.z && 
+                                                n->patch_id == nodes[i]->patch_id;
+                                            });
+                if (!reciprocal) {
+                    std::cout << "Graph is not undirected" << std::endl;
+                }
+            }
+        }
+        for (int j = 0; j < nodes[i]->same_block_next_nodes.size(); ++j) {
+            NodePtr sameBlockNode = nodes[i]->same_block_next_nodes[j];
+            if (sameBlockNode) {
+                bool reciprocal = std::any_of(std::begin(sameBlockNode->same_block_next_nodes), std::end(sameBlockNode->same_block_next_nodes),
+                                            [&nodes, i](const NodePtr n) {
+                                                return n != nullptr && n->volume_id == nodes[i]->volume_id && n->patch_id == nodes[i]->patch_id;
+                                            });
+                if (!reciprocal) {
+                    std::cout << "Graph is not undirected same block" << std::endl;
+                }
+            }
+        }
+    }
+
     if (false) {
         // Third pass: Filter out non-reciprocal next_nodes
         for (int i = 0; i < n; ++i) {
@@ -384,10 +423,27 @@ std::pair<std::vector<NodePtr>, std::vector<NodePtr>> initializeNodes(
     for (NodePtr node : nodes) {
         auto [visited_nodes, nr_unassigned] = frontier_bfs(node);
         node->frontier_nr = nr_unassigned;
+        auto [visited_nodes2, nr_unassigned2] = frontier_bfs(node);
+        if (nr_unassigned != nr_unassigned2) {
+            std::cout << "Bug in frontier_bfs" << std::endl;
+        }
     }
     std::cout << "Fourth pass done" << std::endl;
 
     std::vector<NodePtr> start_nodes;
+    // std::unordered_set<NodePtr> start_nodes_unique;
+    // // Get unique start nodes
+    // for(const auto& id : start_ids) {
+    //     VolumeID volID = {id[0], id[1], id[2]};
+    //     PatchID patchID = id[3];
+    //     NodePtr start_node = getNode(std::cref(volume_dict), volID, patchID);
+    //     start_nodes_unique.insert(start_node);
+    // }
+
+    // for(const auto& start_node : start_nodes_unique) {
+    //     decrement_frontiers(start_node);
+    //     start_nodes.push_back(start_node);
+    // }
 
     for(const auto& id : start_ids) {
         VolumeID volID = {id[0], id[1], id[2]};
@@ -1109,7 +1165,7 @@ std::tuple<int, bool> walk_aggregation_func(
     return {aggregated_nodes.size(), success};
 }
 
-void walk_aggregate_connections(
+void walk_aggregate_connections_old(
     const std::vector<NodePtr>& walk,
     const std::vector<K>& ks,
     AggregatedConnections &aggregated_connections
@@ -1125,7 +1181,7 @@ void walk_aggregate_connections(
     int i = 1;
     for (; i < walk.size(); ++i) {
         NodePtr end_node = walk[i];
-        K k = ks[i];
+        K k = ks[i] - start_k;
         K k_inv = -k;
         int end_index = end_node->index;
         AggregateKey key = {start_index, end_index, k};
@@ -1134,6 +1190,9 @@ void walk_aggregate_connections(
             continue;
         }
         assert(end_node->index >= 0 && "End node index must be non-negative");
+        if (end_node->index < 0) {
+            std::cout << "End node index is negative" << std::endl;
+        }
 
         // Disregard loopback volume edges
         if (start_node == end_node) {
@@ -1152,7 +1211,7 @@ void walk_aggregate_connections(
     int nr_landmarks_direction2 = 0;
     for (int u = walk.size() - 1; u > i; --u) {
         NodePtr end_node = walk[u];
-        K k = ks[u];
+        K k = ks[u] - start_k;
         K k_inv = -k;
         int end_index = end_node->index;
         AggregateKey key = {start_index, end_index, k};
@@ -1174,6 +1233,48 @@ void walk_aggregate_connections(
         if (nr_landmarks_direction2++ > 1) {
             break;
         }
+    }
+}
+
+void walk_aggregate_connections(
+    const std::vector<NodePtr>& walk,
+    const std::vector<K>& ks,
+    AggregatedConnections &aggregated_connections
+    )
+{
+    NodePtr start_node = walk[0];
+    K start_k = ks[0];
+    int start_index = start_node->index;
+
+    assert(start_node->is_landmark && "First node in walk must be a landmark");
+
+    int i = 1;
+    for (; i < walk.size(); ++i) {
+        NodePtr end_node = walk[i];
+        K k = ks[i] - start_k;
+        K k_inv = -k;
+        int end_index = end_node->index;
+        AggregateKey key = {start_index, end_index, k};
+        AggregateKey key_inv = {end_index, start_index, k_inv};
+        if (!(end_node->is_landmark)) {
+            continue;
+        }
+        if (start_node == end_node) {
+            continue;
+        }
+        assert(end_node->index >= 0 && "End node index must be non-negative");
+        if (end_node->index < 0) {
+            std::cout << "End node index is negative" << std::endl;
+        }
+
+        // Aggregate the connection
+        ++aggregated_connections[key];
+        ++aggregated_connections[key_inv];
+
+        // update start node
+        start_node = end_node;
+        start_k = ks[i];
+        start_index = end_index;
     }
 }
 
@@ -1302,21 +1403,19 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, std::unordered_map<int, std::un
     std::vector<long> picked_nrs;
     std::vector<int> valid_indices;
 
-    if (!continue_walks) {
-        for (int i = 0; i < start_nodes.size(); ++i) {
-            NodePtr start_node = start_nodes[i];
-            K start_k = start_ks[i];
-            start_node->is_landmark = true;
-            start_node->index = i;
-            nodes.push_back(start_node);
-            ks.push_back(start_k);
-            picked_nrs.push_back(0);
-            volume_dict[start_node->volume_id][start_node->patch_id] = std::make_pair(start_node, start_k);
-        }
-        // precompute_pick(std::cref(picked_nrs), valid_indices);
-        precompute_pick_frontier(std::cref(nodes));
-        // Add start_node to volume_dict
+    for (int i = 0; i < start_nodes.size(); ++i) {
+        NodePtr start_node = start_nodes[i];
+        K start_k = start_ks[i];
+        start_node->is_landmark = true;
+        start_node->index = i;
+        nodes.push_back(start_node);
+        ks.push_back(start_k);
+        picked_nrs.push_back(0);
+        volume_dict[start_node->volume_id][start_node->patch_id] = std::make_pair(start_node, start_k);
     }
+    // precompute_pick(std::cref(picked_nrs), valid_indices);
+    precompute_pick_frontier(std::cref(nodes));
+    // Add start_node to volume_dict
 
     std::cout << "Here 1" << std::endl;
     long long int nr_unchanged_walks = 0;
@@ -1731,21 +1830,18 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
     std::vector<long> picked_nrs;
     std::vector<int> valid_indices;
 
-    if (!continue_walks) {
-        for (int i = 0; i < start_nodes.size(); ++i) {
-            NodePtr start_node = start_nodes[i];
-            K start_k = start_ks[i];
-            start_node->is_landmark = true;
-            start_node->index = i;
-            nodes.push_back(start_node);
-            ks.push_back(start_k);
-            picked_nrs.push_back(0);
-            volume_dict[start_node->volume_id][start_node->patch_id] = std::make_pair(start_node, start_k);
-        }
-        precompute_pick_frontier(std::cref(nodes));
-        precompute_pick(std::cref(picked_nrs), valid_indices);
-        // Add start_node to volume_dict
+    for (int i = 0; i < start_nodes.size(); ++i) {
+        NodePtr start_node = start_nodes[i];
+        K start_k = start_ks[i];
+        start_node->is_landmark = true;
+        start_node->index = i;
+        nodes.push_back(start_node);
+        ks.push_back(start_k);
+        picked_nrs.push_back(0);
+        volume_dict[start_node->volume_id][start_node->patch_id] = std::make_pair(start_node, start_k);
     }
+    precompute_pick_frontier(std::cref(nodes));
+    precompute_pick(std::cref(picked_nrs), valid_indices);
 
     size_t nr_unchanged_walks = 0;
     NodeUsageCount node_usage_count; // Map to track node usage count with specific k values
@@ -1773,7 +1869,8 @@ std::tuple<std::vector<NodePtr>, std::vector<K>> solveDown(
     double duration4 = 0;
     int count_durations = 0;
 
-    while (((total_walks < 1000) || (total_walks * nrWalks < nr_node_walks)) && (max_nr_walks > 0)) //  && (graph_n * 0.6 > nodes.size())
+    // while (((total_walks < 1000) || (total_walks * nrWalks < nr_node_walks)) && (max_nr_walks > 0)) //  && (graph_n * 0.6 > nodes.size())
+    while (((total_walks < 1000) || (total_walks * nrWalks < nr_node_walks)) && (max_nr_walks > 0) && (graph_n - 1 > nodes.size()))
     {
         auto start = std::chrono::high_resolution_clock::now();
         // std::cout << "\033[1;32m" << "[ThaumatoAnakalyptor]: Starting " << nr_unchanged_walks << " random walk. Nr good nodes: " << nodes.size() << "\033[0m" << std::endl;
