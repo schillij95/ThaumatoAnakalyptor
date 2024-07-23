@@ -195,7 +195,7 @@ def save_cut(i, output_filename, cut_mesh, cut_mesh_texture_size):
     print(f"Saved cut mesh piece {i} to {output_filename}")
 
 def main(output_folder, input_mesh, scale_factor, cut_size, delauny):
-    output_folder = output_folder if output_folder is not None else "/".join(os.path.dirname(input_mesh).split("/")[:-1]) + "/working"
+    output_folder = output_folder if output_folder is not None else os.path.join(os.path.dirname(input_mesh), "working")
     # Ensure output directory exists
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
