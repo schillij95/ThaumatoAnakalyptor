@@ -307,10 +307,10 @@ class MeshDataset(Dataset):
         try:
             print("Contents of the group:", list(stack_array.groups()))
             print("Arrays in the group:", list(stack_array.arrays()))
-            groups = list(stack_array.groups())
+            groups = list(stack_array.arrays())
             #sort the groups
             groups.sort()
-            stack_array = stack_array[groups[0]]
+            stack_array = stack_array[groups[0][0]]
         except Exception as e:
             print(e)
         print(f"zarr shape: {stack_array.shape}")
