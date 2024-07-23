@@ -30,7 +30,14 @@ if __name__ == "__main__":
         obj_paths = finalize_mesh_main(args.output_folder, args.input_mesh, 1.0, args.cut_size, False)
     else:
         # Find all .obj files in the input directory
-        obj_paths = glob(os.path.join(args.input_mesh, '*.obj'))
+        output_folder = args.output_folder if args.output_folder is not None else os.path.join(args.input_mesh, "working")
+        input_objs = glob(os.path.join(args.input_mesh, '*.obj'))
+        # Copy input meshes to the output folder
+        obj_paths = []
+        for input_obj in input_objs:
+            # copy input mesh to the output folder
+            obj_path_ = finalize_mesh_main(args.output_folder, input_obj, 1.0, args.cut_size, False)
+            obj_paths.extend(obj_path_)
     if args.end is not None:
         obj_paths = obj_paths[args.start:args.end]
     else:
