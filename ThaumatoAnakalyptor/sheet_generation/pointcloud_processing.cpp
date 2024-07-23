@@ -1140,6 +1140,7 @@ private:
             if (i == numThreads - 1 || angleEnd > maxWind) {
                 angleEnd = maxWind;
             }
+            // TODO: change to a more balanced angle load distribution between threads. thread 0 does 0, num_threads, 2*num threads.... ; thread i does i, num threads + i, ...
             size_t startIndex = resultIndex;  // Assign the starting index for results for each thread
             threads.push_back(std::thread([this, &points, &normals, &umbilicus_points, &zPositions, angleStart, angleEnd, angleStep, max_eucledian_distance, &results, startIndex]() {
                 this->workerFunction(points, normals, umbilicus_points, zPositions, angleStart, angleEnd, angleStep, max_eucledian_distance, results, startIndex);
