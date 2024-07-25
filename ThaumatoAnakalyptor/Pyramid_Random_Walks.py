@@ -1776,33 +1776,34 @@ class RandomWalkSolver:
                 certainties_max[start_node][end_node] = {"k": max_k, "certainty": max_certainty}
 
         # only take nodes with more than l connections
-        l_first = True
-        while True:
-            if l_first:
-                l_first = False
-            else:
-                l = l_subsequent
-            deleted_nodes = False
-            nodes = list(aggregated_connections.keys())
-            for start_node in nodes:
-                len_start_node = len(aggregated_connections[start_node])
-                if len_start_node < l:
-                    end_nodes = list(aggregated_connections[start_node].keys())
-                    for end_node in end_nodes:
-                        assert start_node != end_node, f"Start node and end node must be different. Got {start_node} and {end_node}."
-                        del aggregated_connections[start_node][end_node]
-                        del aggregated_connections[end_node][start_node]
-                        deleted_nodes = True
-            # nothing deleted, finishing nodes selection
-            if False or (not deleted_nodes):
-                for start_node in nodes:
-                    if len(aggregated_connections[start_node]) == 0:
-                        del aggregated_connections[start_node]
-                # removal complete
-                break
+        # l_first = True
+        # while True:
+        #     if l_first:
+        #         l_first = False
+        #     else:
+        #         l = l_subsequent
+        #     deleted_nodes = False
+        #     nodes = list(aggregated_connections.keys())
+        #     for start_node in nodes:
+        #         len_start_node = len(aggregated_connections[start_node])
+        #         if len_start_node < l:
+        #             end_nodes = list(aggregated_connections[start_node].keys())
+        #             for end_node in end_nodes:
+        #                 assert start_node != end_node, f"Start node and end node must be different. Got {start_node} and {end_node}."
+        #                 del aggregated_connections[start_node][end_node]
+        #                 del aggregated_connections[end_node][start_node]
+        #                 deleted_nodes = True
+        #     # nothing deleted, finishing nodes selection
+        #     if False or (not deleted_nodes):
+        #         for start_node in nodes:
+        #             if len(aggregated_connections[start_node]) == 0:
+        #                 del aggregated_connections[start_node]
+        #         # removal complete
+        #         break
 
         # delete all nodes with too little certainty
-        certainty_min_threshold = 0.33
+        # certainty_min_threshold = 0.33
+        certainty_min_threshold = 0.10
         # certainty_min_threshold = 0.00
         nodes = list(aggregated_connections.keys())
         for start_node in tqdm(nodes, desc="Removing nodes with too little certainty"):
@@ -1905,10 +1906,10 @@ class RandomWalkSolver:
                         assert len(landmark_nodes) > 0, "No landmark nodes sampled."
                         print(f"Pyramid Index is {pyramid_index}. Remaining Landmark Nodes: {len(landmark_nodes)}")
                         # compute landmark nodes connections
-                        # max_steps_ = max_steps if len(graphs) == 1 else max_steps - 1
-                        # min_steps_ = min_steps if len(graphs) == 1 else min_steps - 1
-                        max_steps_ = max_steps
-                        min_steps_ = 10 if len(graphs) == 1 else 9
+                        max_steps_ = max_steps if len(graphs) == 1 else max_steps - 1
+                        min_steps_ = min_steps if len(graphs) == 1 else min_steps - 1
+                        # max_steps_ = max_steps
+                        # min_steps_ = 10 if len(graphs) == 1 else 9
                         pyramid_up_nr_average_ = pyramid_up_nr_average if len(graphs) == 1 else pyramid_up_nr_average * 2
                         # aggregated_connections = self.solve_pyramid_up(graph, landmark_nodes, max_nr_walks=pyramid_up_nr_average_, max_steps=max_steps_, max_tries=max_tries, min_steps=min_steps_, stop_event=stop_event)
                         aggregated_connections = self.solve_pyramid_up_cpp(graph, landmark_nodes, max_nr_walks=pyramid_up_nr_average_, max_steps=max_steps_, max_tries=max_tries, min_steps=min_steps_, stop_event=stop_event)
