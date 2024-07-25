@@ -1262,6 +1262,91 @@ class RandomWalkSolver:
                 same_block_ = graph_edge[k_edge]['same_block']
                 if same_block_: # Add same block edges allways
                     nodes_next_subvolumes[tuple(node)][tuple(next_node)] = (next_node, k, certainty_, same_block_)
+                else:
+                    if tuple(next_node[:3]) not in nodes_next_subvolumes[tuple(node)]: # Add other block edges only if not already added
+                        nodes_next_subvolumes[tuple(node)][tuple(next_node[:3])] = (next_node, k, certainty_, same_block_)
+                    elif nodes_next_subvolumes[tuple(node)][tuple(next_node[:3])][2] < certainty_: # Find the edge into a subvolume with the highest certainty
+                        nodes_next_subvolumes[tuple(node)][tuple(next_node[:3])] = (next_node, k, certainty_, same_block_)
+
+        # Add all edges to both nodes
+        nodes_next_subvolumes_final = {}
+        for node in tqdm(nodes_next_subvolumes, desc="Adding reciprocal edges"):
+            if tuple(node) not in nodes_next_subvolumes_final:
+                nodes_next_subvolumes_final[tuple(node)] = {}
+            for next_subvolume in nodes_next_subvolumes[tuple(node)]:
+                next_node, k, certainty_, same_block_ = nodes_next_subvolumes[tuple(node)][next_subvolume]
+                if tuple(next_node) not in nodes_next_subvolumes_final:
+                    nodes_next_subvolumes_final[tuple(next_node)] = {}
+                nodes_next_subvolumes_final[tuple(node)][tuple(next_node)] = (next_node, k, certainty_, same_block_)
+                nodes_next_subvolumes_final[tuple(next_node)][tuple(node)] = (node, -k, certainty_, same_block_)
+
+        for node in tqdm(graph.nodes, desc="Translating data to C++"):
+            graph_node = graph.nodes[node]
+            node_next_nodes = []
+            node_k_values = []
+            node_same_block = []
+            for next_subvolume in nodes_next_subvolumes_final[tuple(node)]:
+                next_node, k, certainty_, same_block_ = nodes_next_subvolumes_final[tuple(node)][next_subvolume]
+                node_next_nodes.append([int(n) for n in next_node])
+                node_k_values.append(int(k))
+                node_same_block.append(bool(same_block_))
+
+            next_nodes.append(node_next_nodes)
+            k_values.append(node_k_values)
+            same_block.append(node_same_block)
+            umbilicusDirections.append([float(c_vec) for c_vec in self.centroid_vector(graph_node)])
+            centroids.append([float(c) for c in graph_node['centroid']])
+
+        # Prepare overlap threshold
+        overlapp_threshold_filename = 'overlapp_threshold.yaml'
+        with open(overlapp_threshold_filename, 'w') as file:
+            yaml.dump(overlapp_threshold, file)
+
+        return overlapp_threshold_filename, nodes, next_nodes, k_values, same_block, umbilicusDirections, centroids 
+    
+    def translate_data_to_cpp_v2_old(self, graph, overlapp_threshold):
+        """
+        Prepares graph data, solver parameters, and overlap threshold for C++ processing.
+
+        :param graph: A graph object with nodes and edges.
+        :param overlapp_threshold: Dictionary of overlap threshold parameters.
+        :return: Data structures suitable for C++ processing.
+        """
+
+        nodes = [[int(n) for n in node] for node in graph.nodes]
+        next_nodes = []
+        k_values = []
+        same_block = []
+        umbilicusDirections = []
+        centroids = []
+        nodes_next_subvolumes = {}
+        for node in tqdm(graph.nodes, desc="Translating data to C++"):
+            nodes_next_subvolumes[tuple(node)] = {}
+        
+        for node in tqdm(graph.nodes, desc="Translating data to C++"):
+            graph_node = graph.nodes[node]
+            edges = graph_node['edges']
+            for edge in edges:
+                graph_edge = graph.edges[edge]
+                flip_k = edge[0] != node
+                next_node = edge[0] if edge[0] != node else edge[1]
+                if next_node not in graph.nodes:
+                    print(f"Node {next_node} not in graph.")
+                    continue
+                ks = graph.get_edge_ks(node, next_node)
+                # get k of ks with max certainty
+                k = max(ks, key=lambda k: graph_edge[-k if flip_k else k]['certainty'])
+                k_edge = -k if flip_k else k
+                # continue if bad edge
+                if graph_edge[k_edge]['bad_edge']:
+                    continue
+                if graph_edge[k_edge]['certainty'] <= 0:
+                    continue
+
+                certainty_ = graph_edge[k_edge]['certainty']
+                same_block_ = graph_edge[k_edge]['same_block']
+                if same_block_: # Add same block edges allways
+                    nodes_next_subvolumes[tuple(node)][tuple(next_node)] = (next_node, k, certainty_, same_block_)
                     nodes_next_subvolumes[tuple(next_node)][tuple(node)] = (node, -k, certainty_, same_block_)
                 else:
                     if tuple(next_node[:3]) not in nodes_next_subvolumes[tuple(node)]: # Add other block edges only if not already added
@@ -1727,7 +1812,7 @@ class RandomWalkSolver:
                 if certainty < certainty_min_threshold:
                     del aggregated_connections[start_node][end_node]
 
-        min_walks = 1
+        min_walks = 0
         max_walks = 10
         # only take the top n edges for each node
         nodes = list(aggregated_connections.keys())
