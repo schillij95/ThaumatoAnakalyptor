@@ -1234,6 +1234,62 @@ class RandomWalkSolver:
         same_block = []
         umbilicusDirections = []
         centroids = []
+
+        nodes_next_subvolumes = {}
+        for node in tqdm(graph.nodes, desc="Translating data to C++"):
+            nodes_next_subvolumes[tuple(node)] = {}
+        
+        for edge in graph.edges:
+            for k in graph.edges[edge]:
+                if graph.edges[edge][k]['bad_edge']:
+                    continue
+                for i in range(2):
+                    node = edge[i]
+                    next_node = edge[1-i]
+                    if tuple(next_node) not in nodes_next_subvolumes[tuple(node)]:
+                        nodes_next_subvolumes[tuple(node)][tuple(next_node)] = {}
+                    nodes_next_subvolumes[tuple(node)][tuple(next_node)][k] = (next_node, k, graph.edges[edge][k]['certainty'], graph.edges[edge][k]['same_block'])
+
+        for node in tqdm(graph.nodes, desc="Translating data to C++"):
+            graph_node = graph.nodes[node]
+            node_next_nodes = []
+            node_k_values = []
+            node_same_block = []
+            for next_subvolume in nodes_next_subvolumes[tuple(node)]:
+                for k in nodes_next_subvolumes[tuple(node)][next_subvolume]:
+                    next_node, k, certainty_, same_block_ = nodes_next_subvolumes[tuple(node)][next_subvolume][k]
+                    node_next_nodes.append([int(n) for n in next_node])
+                    node_k_values.append(int(k))
+                    node_same_block.append(bool(same_block_))
+
+            next_nodes.append(node_next_nodes)
+            k_values.append(node_k_values)
+            same_block.append(node_same_block)
+            umbilicusDirections.append([float(c_vec) for c_vec in self.centroid_vector(graph_node)])
+            centroids.append([float(c) for c in graph_node['centroid']])
+
+        # Prepare overlap threshold
+        overlapp_threshold_filename = 'overlapp_threshold.yaml'
+        with open(overlapp_threshold_filename, 'w') as file:
+            yaml.dump(overlapp_threshold, file)
+
+        return overlapp_threshold_filename, nodes, next_nodes, k_values, same_block, umbilicusDirections, centroids 
+    
+    def translate_data_to_cpp_v2_old_2(self, graph, overlapp_threshold):
+        """
+        Prepares graph data, solver parameters, and overlap threshold for C++ processing.
+
+        :param graph: A graph object with nodes and edges.
+        :param overlapp_threshold: Dictionary of overlap threshold parameters.
+        :return: Data structures suitable for C++ processing.
+        """
+
+        nodes = [[int(n) for n in node] for node in graph.nodes]
+        next_nodes = []
+        k_values = []
+        same_block = []
+        umbilicusDirections = []
+        centroids = []
         nodes_next_subvolumes = {}
         for node in tqdm(graph.nodes, desc="Translating data to C++"):
             nodes_next_subvolumes[tuple(node)] = {}
@@ -1765,11 +1821,15 @@ class RandomWalkSolver:
                 if end_node not in certainties_total[start_node]:
                     certainties_total[start_node][end_node] = 0
                 for k in aggregated_connections[start_node][end_node]:
+                    if aggregated_connections[start_node][end_node][k] < 0:
+                        print(f"Negative certainty: {aggregated_connections[start_node][end_node][k]}")
                     certainties_total[start_node][end_node] += aggregated_connections[start_node][end_node][k]
                 # find k value with the highest certainty
                 max_k = None
                 max_certainty = 0
                 for k in aggregated_connections[start_node][end_node]:
+                    if aggregated_connections[start_node][end_node][k] < 0:
+                        print(f"Negative certainty: {aggregated_connections[start_node][end_node][k]}")
                     if aggregated_connections[start_node][end_node][k] > max_certainty:
                         max_k = k
                         max_certainty = aggregated_connections[start_node][end_node][k]
@@ -1803,7 +1863,7 @@ class RandomWalkSolver:
 
         # delete all nodes with too little certainty
         # certainty_min_threshold = 0.33
-        certainty_min_threshold = 0.10
+        certainty_min_threshold = 0.66
         # certainty_min_threshold = 0.00
         nodes = list(aggregated_connections.keys())
         for start_node in tqdm(nodes, desc="Removing nodes with too little certainty"):
@@ -1813,23 +1873,36 @@ class RandomWalkSolver:
                 if certainty < certainty_min_threshold:
                     del aggregated_connections[start_node][end_node]
 
+        # Calculate mean certainty over all nodes
+        mean_certainty = 0.0
+        nr_certainties = 0
+        for start_node in aggregated_connections:
+            for end_node in aggregated_connections[start_node]:
+                mean_certainty += certainties_max[start_node][end_node]["certainty"]
+                nr_certainties += 1
+        mean_certainty /= nr_certainties
+        mean_certainty_threshold = 0.0 * mean_certainty
+
         min_walks = 0
         max_walks = 10
         # only take the top n edges for each node
-        nodes = list(aggregated_connections.keys())
-        for start_node in tqdm(nodes, desc="Taking top n edges for each node"):
-            # sort end nodes by certainty total from largest certainty to lowest
-            n_ = min(n, len(aggregated_connections[start_node]))
-            end_nodes1 = sorted(aggregated_connections[start_node], key=lambda x: certainties_max[start_node][x]["certainty"], reverse=True)[:n_]
-            end_nodes2 = sorted(aggregated_connections[start_node], key=lambda x: (certainties_max[start_node][x]["certainty"]/certainties_total[start_node][x]), reverse=True)[:n_]
-            end_nodes3 = sorted(aggregated_connections[start_node], key=lambda x: certainties_total[start_node][x], reverse=True)[:n_]
-            end_nodes4 = sorted(aggregated_connections[start_node], key=lambda x: (certainties_max[start_node][x]["certainty"]/certainties_total[start_node][x])*max(0.0, min(max_walks, certainties_max[start_node][x]["certainty"]) - min_walks) / (max_walks - min_walks), reverse=True)[:n_]
-            end_nodes = set(end_nodes1 + end_nodes2 + end_nodes3 + end_nodes4)
-            # end_nodes = set(end_nodes2 + end_nodes4)
-            bad_end_nodes = list(set(set(aggregated_connections[start_node]) - end_nodes))
-            for end_node in bad_end_nodes:
-                del aggregated_connections[start_node][end_node]
-                del certainties_total[start_node][end_node]
+        # nodes = list(aggregated_connections.keys())
+        # for start_node in tqdm(nodes, desc="Taking top n edges for each node"):
+        #     # sort end nodes by certainty total from largest certainty to lowest
+        #     n_ = min(n, len(aggregated_connections[start_node]))
+        #     # end_nodes1 = sorted(aggregated_connections[start_node], key=lambda x: certainties_max[start_node][x]["certainty"], reverse=True)[:n_]
+        #     # end_nodes2 = sorted(aggregated_connections[start_node], key=lambda x: (certainties_max[start_node][x]["certainty"]/certainties_total[start_node][x]), reverse=True)[:n_]
+        #     # end_nodes3 = sorted(aggregated_connections[start_node], key=lambda x: certainties_total[start_node][x], reverse=True)[:n_]
+        #     end_nodes4 = sorted(aggregated_connections[start_node], key=lambda x: (certainties_max[start_node][x]["certainty"]/certainties_total[start_node][x])*max(0.0, min(max_walks, certainties_max[start_node][x]["certainty"]) - min_walks) / (max_walks - min_walks), reverse=True)[:n_]
+        #     # end_nodes = set(end_nodes1 + end_nodes2 + end_nodes3 + end_nodes4)
+        #     # end_nodes = set(end_nodes2 + end_nodes4)
+        #     end_nodes = set(end_nodes4)
+        #     # print(f"End nodes: {end_nodes}")
+        #     bad_end_nodes = list(set(set(aggregated_connections[start_node]) - end_nodes))
+        #     # print(f"Bad end nodes: {bad_end_nodes}")
+        #     for end_node in bad_end_nodes:
+        #         del aggregated_connections[start_node][end_node]
+        #         del certainties_total[start_node][end_node]
         
         # remove all nodes with no connections
         nodes = list(aggregated_connections.keys())
@@ -1842,12 +1915,17 @@ class RandomWalkSolver:
         for start_node in tqdm(aggregated_connections, desc="Adding landmark connection edges"):
             for end_node in aggregated_connections[start_node]:
                 max_certainty = certainties_max[start_node][end_node]["certainty"]
+                if max_certainty < mean_certainty_threshold:
+                    # print(f"Certainty too low: {max_certainty}")
+                    continue
                 max_k = certainties_max[start_node][end_node]["k"]
                 certainty = max_certainty / certainties_total[start_node][end_node]
                 if certainty < certainty_min_threshold:
+                    print(f"Certainty too low: {certainty}")
                     continue
-                certainty = certainty * max(0.0, min(max_walks, max_certainty) - min_walks) / (max_walks - min_walks)
-                if certainty <= 0.0:
+                certainty_ = max_certainty - min_walks
+                if certainty_ <= 0.0:
+                    print(f"Certainty too low: {certainty_}")
                     continue
                 if max_k is not None:
                     contracted_graph.add_edge(start_node, end_node, certainty, max_k, same_block=False)
@@ -1873,7 +1951,7 @@ class RandomWalkSolver:
         
         return contracted_graph
 
-    def solve_pyramid(self, path, pyramid_up_nr_average=1000, max_nr_walks=100, nr_walks_per_node=100, max_unchanged_walks=10000, max_steps=100, max_tries=6, min_steps=10, min_end_steps=4, l=7, l_subsequent=6, n=4, stop_event=None):
+    def solve_pyramid(self, path, pyramid_up_nr_average=1000, max_nr_walks=100, nr_walks_per_node=100, max_unchanged_walks=10000, max_steps=100, max_tries=6, min_steps=10, min_end_steps=4, l=7, l_subsequent=6, n=2, stop_event=None):
         # pyramid solution utilizing random walks to deduct the nodes connections
         # samples landmarks and computing their connection certainties iteratively while contracting the graph with the help of the landmarks
         # when reaching the pyramid top, the graph is expanded again with the help of the landmarks. the top pyramid node is the starting node.
@@ -1906,8 +1984,10 @@ class RandomWalkSolver:
                         assert len(landmark_nodes) > 0, "No landmark nodes sampled."
                         print(f"Pyramid Index is {pyramid_index}. Remaining Landmark Nodes: {len(landmark_nodes)}")
                         # compute landmark nodes connections
-                        max_steps_ = max_steps if len(graphs) == 1 else max_steps - 1
-                        min_steps_ = min_steps if len(graphs) == 1 else min_steps - 1
+                        # max_steps_ = max_steps if len(graphs) == 1 else max_steps - 1
+                        # min_steps_ = min_steps if len(graphs) == 1 else min_steps - 1
+                        max_steps_ = 15
+                        min_steps_ = 4
                         # max_steps_ = max_steps
                         # min_steps_ = 10 if len(graphs) == 1 else 9
                         pyramid_up_nr_average_ = pyramid_up_nr_average if len(graphs) == 1 else pyramid_up_nr_average * 2
@@ -1934,7 +2014,7 @@ class RandomWalkSolver:
                         l_subsequent_ = l_subsequent - 1
                         n_ = n + 1
 
-                    graph = self.contract_graph(graph, aggregated_connections,l=l, l_subsequent=l_subsequent_, n=n_)
+                    graph = self.contract_graph(graph, aggregated_connections,l=l, l_subsequent=l_subsequent_, n=n)
                     graphs.append(graph)
                     assert len(graph.nodes) >= 1, "Graph has no nodes."
                     pyramid_index += 1
@@ -1950,7 +2030,7 @@ class RandomWalkSolver:
             assert len(landmark_nodes) <= min_pyramid_nodes, f"More than {min_pyramid_nodes} landmark node left."
             fixed_nodes = [tuple(landmark_nodes[0])]
             fixed_ks = [0]
-            min_steps_pyramid_down = 8
+            min_steps_pyramid_down = 16
             # pyramid down
             for i in tqdm(range(len(graphs)-1, -1, -1), desc="Pyramid Down"):
                 # skip last 1 graph steps, because this graph has too much noise in its nodes. the sheets are already found earlier in the pyramid
@@ -1961,7 +2041,8 @@ class RandomWalkSolver:
                 small_addition = 0
                 if i > len(graphs) - 4:
                     small_addition = 2 * nr_walks_per_node + abs(i - (len(graphs) - 4))*nr_walks_per_node
-                min_steps_ = min(max(4, len(graph.nodes) // 3), min_steps_pyramid_down)
+                # min_steps_ = min(max(4, len(graph.nodes) // 3), min_steps_pyramid_down)
+                min_steps_ = min_steps_pyramid_down
                 min_end_steps_ = min_steps_
                 # compute pyramid down
                 # fixed_nodes, fixed_ks = self.solve_pyramid_down(graph, fixed_nodes, fixed_ks, path, max_nr_walks=max_nr_walks, nr_walks_per_node=nr_walks_per_node + small_addition, max_unchanged_walks=max_unchanged_walks/4000 * (len(graph.nodes)), max_steps=max_steps, max_tries=max_tries, min_steps=min_steps, min_end_steps=min_end_steps, stop_event=stop_event)
@@ -2782,7 +2863,7 @@ def random_walks():
                           "enable_winding_switch": True, "max_same_block_jump_range": 3,
                           "pyramid_up_nr_average": 10000, "nr_walks_per_node":5000,
                           "enable_winding_switch_postprocessing": False,
-                          "surrounding_patches_size": 3, "max_sheet_clip_distance": 60, "sheet_z_range": (-5000, 400000), "sheet_k_range": (-1000000, 2000000), "volume_min_certainty_total_percentage": 0.0, "max_umbilicus_difference": 30,
+                          "surrounding_patches_size": 3, "max_sheet_clip_distance": 60, "sheet_z_range": (-5000, 400000), "sheet_k_range": (-1000, 1000), "volume_min_certainty_total_percentage": 0.0, "max_umbilicus_difference": 30,
                           "walk_aggregation_threshold": 100, "walk_aggregation_max_current": -1,
                           "bad_edge_threshold": 3
                           }
@@ -2794,7 +2875,7 @@ def random_walks():
     min_steps = 16
     min_end_steps = 16
     max_tries = 6
-    max_unchanged_walks = 30 * max_nr_walks # 30 * max_nr_walks
+    max_unchanged_walks = 100 * max_nr_walks # 30 * max_nr_walks
     recompute = 0
     
     # Create an argument parser
@@ -2887,4 +2968,4 @@ def random_walks():
 if __name__ == '__main__':
     random_walks()
 
-# Example command: python3 -m ThaumatoAnakalyptor.Pyramid_Random_Walks --path /scroll.volpkg/working/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks
+# Example command: python3 -m ThaumatoAnakalyptor.Pyramid_Random_Walks --path /scroll.volpkg/working/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks --toy_problem

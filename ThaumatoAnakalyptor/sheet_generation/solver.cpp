@@ -970,6 +970,7 @@ std::tuple<std::vector<NodePtr>, std::vector<K>, bool, bool> random_walk(
                 if (k == -10) {
                     continue;
                 }
+                continue;
                 // return {empty_walk, empty_ks, "Inverse loop closure failed", false, false};
                 return {empty_walk, empty_ks, false, false};
             }
