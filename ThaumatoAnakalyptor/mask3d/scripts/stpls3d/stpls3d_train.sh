@@ -15,6 +15,7 @@ general.experiment_name="train" \
 general.project_name="stpls3d" \
 data/datasets=stpls3d \
 general.num_targets=2 \
+general.gpus=2 \
 data.num_labels=2 \
 data.voxel_size=0.333 \
 data.num_workers=32 \
