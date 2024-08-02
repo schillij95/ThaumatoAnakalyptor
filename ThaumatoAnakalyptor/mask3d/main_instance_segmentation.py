@@ -88,7 +88,7 @@ def train(cfg: DictConfig):
 
     runner = Trainer(
         logger=loggers,
-        gpus=cfg.general.gpus,
+        gpus=1,
         accelerator="gpu",
         strategy='ddp',
         callbacks=callbacks,
