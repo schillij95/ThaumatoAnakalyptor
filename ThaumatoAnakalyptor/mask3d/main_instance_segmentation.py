@@ -105,7 +105,9 @@ def test(cfg: DictConfig):
     os.chdir(hydra.utils.get_original_cwd())
     cfg, model, loggers = get_parameters(cfg)
     runner = Trainer(
-        gpus=1,
+        gpus=cfg.general.gpus,
+        accelerator="gpu",
+        strategy='ddp',
         logger=loggers,
         **cfg.trainer,
     )
