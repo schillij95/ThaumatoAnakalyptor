@@ -1396,7 +1396,7 @@ class InstanceSegmentation(pl.LightningModule):
         log_prefix = f"val"
 
         if not os.path.exists(base_path):
-            os.makedirs(base_path)
+            os.makedirs(base_path, exist_ok=True)
 
         try:
             if self.validation_dataset.dataset_name == "s3dis":
