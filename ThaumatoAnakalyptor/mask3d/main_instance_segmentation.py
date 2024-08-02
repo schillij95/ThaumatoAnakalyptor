@@ -89,6 +89,8 @@ def train(cfg: DictConfig):
     runner = Trainer(
         logger=loggers,
         gpus=cfg.general.gpus,
+        accelerator="gpu",
+        strategy='ddp',
         callbacks=callbacks,
         **cfg.trainer,
     )
@@ -103,9 +105,8 @@ def test(cfg: DictConfig):
     os.chdir(hydra.utils.get_original_cwd())
     cfg, model, loggers = get_parameters(cfg)
     runner = Trainer(
-        gpus=cfg.general.gpus,
+        gpus=1,
         logger=loggers,
-        weights_save_path=str(cfg.general.save_dir),
         **cfg.trainer,
     )
     runner.test(model)
