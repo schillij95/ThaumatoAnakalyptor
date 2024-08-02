@@ -113,8 +113,6 @@ class InstanceSegmentation(pl.LightningModule):
         # misc
         self.labels_info = dict()
         
-        self.prepare_data()
-
     def forward(
         self, x, point2segment=None, raw_coordinates=None, is_eval=False
     ):
