@@ -112,7 +112,9 @@ class InstanceSegmentation(pl.LightningModule):
         self.iou = IoU()
         # misc
         self.labels_info = dict()
-
+        
+        self.prepare_data()
+        
     def forward(
         self, x, point2segment=None, raw_coordinates=None, is_eval=False
     ):
@@ -1085,19 +1087,22 @@ class InstanceSegmentation(pl.LightningModule):
 
             if self.config.general.export:
                 if self.validation_dataset.dataset_name == "stpls3d":
-                    scan_id, _, sample, crop_id = file_names[bid].split("_")
-                    crop_id = int(crop_id.replace(".txt", ""))
-                    file_name = (
-                        f"{scan_id}_points_GTv3_0{crop_id}_{sample}_inst_nostuff"
-                    )
+                    try:
+                        scan_id, _, sample, crop_id = file_names[bid].split("_")
+                        crop_id = int(crop_id.replace(".txt", ""))
+                        file_name = (
+                            f"{scan_id}_points_GTv3_0{crop_id}_{sample}_inst_nostuff"
+                        )
 
-                    self.export(
-                        self.preds[file_names[bid]]["pred_masks"],
-                        self.preds[file_names[bid]]["pred_scores"],
-                        self.preds[file_names[bid]]["pred_classes"],
-                        file_name,
-                        self.decoder_id,
-                    )
+                        self.export(
+                            self.preds[file_names[bid]]["pred_masks"],
+                            self.preds[file_names[bid]]["pred_scores"],
+                            self.preds[file_names[bid]]["pred_classes"],
+                            file_name,
+                            self.decoder_id,
+                        )
+                    except:
+                        pass
                 else:
                     self.export(
                         self.preds[file_names[bid]]["pred_masks"],
@@ -1393,7 +1398,7 @@ class InstanceSegmentation(pl.LightningModule):
         log_prefix = f"val"
 
         if not os.path.exists(base_path):
-            os.makedirs(base_path)
+            os.makedirs(base_path, exist_ok=True)
 
         try:
             if self.validation_dataset.dataset_name == "s3dis":

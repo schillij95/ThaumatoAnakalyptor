@@ -89,6 +89,8 @@ def train(cfg: DictConfig):
     runner = Trainer(
         logger=loggers,
         gpus=cfg.general.gpus,
+        accelerator="gpu",
+        strategy='ddp',
         callbacks=callbacks,
         **cfg.trainer,
     )
@@ -104,8 +106,9 @@ def test(cfg: DictConfig):
     cfg, model, loggers = get_parameters(cfg)
     runner = Trainer(
         gpus=cfg.general.gpus,
+        accelerator="gpu",
+        strategy='ddp',
         logger=loggers,
-        weights_save_path=str(cfg.general.save_dir),
         **cfg.trainer,
     )
     runner.test(model)
