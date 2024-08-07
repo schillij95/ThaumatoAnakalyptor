@@ -23,7 +23,7 @@ jobs:
             type=raw,value=edge,enable={{is_default_branch}}
 
       - name: Debug metadata tags
-        run: echo "Tags: ${{ steps.meta.outputs.tags }}"
+        run: echo "Tags: \"${{ steps.meta.outputs.tags }}\""
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
