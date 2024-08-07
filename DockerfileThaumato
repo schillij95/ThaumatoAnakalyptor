@@ -31,6 +31,15 @@ ENV PATH /opt/conda/envs/$CONDA_DEFAULT_ENV/bin:$PATH
 # Install cython and pyyaml first
 RUN pip install "cython<3.0.0" pyyaml==5.4.1 --no-build-isolation -v
 
+# Git clone the ThaumatoAnakalyptor repository into the workspace as base
+RUN git clone --recurse-submodules https://github.com/schillij95/ThaumatoAnakalyptor
+RUN mkdir -p /workspace
+RUN mv ThaumatoAnakalyptor/* /workspace
+# print contents of the current working directory
+RUN ls -la
+# print the contents of the workspace directory
+RUN ls -la /workspace
+
 # Copy your environment.yml file
 COPY environment_thaumato.yml /workspace/
 
@@ -182,8 +191,8 @@ WORKDIR /
 RUN pip install gdown
 
 # Download the canonical timesformer weights from Google Drive using gdown
-RUN rm -f /workspace/ThaumatoAnakalyptor/Vesuvius-Grandprize-Winner/timesformer_wild15_20230702185753_0_fr_i3depoch=12.ckpt
-RUN gdown --id 13Iu-dR-1sKq_oGJfNa86LcBSv1o4XA37 -O /workspace/ThaumatoAnakalyptor/Vesuvius-Grandprize-Winner/timesformer_wild15_20230702185753_0_fr_i3depoch=12.ckpt
+RUN rm -f /Vesuvius-Grandprize-Winner/timesformer_wild15_20230702185753_0_fr_i3depoch=12.ckpt
+RUN gdown --id 13Iu-dR-1sKq_oGJfNa86LcBSv1o4XA37 -O /Vesuvius-Grandprize-Winner/timesformer_wild15_20230702185753_0_fr_i3depoch=12.ckpt
 
 # Download the canonical mask3d weights from Google Drive using gdown
 RUN rm -f /workspace/ThaumatoAnakalyptor/mask3d/saved/train/last-epoch.ckpt
