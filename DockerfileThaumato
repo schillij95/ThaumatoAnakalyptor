@@ -10,8 +10,18 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
+# Git clone the ThaumatoAnakalyptor repository into the workspace as base
+RUN git clone --recurse-submodules https://github.com/schillij95/ThaumatoAnakalyptor
+RUN mkdir -p /workspace
+RUN mv ThaumatoAnakalyptor/* /workspace
+# print contents of the current working directory
+RUN ls -la
+# print the contents of the workspace directory
+RUN ls -la /workspace
+
 # Install Miniconda (you can choose a specific version if you want)
-RUN curl -Lo miniconda.sh https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh \
+RUN apt-get update && apt-get install -y curl \
+    && curl -Lo miniconda.sh https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh \
     && chmod +x miniconda.sh \
     && ./miniconda.sh -b -p /opt/conda \
     && rm miniconda.sh
@@ -30,15 +40,6 @@ ENV PATH /opt/conda/envs/$CONDA_DEFAULT_ENV/bin:$PATH
 
 # Install cython and pyyaml first
 RUN pip install "cython<3.0.0" pyyaml==5.4.1 --no-build-isolation -v
-
-# Git clone the ThaumatoAnakalyptor repository into the workspace as base
-RUN git clone --recurse-submodules https://github.com/schillij95/ThaumatoAnakalyptor
-RUN mkdir -p /workspace
-RUN mv ThaumatoAnakalyptor/* /workspace
-# print contents of the current working directory
-RUN ls -la
-# print the contents of the workspace directory
-RUN ls -la /workspace
 
 # Copy your environment.yml file
 COPY environment_thaumato.yml /workspace/
