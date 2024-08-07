@@ -118,6 +118,7 @@ RUN gdown --id 13Iu-dR-1sKq_oGJfNa86LcBSv1o4XA37 -O /workspace/Vesuvius-Grandpri
 COPY ./ThaumatoAnakalyptor/mask3d/ /workspace/ThaumatoAnakalyptor/mask3d/
 
 # Download the canonical mask3d weights from Google Drive using gdown
+RUN mkdir -p /workspace/ThaumatoAnakalyptor/mask3d/saved/train
 RUN rm -f /workspace/ThaumatoAnakalyptor/mask3d/saved/train/last-epoch.ckpt
 RUN gdown --id 1gO8Nf4sCaA7r4dO6ePtt0SE0E5ePXSid -O /workspace/ThaumatoAnakalyptor/mask3d/saved/train/last-epoch.ckpt
 
