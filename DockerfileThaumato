@@ -178,6 +178,17 @@ RUN cmake .. \
 
 WORKDIR /
 
+# Install gdown to handle Google Drive file downloads
+RUN pip install gdown
+
+# Download the canonical timesformer weights from Google Drive using gdown
+RUN rm -f /workspace/ThaumatoAnakalyptor/Vesuvius-Grandprize-Winner/timesformer_wild15_20230702185753_0_fr_i3depoch=12.ckpt
+RUN gdown --id 13Iu-dR-1sKq_oGJfNa86LcBSv1o4XA37 -O /workspace/ThaumatoAnakalyptor/Vesuvius-Grandprize-Winner/timesformer_wild15_20230702185753_0_fr_i3depoch=12.ckpt
+
+# Download the canonical mask3d weights from Google Drive using gdown
+RUN rm -f /workspace/ThaumatoAnakalyptor/mask3d/saved/train/last-epoch.ckpt
+RUN gdown --id 1gO8Nf4sCaA7r4dO6ePtt0SE0E5ePXSid -O /workspace/ThaumatoAnakalyptor/mask3d/saved/train/last-epoch.ckpt
+
 # Add user for GUI
 # RUN adduser --quiet --disabled-password qtuser && usermod -a -G audio qtuser
 RUN usermod -a -G audio root
