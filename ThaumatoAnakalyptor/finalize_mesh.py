@@ -127,7 +127,7 @@ def cut_mesh_size(mesh, texture_size, min_x, cut_size):
     triangles_mask = uvs_mask_.reshape(-1, 3)
     print(f"Sum of triangles mask: {np.sum(triangles_mask)}, with shape {triangles_mask.shape}")
     # Select vertices and triangles within the x range
-    triangles_mask = np.all(triangles_mask, axis=1)
+    triangles_mask = np.any(triangles_mask, axis=1)
     uvs_mask = triangles_mask.repeat(3).reshape(-1)
 
     selected_uvs = uv_scaled[uvs_mask]
@@ -195,7 +195,7 @@ def save_cut(i, output_filename, cut_mesh, cut_mesh_texture_size):
     print(f"Saved cut mesh piece {i} to {output_filename}")
 
 def main(output_folder, input_mesh, scale_factor, cut_size, delauny):
-    output_folder = output_folder if output_folder is not None else "/".join(os.path.dirname(input_mesh).split("/")[:-1]) + "/working"
+    output_folder = output_folder if output_folder is not None else os.path.join(os.path.dirname(input_mesh), "working")
     # Ensure output directory exists
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
@@ -210,6 +210,8 @@ def main(output_folder, input_mesh, scale_factor, cut_size, delauny):
     # Scale mesh
     mesh = scale_mesh(mesh, scale_factor)
     texture_size = (texture_size * scale_factor).astype(np.int32)
+    # Save scaled mesh
+    # save_cut(0, obj_path.replace(".obj", "_scaled.obj"), mesh, texture_size)
 
     # Cut mesh into pieces and normalize UVs
     cut_mesh_list = cut_meshes(mesh, texture_size, cut_size)
