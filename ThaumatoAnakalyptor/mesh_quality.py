@@ -8,18 +8,18 @@ from scipy.cluster.hierarchy import fcluster, linkage
 import argparse
 import os
 from .split_mesh import MeshSplitter
+from .sheet_to_mesh import scale_points, shuffling_points_axis
 import tempfile
 from tqdm import tqdm
 import pickle
 from copy import deepcopy
 
-def load_stitching_order(txt_path):
-    # loads from a txt file the mesh filenames. each line contains one mesh name
-    with open(txt_path, "r") as f:
-        mesh_files = f.readlines()
-    mesh_files = [m.strip() for m in mesh_files]
-    print(f"Loaded {mesh_files} mesh files")
-    return mesh_files
+def setup_closest_triangles(mesh):
+    mesh = o3d.t.geometry.TriangleMesh.from_legacy(mesh)
+    # Create a scene and add the triangle mesh
+    scene = o3d.t.geometry.RaycastingScene()
+    _ = scene.add_triangles(mesh)  # we do not need the geometry ID for mesh
+    return scene
 
 def load_mesh_vertices(obj_file):
     # copy mesh to tempfile
@@ -47,33 +47,42 @@ def load_mesh_vertices(obj_file):
     scene = setup_closest_triangles(mesh)
     return mesh, vertices, triangles, scene
 
-def save_mesh(save_mesh_path, mesh):
-    vertices = np.asarray(mesh.vertices)
-    vertices -= 500
-    vertices = vertices[:,[2, 0, 1]].astype(np.float64)
-    mesh.vertices = o3d.utility.Vector3dVector(vertices)
-    normals = np.asarray(mesh.vertex_normals)
-    normals = normals[:,[2, 0, 1]]
-    mesh.vertex_normals = o3d.utility.Vector3dVector(normals)
-    triangles = np.asarray(mesh.triangles).astype(np.int64)
-    o3d.io.write_triangle_mesh(save_mesh_path, mesh, write_ascii=False)
-    # success = igl.write_obj(save_mesh_path, vertices, triangles)
-    # print(f"Save mesh success: {success}")
-
-def calculate_winding_angle(mesh_path, pointcloud_dir):
-    umbilicus_path = os.path.join(os.path.dirname(pointcloud_dir), "umbilicus.txt")
-    splitter =  MeshSplitter(mesh_path, umbilicus_path)
+def calculate_winding_angle(default_splitter):
     # splitter.compute_uv_with_bfs(np.random.randint(0, splitter.vertices_np.shape[0]))
-    splitter.compute_uv_with_bfs(0) # for production
-    winding_angles = splitter.vertices_np[:, 0]
+    winding_angles = default_splitter.vertices_np[:, 0]
     return winding_angles
 
-def setup_closest_triangles(mesh):
-    mesh = o3d.t.geometry.TriangleMesh.from_legacy(mesh)
-    # Create a scene and add the triangle mesh
-    scene = o3d.t.geometry.RaycastingScene()
-    _ = scene.add_triangles(mesh)  # we do not need the geometry ID for mesh
-    return scene
+def calculate_winding_angle_pointcloud_instance(points, default_splitter):
+    # splitter.compute_uv_with_bfs(np.random.randint(0, splitter.vertices_np.shape[0]))
+    winding_angles = np.zeros(len(points))
+    for i in range(len(points)):
+        winding_angles[i] = default_splitter.angle_between_vertices(np.array([0.0, 0.0, 0.0]), points[i])
+
+    # normalize to range +-180 around start point
+    start_winding_angle = winding_angles[0]
+    mask_gt = winding_angles > start_winding_angle + 180
+    mask_lt = winding_angles < start_winding_angle - 180
+    winding_angles[mask_gt] -= 360
+    winding_angles[mask_lt] += 360
+    assert np.all(winding_angles >= start_winding_angle - 180), f"Minimum winding angle is below -180 away from start winding angle: {np.min(winding_angles)}"
+    assert np.all(winding_angles <= start_winding_angle + 180), f"Maximum winding angle is above 180 away from start winding angle: {np.max(winding_angles)}"
+    return winding_angles
+
+def calculate_winding_angle_pointcloud_raw(points, gt_splitter):
+    # splitter.compute_uv_with_bfs(np.random.randint(0, splitter.vertices_np.shape[0]))
+    winding_angles = np.zeros(len(points))
+    for i in range(len(points)):
+        winding_angles[i] = gt_splitter.angle_between_vertices(np.array([0.0, 0.0, 0.0]), points[i])
+
+    # normalize to range +-180 around start point
+    start_winding_angle = winding_angles[0]
+    mask_gt = winding_angles > start_winding_angle + 180
+    mask_lt = winding_angles < start_winding_angle - 180
+    winding_angles[mask_gt] -= 360
+    winding_angles[mask_lt] += 360
+    assert np.all(winding_angles >= start_winding_angle - 180), f"Minimum winding angle is below -180 away from start winding angle: {np.min(winding_angles)}"
+    assert np.all(winding_angles <= start_winding_angle + 180), f"Maximum winding angle is above 180 away from start winding angle: {np.max(winding_angles)}"
+    return winding_angles
 
 def find_closest_triangles(points, scene):
     # Find the closest triangle and the distance for each point
@@ -209,35 +218,32 @@ def find_valid_relations(points2, scene1, triangles1, winding_angles2, max_dista
 
     return closest_indices1, winding_angles_points2, clostest_points2, points_indices2
 
-def align_meshes(mesh1_path, mesh2_path, umbilicus_path, max_distance, default_splitter):
+def align_winding_angles(vertices1, winding_angles1, mesh2_path, umbilicus_path, max_distance, gt_splitter):
     # load the meshes
-    mesh1, vertices1, triangles1, scene1 = load_mesh_vertices(mesh1_path)
     mesh2, vertices2, triangles2, scene2 = load_mesh_vertices(mesh2_path)
 
-    # calculate the winding angles
-    winding_angles1 = calculate_winding_angle(mesh1_path, umbilicus_path)
-    winding_angles2 = calculate_winding_angle(mesh2_path, umbilicus_path)
+    # calculate the gt winding angles
+    winding_angles2 = calculate_winding_angle(gt_splitter)
     assert len(winding_angles1) == len(vertices1)
     assert len(winding_angles2) == len(vertices2)
 
     # find the closest vertices
-    closest_indices1, winding_angles_vertices2, clostest_vertices2, points_indices2 = find_valid_relations(vertices2, scene1, triangles1, winding_angles2, max_distance)
-    closest_indices2, winding_angles_vertices1, clostest_vertices1, points_indices1 = find_valid_relations(vertices1, scene2, triangles2, winding_angles1, max_distance)
+    closest_indices2, winding_angles_vertices1, clostest_vertices1, points_indices1 = find_valid_relations(vertices1, scene2, triangles2, winding_angles1, max_distance) # find the clostest triangle of the gt mesh (mesh 2) for each vertex of the input mesh (mesh 1) -> then find the winding angle of one of the vertices of the closest triangle each in the gt mesh (mesh 2)
 
-    # Make statistic about the winding differences
+    # Make statistic about the winding differences in the closest vertices
     winding_angle_difference = {}
-    for i in range(len(closest_indices1)):
-        vertex1 = vertices1[closest_indices1[i]]
-        angle1 = winding_angles1[closest_indices1[i]]
-        vertex2 = clostest_vertices2[i]
-        angle2 = winding_angles_vertices2[i]
-        w_a_diff = winding_difference(vertex1, angle1, vertex2, angle2, default_splitter)
+    for i in range(len(closest_indices2)):
+        vertex2 = vertices2[closest_indices2[i]]
+        angle2 = winding_angles2[closest_indices2[i]]
+        vertex1 = clostest_vertices1[i]
+        angle1 = winding_angles_vertices1[i]
+        w_a_diff = winding_difference(vertex2, angle2, vertex1, angle1, gt_splitter)
         if not int(w_a_diff) in winding_angle_difference:
             winding_angle_difference[int(w_a_diff)] = 0
         winding_angle_difference[int(w_a_diff)] += 1
 
     print(winding_angle_difference)
-    return winding_angle_difference, winding_angles1, winding_angles2, points_indices1, points_indices2, scene1, scene2, mesh1, mesh2
+    return winding_angle_difference, winding_angles2, scene2, mesh2
 
 def find_best_alignment(winding_angle_difference):
     # find the max used k value
@@ -284,22 +290,28 @@ def calculate_overlapping(secondary_vertices, winding_angles_secondary, winding_
 
 def mesh_quality(mesh_path1, mesh_path2, umbilicus_path, max_distance, output_dir, distance_threshold=100):
     print(f"Calculating the quality of mesh {mesh_path1} with respect to ground truth mesh {mesh_path2} ...")
-    default_splitter = MeshSplitter(mesh_path1, umbilicus_path)
+    mesh1_splitter = MeshSplitter(mesh_path1, umbilicus_path)
+    mesh1_splitter.compute_uv_with_bfs(0) # precomputation of the winding angles of the mesh
+    gt_splitter = MeshSplitter(mesh_path2, umbilicus_path)
+    gt_splitter.compute_uv_with_bfs(0) # precomputation of the winding angles of the gt mesh
+
     fresh_start = True
     if fresh_start:
-        winding_angle_difference, winding_angles1, winding_angles2, points_indices1, points_indices2, scene1, scene2, mesh1, mesh2 = align_meshes(mesh_path1, mesh_path2, umbilicus_path, max_distance, default_splitter)
+        mesh1, vertices1, _, _ = load_mesh_vertices(mesh_path1)
+        winding_angles1 = calculate_winding_angle(mesh_path1, mesh1_splitter)
+        winding_angle_difference, winding_angles2, scene2, mesh2 = align_winding_angles(vertices1, winding_angles1, mesh_path2, umbilicus_path, max_distance, gt_splitter)
         best_alignment = find_best_alignment(winding_angle_difference)
         print(f"Best alignment: {best_alignment}")
 
         # pickle save 
         os.makedirs(output_dir, exist_ok=True)
         with open(os.path.join(output_dir, "development.pkl"), "wb") as f:
-            pickle.dump((winding_angle_difference, winding_angles1, winding_angles2, points_indices1, points_indices2, best_alignment), f)
+            pickle.dump((winding_angle_difference, winding_angles1, winding_angles2, best_alignment), f)
     else:
         with open(os.path.join(output_dir, "development.pkl"), "rb") as f:
-            winding_angle_difference, winding_angles1, winding_angles2, points_indices1, points_indices2, best_alignment = pickle.load(f)
+            winding_angle_difference, winding_angles1, winding_angles2, best_alignment = pickle.load(f)
 
-            mesh1, _, _, scene1 = load_mesh_vertices(mesh_path1)
+            mesh1, _, _, _ = load_mesh_vertices(mesh_path1)
             mesh2, _, _, scene2 = load_mesh_vertices(mesh_path2)
 
     # Adjust the winding angles of the second mesh to have the same winding angle base as the first mesh
@@ -312,25 +324,93 @@ def mesh_quality(mesh_path1, mesh_path2, umbilicus_path, max_distance, output_di
     primary_vertices = np.asarray(mesh1.vertices)
     secondary_triangles = np.asarray(mesh2.triangles)
     # Iteratively refine vertices positions of both meshes in the overlapping region
-    calculate_vertices_error(primary_vertices, winding_angles1, winding_angles2, secondary_triangles, scene2, default_splitter, distance_threshold=distance_threshold)
+    calculate_vertices_error(primary_vertices, winding_angles1, winding_angles2, secondary_triangles, scene2, mesh1_splitter, distance_threshold=distance_threshold)
 
-def compute(mesh_path1, mesh_path2, umbilicus_path, max_distance):
+def compute(input_mesh, input_raw_pointcloud, input_instance_pointcloud, mesh_path2, umbilicus_path, max_distance, distance_threshold):
     output_dir = os.path.dirname(mesh_path2) + "_quality"
 
-    mesh_quality(mesh_path1, mesh_path2, umbilicus_path, max_distance, output_dir)
+    fresh_start = False
+    gt_splitter = MeshSplitter(mesh_path2, umbilicus_path)
+    if fresh_start:
+        gt_splitter.compute_uv_with_bfs(0) # precomputation of the winding angles of the gt mesh
+        # make dirs
+        os.makedirs(output_dir, exist_ok=True)
+        with open(os.path.join(output_dir, "development.pkl"), "wb") as f:
+            pickle.dump(gt_splitter.vertices_np, f)
+    else:
+        with open(os.path.join(output_dir, "development.pkl"), "rb") as f:
+            gt_splitter.vertices_np = pickle.load(f)
+
+    # load input data, get winding angles 1
+    axis_indices = [2, 0, 1]
+    if input_instance_pointcloud is not None: # TODO proper check for instance
+        # 3D instance pointcloud
+        vertices1 = o3d.io.read_point_cloud(input_instance_pointcloud)
+        # to numpy
+        vertices1 = np.asarray(vertices1.points)
+        # adjust coordinate frame
+        vertices1 = scale_points(vertices1, 4.0, axis_offset=-500)
+        vertices1, _ = shuffling_points_axis(vertices1, vertices1, axis_indices)
+        winding_angles1 = calculate_winding_angle_pointcloud_instance(vertices1, gt_splitter)
+    elif input_raw_pointcloud is not None:
+        # 3D raw pointcloud
+        vertices1 = o3d.io.read_point_cloud(input_raw_pointcloud)
+        # to numpy
+        vertices1 = np.asarray(vertices1.points)
+        # adjust coordinate frame
+        vertices1 = scale_points(vertices1, 1.0, axis_offset=-500)
+        vertices1, _ = shuffling_points_axis(vertices1, vertices1, axis_indices)
+        # find closest triangles
+        mesh2, vertices2, triangles2, scene2 = load_mesh_vertices(mesh_path2)
+        closest_triangle, closest_distances = find_closest_triangles(vertices1, scene2)
+        # Get the index of the first vertex in the closest triangle
+        closest_indices2 = triangles2[closest_triangle][:, 0]
+        winding_angles2 = calculate_winding_angle(gt_splitter)
+        # Get the winding angles of the closest vertices as the winding angles of the points
+        winding_angles1 = winding_angles2[closest_indices2]
+    else:
+        # mesh
+        mesh1, vertices1, _, _ = load_mesh_vertices(input_mesh)
+        mesh1_splitter = MeshSplitter(input_mesh, umbilicus_path)
+        mesh1_splitter.compute_uv_with_bfs(0) # precomputation of the winding angles of the mesh
+        winding_angles1 = calculate_winding_angle(mesh1_splitter)
+
+    # align winding angles
+    winding_angle_difference, winding_angles2, scene2, mesh2 = align_winding_angles(vertices1, winding_angles1, mesh_path2, umbilicus_path, max_distance, gt_splitter)
+    best_alignment = find_best_alignment(winding_angle_difference)
+    print(f"Best alignment: {best_alignment}")
+
+    # Adjust the winding angles of the second mesh to have the same winding angle base as the first mesh
+    winding_angles2 += best_alignment
+
+    print("Mesh 1 min max winding angle: ", np.min(winding_angles1), np.max(winding_angles1))
+    print("Mesh 2 min max winding angle: ", np.min(winding_angles2), np.max(winding_angles2))
+
+    secondary_triangles = np.asarray(mesh2.triangles)
+    # Iteratively refine vertices positions of both meshes in the overlapping region
+    calculate_vertices_error(vertices1, winding_angles1, winding_angles2, secondary_triangles, scene2, gt_splitter, distance_threshold=distance_threshold)
+
+    # mesh_quality(mesh_path1, mesh_path2, umbilicus_path, max_distance, output_dir)
 
 def main():
     # Parse arguments
     parser = argparse.ArgumentParser(description="Calculate the Quality statistic of a 3D mesh and a Ground Truth 3D Mesh.")
-    parser.add_argument("--input_mesh", type=str, help="Path to the 3D input mesh (.obj)")
+    parser.add_argument("--input_mesh", type=str, help="Path to the 3D mesh input data (.obj)", default=None)
+    parser.add_argument("--input_raw_pointcloud", type=str, help="Path to the 3D raw pointcloud input data (.ply)", default=None)
+    parser.add_argument("--input_instance_pointcloud", type=str, help="Path to the 3D raw pointcloud input data (.ply)", default=None)
     parser.add_argument("--gt_mesh", type=str, help="Path to the 3D input mesh (.obj)")
     parser.add_argument("--umbilicus_path", type=str, help="Path to the 3D point cloud directory (containing .ply)")
     parser.add_argument("--max_distance", type=float, help="Maximum distance for a point to be considered part of the mesh", default=1)
+    parser.add_argument("--distance_threshold", type=float, help="Distance threshold for overlapping vertices", default=100)
 
     args = parser.parse_args()
+    print(f"args: {args}")
+
+    # Exactly one input must be not None
+    assert int(args.input_mesh is not None) + int(args.input_raw_pointcloud is not None) + int(args.input_instance_pointcloud is not None) == 1, "Exactly one input must be not None"
 
     # Compute the 3D mask with labels
-    compute(args.input_mesh, args.gt_mesh, args.umbilicus_path, args.max_distance)
+    compute(args.input_mesh, args.input_raw_pointcloud, args.input_instance_pointcloud, args.gt_mesh, args.umbilicus_path, args.max_distance, args.distance_threshold)
 
 if __name__ == "__main__":
     main()
