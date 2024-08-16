@@ -2815,6 +2815,15 @@ def compute(overlapp_threshold, start_point, path, recompute=False, stop_event=N
             scroll_graph = load_graph(save_path.replace("blocks", "subgraph") + ".pkl")
         else:
             scroll_graph = load_graph(recompute_path)
+
+    if (not toy_problem) and flip_winding_direction:
+        print("Flipping winding direction ...")
+        scroll_graph.flip_winding_direction()
+        scroll_graph.save_graph(recompute_path)
+        print("Done flipping winding direction.")
+    elif flip_winding_direction:
+        raise ValueError("Cannot flip winding direction for toy problem.")
+    
     scroll_graph.set_overlapp_threshold(overlapp_threshold)
     scroll_graph.start_block, scroll_graph.patch_id = start_block, patch_id
 
@@ -2822,12 +2831,6 @@ def compute(overlapp_threshold, start_point, path, recompute=False, stop_event=N
     min_z = min([scroll_graph.nodes[node]["centroid"][1] for node in scroll_graph.nodes])
     max_z = max([scroll_graph.nodes[node]["centroid"][1] for node in scroll_graph.nodes])
     print(f"Min z: {min_z}, Max z: {max_z}")
-    
-    if flip_winding_direction:
-        print("Flipping winding direction ...")
-        scroll_graph.flip_winding_direction()
-        scroll_graph.save_graph(recompute_path)
-        print("Done flipping winding direction.")
 
     print(f"Number of nodes in the graph: {len(scroll_graph.nodes)}")
 
