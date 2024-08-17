@@ -465,9 +465,9 @@ void calculate_histogram(const std::vector<Node>& graph, const std::string& file
         cv::imwrite(filename, hist_image);
     }
 
-    // Display the histogram
-    cv::imshow("Histogram of f_star values", hist_image);
-    cv::waitKey(1);
+    // // Display the histogram
+    // cv::imshow("Histogram of f_star values", hist_image);
+    // cv::waitKey(1);
 }
 
 void create_video_from_histograms(const std::string& directory, const std::string& output_file, int fps = 10) {
