@@ -568,13 +568,6 @@ void solve(std::vector<Node>& graph, int argc, char** argv) {
 
                 if (iter % 100 == 0) {
                     std::cout << "Iteration: " << iter << std::endl;
-                    // Calculate the exact matching loss
-                    float exact_score = exact_matching_score(graph);
-                    std::cout << "Exact Matching Score: " << exact_score << std::endl;
-
-                    // Calculate the approximate matching loss
-                    float approx_loss = approximate_matching_loss(graph, 1.0f);
-                    std::cout << "Approximate Matching Loss: " << approx_loss << std::endl;
 
                     // Generate filename with zero padding
                     std::ostringstream filename;
