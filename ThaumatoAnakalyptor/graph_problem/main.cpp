@@ -14,15 +14,15 @@ namespace fs = std::filesystem;
 
 struct Edge {
     unsigned int target_node;
-    float certainty;
-    float k;
+    int16_t certainty;
+    int16_t k;
     bool same_block;
 };
 
 struct Node {
-    float f_init;
-    float f_tilde;
-    float f_star;
+    int f_init;
+    int f_tilde;
+    int f_star;
     bool deleted = false;
     std::vector<Edge> edges;
 };
@@ -44,10 +44,13 @@ std::vector<Node> load_graph_from_binary(const std::string &file_name) {
     // Prepare the graph with empty nodes
     graph.resize(num_nodes);
 
-    // Read each node's winding angle
+    // Read each node's winding angle and store it as int16_t
     for (unsigned int i = 0; i < num_nodes; ++i) {
-        infile.read(reinterpret_cast<char*>(&graph[i].f_init), sizeof(float));
-        // Save to f_tilde and f_star as well
+        float f_init_float;
+        infile.read(reinterpret_cast<char*>(&f_init_float), sizeof(float));
+
+        // Convert to int
+        graph[i].f_init = static_cast<int>(f_init_float);
         graph[i].f_tilde = graph[i].f_init;
         graph[i].f_star = graph[i].f_init;
     }
@@ -63,8 +66,14 @@ std::vector<Node> load_graph_from_binary(const std::string &file_name) {
         for (unsigned int j = 0; j < num_edges; ++j) {
             Edge edge;
             infile.read(reinterpret_cast<char*>(&edge.target_node), sizeof(unsigned int));
-            infile.read(reinterpret_cast<char*>(&edge.certainty), sizeof(float));
-            infile.read(reinterpret_cast<char*>(&edge.k), sizeof(float));
+
+            float certainty_float;
+            infile.read(reinterpret_cast<char*>(&certainty_float), sizeof(float));
+            edge.certainty = static_cast<int16_t>(certainty_float * 50); // Scale by 50
+            float k_float;
+            infile.read(reinterpret_cast<char*>(&k_float), sizeof(float));
+            edge.k = static_cast<int16_t>(k_float);
+
             infile.read(reinterpret_cast<char*>(&edge.same_block), sizeof(bool));
 
             graph[node_id].edges.push_back(edge);
@@ -73,9 +82,83 @@ std::vector<Node> load_graph_from_binary(const std::string &file_name) {
 
     std::cout << "Graph loaded successfully." << std::endl;
 
+    // Find largest certainty (scaled back to float for display)
+    int16_t max_certainty = 0;
+    for (const auto& node : graph) {
+        for (const auto& edge : node.edges) {
+            if (edge.certainty > max_certainty) {
+                max_certainty = edge.certainty;
+            }
+        }
+    }
+
+    std::cout << "Max Certainty (scaled): " << max_certainty << std::endl;
+
     infile.close();
     return graph;
 }
+
+// std::vector<Node> load_graph_from_binary(const std::string &file_name) {
+//     std::vector<Node> graph;
+//     std::ifstream infile(file_name, std::ios::binary);
+
+//     if (!infile.is_open()) {
+//         std::cerr << "Error opening file." << std::endl;
+//         return graph;
+//     }
+
+//     // Read the number of nodes
+//     unsigned int num_nodes;
+//     infile.read(reinterpret_cast<char*>(&num_nodes), sizeof(unsigned int));
+//     std::cout << "Number of nodes in graph: " << num_nodes << std::endl;
+
+//     // Prepare the graph with empty nodes
+//     graph.resize(num_nodes);
+
+//     // Read each node's winding angle
+//     for (unsigned int i = 0; i < num_nodes; ++i) {
+//         infile.read(reinterpret_cast<char*>(&graph[i].f_init), sizeof(float));
+//         // Save to f_tilde and f_star as well
+//         graph[i].f_tilde = graph[i].f_init;
+//         graph[i].f_star = graph[i].f_init;
+//     }
+
+//     // Read the adjacency list
+//     for (unsigned int i = 0; i < num_nodes; ++i) {
+//         unsigned int node_id;
+//         infile.read(reinterpret_cast<char*>(&node_id), sizeof(unsigned int));
+
+//         unsigned int num_edges;
+//         infile.read(reinterpret_cast<char*>(&num_edges), sizeof(unsigned int));
+
+//         for (unsigned int j = 0; j < num_edges; ++j) {
+//             Edge edge;
+//             infile.read(reinterpret_cast<char*>(&edge.target_node), sizeof(unsigned int));
+//             infile.read(reinterpret_cast<char*>(&edge.certainty), sizeof(float));
+//             infile.read(reinterpret_cast<char*>(&edge.k), sizeof(float));
+//             infile.read(reinterpret_cast<char*>(&edge.same_block), sizeof(bool));
+
+//             graph[node_id].edges.push_back(edge);
+//         }
+//     }
+
+//     std::cout << "Graph loaded successfully." << std::endl;
+
+//     // Find largest certainty
+//     float max_certainty = 0.0f;
+//     for (const auto& node : graph) {
+//         for (const auto& edge : node.edges) {
+//             if (edge.certainty > max_certainty) {
+//                 max_certainty = edge.certainty;
+//             }
+//         }
+//     }
+
+//     std::cout << "Max Certainty: " << max_certainty << std::endl;
+
+//     infile.close();
+//     return graph;
+// }
 
 void save_graph_to_binary(const std::string& file_name, const std::vector<Node>& graph) {
     std::ofstream outfile(file_name, std::ios::binary);
@@ -382,9 +465,9 @@ void calculate_histogram(const std::vector<Node>& graph, const std::string& file
         cv::imwrite(filename, hist_image);
     }
 
-    // // Display the histogram
-    // cv::imshow("Histogram of f_star values", hist_image);
-    // cv::waitKey(1);
+    // Display the histogram
+    cv::imshow("Histogram of f_star values", hist_image);
+    cv::waitKey(1);
 }
 
 void create_video_from_histograms(const std::string& directory, const std::string& output_file, int fps = 10) {
@@ -458,22 +541,24 @@ bool remove_invalid_edges(std::vector<Node>& graph, float threshold = 0.1) {
     return erased_edges > 0;
 }
 
-void update_nodes(std::vector<Node>& graph, float o, float spring_constant) {
+void update_nodes(std::vector<Node>& graph, uint16_t o, float spring_constant) {
+    int scaled_spring_constant = static_cast<int>(spring_constant * 100);  // Precompute scaled spring constant
 
     #pragma omp parallel for
     for (unsigned int i = 0; i < graph.size(); ++i) {
         if (graph[i].deleted) {
             continue;
         }
-        float sum_w_f_tilde_k = 0.0f;
-        float sum_w = 0.0f;
+        int sum_w_f_tilde_k = 0.0f;
+        int sum_w = 0.0f;
 
         for (const auto& edge : graph[i].edges) {
             if (graph[edge.target_node].deleted) {
                 continue;
             }
             unsigned int neighbor_node = edge.target_node;
-            sum_w_f_tilde_k += edge.certainty * (graph[neighbor_node].f_tilde - spring_constant * edge.k);
+            int diff = graph[neighbor_node].f_tilde - (scaled_spring_constant * edge.k) / 100;
+            sum_w_f_tilde_k += edge.certainty * diff;
             sum_w += edge.certainty;
         }
 
@@ -520,7 +605,7 @@ std::vector<float> generate_spring_constants(float start_value, int steps) {
 void solve(std::vector<Node>& graph, int argc, char** argv) {
     // Default values for parameters
     int num_iterations = 10000;
-    float o = 2.0f;
+    uint16_t o = 50 * 2.0f;
     float spring_constant = 2.0f;
     int steps = 5;
 
@@ -529,7 +614,7 @@ void solve(std::vector<Node>& graph, int argc, char** argv) {
         num_iterations = std::atoi(argv[1]); // Convert the first argument to int
     }
     if (argc > 2) {
-        o = std::atof(argv[2]); // Convert the second argument to float
+        o = 50 * std::atof(argv[2]); // Convert the second argument to float
     }
     if (argc > 3) {
         spring_constant = std::atof(argv[3]); // Convert the third argument to float
