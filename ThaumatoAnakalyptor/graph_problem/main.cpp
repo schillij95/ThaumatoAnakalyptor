@@ -39,6 +39,7 @@ std::vector<Node> load_graph_from_binary(const std::string &file_name) {
     // Read the number of nodes
     unsigned int num_nodes;
     infile.read(reinterpret_cast<char*>(&num_nodes), sizeof(unsigned int));
+    std::cout << "Number of nodes in graph: " << num_nodes << std::endl;
 
     // Prepare the graph with empty nodes
     graph.resize(num_nodes);
@@ -64,11 +65,13 @@ std::vector<Node> load_graph_from_binary(const std::string &file_name) {
             infile.read(reinterpret_cast<char*>(&edge.target_node), sizeof(unsigned int));
             infile.read(reinterpret_cast<char*>(&edge.certainty), sizeof(float));
             infile.read(reinterpret_cast<char*>(&edge.k), sizeof(float));
-            // infile.read(reinterpret_cast<char*>(&edge.same_block), sizeof(bool));
+            infile.read(reinterpret_cast<char*>(&edge.same_block), sizeof(bool));
 
             graph[node_id].edges.push_back(edge);
         }
     }
+
+    std::cout << "Graph loaded successfully." << std::endl;
 
     infile.close();
     return graph;
