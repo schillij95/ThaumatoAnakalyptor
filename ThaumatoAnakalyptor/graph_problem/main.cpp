@@ -178,7 +178,7 @@ void dfs_assign_f_star(int node_index, std::vector<Node>& graph, std::vector<boo
     }
 }
 
-void assign_winding_angles(std::vector<Node>& graph) {
+void assign_winding_angles_dfs(std::vector<Node>& graph) {
     int num_nodes = graph.size();
     std::vector<bool> visited(num_nodes, false);
 
@@ -198,6 +198,66 @@ void assign_winding_angles(std::vector<Node>& graph) {
 
     // Perform DFS to assign f_star values
     dfs_assign_f_star(start_node, graph, visited);
+}
+
+using EdgeWithCertainty = std::pair<float, int>;  // {certainty, target_node}
+
+void prim_mst_assign_f_star(int start_node, std::vector<Node>& graph) {
+    int num_nodes = graph.size();
+    std::vector<bool> in_mst(num_nodes, false);
+    std::vector<float> min_certainty(num_nodes, std::numeric_limits<float>::max());
+    std::vector<int> parent(num_nodes, -1);
+
+    // Priority queue to pick the edge with the minimum certainty
+    std::priority_queue<EdgeWithCertainty, std::vector<EdgeWithCertainty>, std::greater<EdgeWithCertainty>> pq;
+
+    pq.push({0.0f, start_node});
+    min_certainty[start_node] = 0.0f;
+
+    while (!pq.empty()) {
+        int u = pq.top().second;
+        pq.pop();
+
+        if (in_mst[u]) continue;
+        in_mst[u] = true;
+
+        for (const auto& edge : graph[u].edges) {
+            int v = edge.target_node;
+            float w = edge.certainty;
+
+            if (!in_mst[v] && w < min_certainty[v]) {
+                min_certainty[v] = w;
+                pq.push({w, v});
+                parent[v] = u;
+                // Assign f_star while traversing
+                graph[v].f_star = closest_valid_winding_angle(graph[u].f_init, graph[u].f_star + edge.k);
+            }
+        }
+    }
+
+    // Set f_star for the root node (start_node)
+    graph[start_node].f_star = graph[start_node].f_init;
+}
+
+void assign_winding_angles(std::vector<Node>& graph) {
+    int num_nodes = graph.size();
+    
+    // Find a non-deleted node in the largest connected component to start the MST
+    int start_node = -1;
+    for (int i = 0; i < num_nodes; ++i) {
+        if (!graph[i].deleted) {
+            start_node = i;
+            break;
+        }
+    }
+
+    if (start_node == -1) {
+        std::cerr << "No non-deleted nodes found in the graph." << std::endl;
+        return;
+    }
+
+    // Perform MST to assign f_star values
+    prim_mst_assign_f_star(start_node, graph);
 }
 
 float min_f_star(const std::vector<Node>& graph) {
