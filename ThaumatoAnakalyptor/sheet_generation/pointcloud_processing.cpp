@@ -1702,7 +1702,7 @@ std::vector<std::vector<float>> optimize_ordered_pointset(
     float learning_rate = 0.1,
     int iterations = 3,
     float error_val_d = 0.01,  // Delta for error value convergence
-    float unfix_factor = 3.0,
+    float unfix_factor = 3.0, // factor of which the error of a node has to be above the mean error to have the node go from fixed to floating during optimization
     bool verbose = true
     )
 {
