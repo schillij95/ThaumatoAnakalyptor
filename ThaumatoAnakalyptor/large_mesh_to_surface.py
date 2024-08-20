@@ -31,6 +31,7 @@ if __name__ == "__main__":
     else:
         # Find all .obj files in the input directory
         input_objs = glob(os.path.join(args.input_mesh, '*_flatboi.obj'))
+        print(f"Found {len(input_objs)} input meshes")
         # Copy input meshes to the output folder
         obj_paths = []
         for input_obj in input_objs:
@@ -65,3 +66,5 @@ if __name__ == "__main__":
         # Running the command
         process_rendering = subprocess.Popen(command)
         process_rendering.wait()
+
+# Example command: python3 -m ThaumatoAnakalyptor.large_mesh_to_surface --input_mesh /scroll.volpkg/working/scroll3_surface_points/1352_3600_5002/point_cloud_colorized_verso_subvolume_blocks/windowed_mesh_20240820180403 --scroll /scroll.volpkg/volumes/2dtifs_8um_grids --display
