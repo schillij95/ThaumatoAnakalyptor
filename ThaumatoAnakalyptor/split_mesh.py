@@ -9,6 +9,7 @@ from scipy.interpolate import interp1d
 from copy import deepcopy
 from tqdm import tqdm
 import os
+from datetime import datetime
 
 class MeshSplitter:
     def __init__(self, mesh_path, umbilicus_path):
@@ -267,6 +268,9 @@ class MeshSplitter:
 
 
     def split_mesh(self, split_width):
+        # window mesh folder name with datetime string
+        stamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        window_mesh_name = f"windowed_mesh_{stamp}"
         # Function to cut the mesh into pieces along the x-axis
         vertices = np.asarray(self.mesh.vertices)
         normals = np.asarray(self.mesh.vertex_normals)
@@ -298,7 +302,7 @@ class MeshSplitter:
             print(f"Nr uvs in cut mesh: {len(np.asarray(cut_mesh.triangle_uvs))}")
             print(f"Nr vertices in cut mesh: {len(np.asarray(cut_mesh.vertices))}")
             
-            path_window = os.path.join(os.path.dirname(self.mesh_path), "windowed_mesh", os.path.basename(self.mesh_path).replace(".obj", f"_window_{int(window_start)}_{int(window_end)}.obj"))
+            path_window = os.path.join(os.path.dirname(self.mesh_path), window_mesh_name, os.path.basename(self.mesh_path).replace(".obj", f"_window_{int(window_start)}_{int(window_end)}.obj"))
             mesh_paths.append(path_window)
             # Create the directory if it doesn't exist
             os.makedirs(os.path.dirname(path_window), exist_ok=True)

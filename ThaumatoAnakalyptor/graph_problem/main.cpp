@@ -89,68 +89,6 @@ std::vector<Node> load_graph_from_binary(const std::string &file_name) {
     return graph;
 }
 
-// std::vector<Node> load_graph_from_binary(const std::string &file_name) {
-//     std::vector<Node> graph;
-//     std::ifstream infile(file_name, std::ios::binary);
-
-//     if (!infile.is_open()) {
-//         std::cerr << "Error opening file." << std::endl;
-//         return graph;
-//     }
-
-//     // Read the number of nodes
-//     unsigned int num_nodes;
-//     infile.read(reinterpret_cast<char*>(&num_nodes), sizeof(unsigned int));
-//     std::cout << "Number of nodes in graph: " << num_nodes << std::endl;
-
-//     // Prepare the graph with empty nodes
-//     graph.resize(num_nodes);
-
-//     // Read each node's winding angle
-//     for (unsigned int i = 0; i < num_nodes; ++i) {
-//         infile.read(reinterpret_cast<char*>(&graph[i].f_init), sizeof(float));
-//         // Save to f_tilde and f_star as well
-//         graph[i].f_tilde = graph[i].f_init;
-//         graph[i].f_star = graph[i].f_init;
-//     }
-
-//     // Read the adjacency list
-//     for (unsigned int i = 0; i < num_nodes; ++i) {
-//         unsigned int node_id;
-//         infile.read(reinterpret_cast<char*>(&node_id), sizeof(unsigned int));
-
-//         unsigned int num_edges;
-//         infile.read(reinterpret_cast<char*>(&num_edges), sizeof(unsigned int));
-
-//         for (unsigned int j = 0; j < num_edges; ++j) {
-//             Edge edge;
-//             infile.read(reinterpret_cast<char*>(&edge.target_node), sizeof(unsigned int));
-//             infile.read(reinterpret_cast<char*>(&edge.certainty), sizeof(float));
-//             infile.read(reinterpret_cast<char*>(&edge.k), sizeof(float));
-//             infile.read(reinterpret_cast<char*>(&edge.same_block), sizeof(bool));
-
-//             graph[node_id].edges.push_back(edge);
-//         }
-//     }
-
-//     std::cout << "Graph loaded successfully." << std::endl;
-
-//     // Find largest certainty
-//     float max_certainty = 0.0f;
-//     for (const auto& node : graph) {
-//         for (const auto& edge : node.edges) {
-//             if (edge.certainty > max_certainty) {
-//                 max_certainty = edge.certainty;
-//             }
-//         }
-//     }
-
-//     std::cout << "Max Certainty: " << max_certainty << std::endl;
-
-//     infile.close();
-//     return graph;
-// }
-
 void save_graph_to_binary(const std::string& file_name, const std::vector<Node>& graph) {
     std::ofstream outfile(file_name, std::ios::binary);
 
@@ -247,7 +185,7 @@ void dfs_assign_f_star(int node_index, std::vector<Node>& graph, std::vector<boo
                 visited[edge.target_node] = true;
 
                 // Calculate the f_star for the target node
-                graph[edge.target_node].f_star = closest_valid_winding_angle(graph[current].f_init , graph[current].f_star + edge.k);
+                graph[edge.target_node].f_star = closest_valid_winding_angle(graph[current].f_init , graph[current].f_tilde + edge.k);
 
                 stack.push(edge.target_node);
             }
@@ -280,7 +218,7 @@ void assign_winding_angles_dfs(std::vector<Node>& graph) {
 using EdgeWithCertainty = std::pair<float, int>;  // {certainty, target_node}
 
 void prim_mst_assign_f_star(int start_node, std::vector<Node>& graph) {
-    int num_nodes = graph.size();
+    size_t num_nodes = graph.size();
     std::vector<bool> in_mst(num_nodes, false);
     std::vector<float> min_k_delta(num_nodes, std::numeric_limits<float>::max());
     std::vector<int> parent(num_nodes, -1);
@@ -300,20 +238,53 @@ void prim_mst_assign_f_star(int start_node, std::vector<Node>& graph) {
 
         for (const auto& edge : graph[u].edges) {
             int v = edge.target_node;
-            float k_delta = std::abs((graph[edge.target_node].f_tilde - graph[u].f_tilde) - edge.k); // difference between BP solution and estimated k from the graph
+            float k_delta = std::abs((graph[v].f_tilde - graph[u].f_tilde) - edge.k) / std::abs(edge.k); // difference between BP solution and estimated k from the graph
 
             if (!in_mst[v] && k_delta < min_k_delta[v]) {
                 min_k_delta[v] = k_delta;
                 pq.push({k_delta, v});
                 parent[v] = u;
-                // Assign f_star while traversing
-                graph[v].f_star = closest_valid_winding_angle(graph[u].f_init, graph[u].f_star + edge.k);
             }
         }
     }
 
     // Set f_star for the root node (start_node)
     graph[start_node].f_star = graph[start_node].f_init;
+
+    // Find for each node the children
+    std::vector<std::vector<unsigned int>> children(num_nodes);
+    for (unsigned int i = 0; i < num_nodes; ++i) {
+        if (parent[i] != -1) {
+            children[parent[i]].push_back(i);
+        }
+    }
+
+    // Traverse the MST in a DFS manner to assign f_star values
+    std::stack<int> stack;
+    stack.push(start_node);
+
+    while (!stack.empty()) {
+        int current = stack.top();
+        stack.pop();
+
+        for (unsigned int child : children[current]) {
+            // Find edge from parent to child
+            Edge edge;
+            for (const auto& e : graph[current].edges) {
+                if (e.target_node == child) {
+                    edge = e;
+                    break;
+                }
+                // verbose if edge not found at last child
+                if (e.target_node == graph[current].edges.back().target_node) {
+                    std::cerr << "Edge not found for parent: " << current << " and child: " << child << std::endl;
+                }
+            }
+
+            graph[child].f_star = closest_valid_winding_angle(graph[child].f_init, graph[current].f_tilde + edge.k);
+            stack.push(child);
+        }
+    }
 }
 
 void assign_winding_angles(std::vector<Node>& graph) {
@@ -593,8 +564,11 @@ std::vector<float> generate_spring_constants(float start_value, int steps) {
 void solve(std::vector<Node>& graph, int argc, char** argv) {
     // Default values for parameters
     int num_iterations = 10000;
-    float o = 2.0f;
     float spring_constant = 2.0f;
+    float o = 2.0f;
+    float iterations_factor = 2.0f;
+    float o_factor = 0.25f;
+    float spring_factor = 3.0f;
     int steps = 5;
 
     // Override default values with command-line arguments if provided
@@ -609,6 +583,15 @@ void solve(std::vector<Node>& graph, int argc, char** argv) {
     }
     if (argc > 4) {
         steps = std::atoi(argv[4]); // Convert the fourth argument to int
+    }
+    if (argc > 5) {
+        iterations_factor = std::atof(argv[5]); // Convert the fifth argument to float
+    }
+    if (argc > 6) {
+        o_factor = std::atof(argv[6]); // Convert the sixth argument to float
+    }
+    if (argc > 7) {
+        spring_factor = std::atof(argv[7]); // Convert the seventh argument to float
     }
 
     // Path to the histogram directory
@@ -635,22 +618,31 @@ void solve(std::vector<Node>& graph, int argc, char** argv) {
     while (true) {
         // Do 2 rounds of edge deletion
         if (edges_deletion_round > 1) {
+            // Do last of updates with 3x times iterations and spring constant 1.0
+            num_iterations = num_iterations * 3;
+            spring_constant = 1.0f;
+
             break;
         }
         // Solve for each spring constant
         for (int64_t i = -1; i < steps+1; ++i) {
-            float spring_constant_iteration = i == -1 ? spring_constants[0] : spring_constants[i];
             int num_iterations_iteration = num_iterations;
             float o_iteration = o;
+            float spring_constant_iteration = i == -1 ? spring_constants[0] : spring_constants[i];
             if (i == -1 && edges_deletion_round == 0) {
                 // Use a warmup iteration with 10x the spring constant
-                spring_constant_iteration *= 3.0f;
-                num_iterations_iteration *= 2;
-                o_iteration = o * 0.25f;
+                num_iterations_iteration *= iterations_factor;
+                o_iteration = o * o_factor;
+                spring_constant_iteration *= spring_factor;
             }
             else if (i == -1) {
                 // Skip the warmup iteration for subsequent rounds
                 continue;
+            }
+            else if (i == steps && edges_deletion_round == 1) {
+                // Do last of updates with 3x times iterations and spring constant 1.0
+                num_iterations_iteration *= 3.0f;
+                spring_constant_iteration = 1.0f;
             }
             std::cout << "Spring Constant " << i << ": " << std::setprecision(10) << spring_constant_iteration << std::endl;
             for (int iter = 0; iter < num_iterations_iteration; ++iter) {
@@ -675,9 +667,6 @@ void solve(std::vector<Node>& graph, int argc, char** argv) {
         // After first edge deletion round remove the invalid edges
         if (edges_deletion_round == 0) {
             // Remove edges with too much difference between f_star and k
-            // if (!remove_invalid_edges(graph, invalid_edge_threshold)) {
-            //     break;
-            // }
             remove_invalid_edges(graph, invalid_edge_threshold);
         }
         find_largest_connected_component(graph);

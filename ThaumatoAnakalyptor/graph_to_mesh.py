@@ -1154,7 +1154,7 @@ class WalkToSheet():
             result_pkl_path = os.path.join(self.save_path, "results_ts_normals.pkl")
             with open(result_pkl_path, 'rb') as f:
                 (result_ts, result_normals) = pickle.load(f)
-
+        
         fresh_start3 = True
         if fresh_start3:
             valid_p = 0.4
@@ -1384,7 +1384,7 @@ class WalkToSheet():
         mesh_path = os.path.join(self.save_path, "mesh.obj")
 
         # Set to false to load precomputed partial results during development
-        start_fresh = True
+        start_fresh = False
         if start_fresh: 
             # Set to false to load precomputed partial results during development
             start_fresh_build_points = True
