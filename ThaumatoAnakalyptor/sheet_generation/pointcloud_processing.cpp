@@ -1659,21 +1659,21 @@ private:
                     ordered_pointset[o][i] = std::move(ordered_pointset_);
                     ordered_normals[o][i] = std::move(ordered_normals_);
 
-                    if (i == z_positions.size() / 2 && o == totalAngles / 2) {
-                        // Find mean and std of winding angles of the points
-                        float mean_winding_angle = 0.0;
-                        float std_winding_angle = 0.0;
-                        for (size_t p = 0; p < ordered_points[o][i].size(); ++p) {
-                            mean_winding_angle += ordered_points[o][i][p][3];
-                        }
-                        mean_winding_angle /= ordered_points[o][i].size();
-                        for (size_t p = 0; p < ordered_points[o][i].size(); ++p) {
-                            std_winding_angle += std::pow(ordered_points[o][i][p][3] - mean_winding_angle, 2);
-                        }
-                        std_winding_angle = std::sqrt(std_winding_angle / ordered_points[o][i].size());
+                    // if (i == z_positions.size() / 2 && o == totalAngles / 2) {
+                    //     // Find mean and std of winding angles of the points
+                    //     float mean_winding_angle = 0.0;
+                    //     float std_winding_angle = 0.0;
+                    //     for (size_t p = 0; p < ordered_points[o][i].size(); ++p) {
+                    //         mean_winding_angle += ordered_points[o][i][p][3];
+                    //     }
+                    //     mean_winding_angle /= ordered_points[o][i].size();
+                    //     for (size_t p = 0; p < ordered_points[o][i].size(); ++p) {
+                    //         std_winding_angle += std::pow(ordered_points[o][i][p][3] - mean_winding_angle, 2);
+                    //     }
+                    //     std_winding_angle = std::sqrt(std_winding_angle / ordered_points[o][i].size());
 
-                        std::cout << "Angle: " << angles[g] << " Mean winding angle: " << mean_winding_angle << " Std winding angle: " << std_winding_angle << std::endl;
-                    }
+                    //     std::cout << "Angle: " << angles[g] << " Mean winding angle: " << mean_winding_angle << " Std winding angle: " << std_winding_angle << std::endl;
+                    // }
                 }
             }
 
