@@ -6,6 +6,7 @@ from .mesh_to_surface import ppm_and_texture
 import subprocess
 from tqdm import tqdm
 import os
+from glob import glob
 import argparse
 
 if __name__ == "__main__":
@@ -25,7 +26,20 @@ if __name__ == "__main__":
 
     args = parser.parse_known_args()[0]
     print(f"Known args: {args}")
-    obj_paths = finalize_mesh_main(args.output_folder, args.input_mesh, 1.0, args.cut_size, False)
+    if args.input_mesh.endswith('.obj'):
+        obj_paths = finalize_mesh_main(args.output_folder, args.input_mesh, 1.0, args.cut_size, False)
+    else:
+        # Find all .obj files in the input directory
+        input_objs = glob(os.path.join(args.input_mesh, '*_flatboi.obj'))
+        # Copy input meshes to the output folder
+        obj_paths = []
+        for input_obj in input_objs:
+            # copy input mesh to the output folder
+            print(f"Copying {input_obj} to {args.output_folder}")
+            obj_path_ = finalize_mesh_main(args.output_folder, input_obj, 1.0, args.cut_size, False)
+            obj_paths.extend(obj_path_)
+    # sort the obj_paths
+    obj_paths.sort()
     if args.end is not None:
         obj_paths = obj_paths[args.start:args.end]
     else:
