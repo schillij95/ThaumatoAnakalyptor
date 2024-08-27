@@ -120,14 +120,15 @@ COPY ./ThaumatoAnakalyptor/mask3d/ /workspace/ThaumatoAnakalyptor/mask3d/
 # Download the canonical mask3d weights from Google Drive using gdown
 RUN mkdir -p /workspace/ThaumatoAnakalyptor/mask3d/saved/train
 RUN rm -f /workspace/ThaumatoAnakalyptor/mask3d/saved/train/last-epoch.ckpt
-RUN gdown --id 1gO8Nf4sCaA7r4dO6ePtt0SE0E5ePXSid -O /workspace/ThaumatoAnakalyptor/mask3d/saved/train/last-epoch.ckpt
+RUN gdown --id 1ifag-_ode1dtIguJb0BQXxQ-BwFYos0c -O /workspace/ThaumatoAnakalyptor/mask3d/saved/train/last-epoch.ckpt
 
 # Install necessary tools and Eigen3
 RUN apt-get update && \
 apt-get install -y \
 libeigen3-dev  \ 
 libarchive-dev \
-libtbb-dev
+libtbb-dev  \
+libopencv-dev
 
 # build C++ ThaumatoAnakalyptor code
 COPY ./ThaumatoAnakalyptor/sheet_generation/ /workspace/ThaumatoAnakalyptor/sheet_generation/
@@ -149,6 +150,21 @@ WORKDIR /
 RUN git clone --recurse-submodules https://github.com/schillij95/ThaumatoAnakalyptor /ThaumatoAnakalyptor_temp
 RUN mkdir -p /workspace
 RUN cp -rn /ThaumatoAnakalyptor_temp/. /workspace && rm -rf /ThaumatoAnakalyptor_temp
+
+# Build the graph_problem
+WORKDIR /workspace/ThaumatoAnakalyptor/graph_problem/
+
+# Remove the existing build directory to clear any old configurations
+RUN rm -rf build && mkdir -p build
+
+WORKDIR /workspace/ThaumatoAnakalyptor/graph_problem/build/
+# print out the contents of the current working directory
+RUN ls -la
+
+RUN cmake .. \
+&& cmake --build .
+
+WORKDIR /
 
 # Add user for GUI
 # RUN adduser --quiet --disabled-password qtuser && usermod -a -G audio qtuser
