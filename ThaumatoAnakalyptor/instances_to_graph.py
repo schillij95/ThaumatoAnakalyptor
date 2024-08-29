@@ -1470,7 +1470,7 @@ def random_walks():
         else:
             scroll_graph = load_graph(path.replace("blocks", "scroll_graph_angular") + ".pkl")
         
-        scroll_graph_solved = load_graph_winding_angle_from_binary(os.path.join(os.path.dirname(save_path), "out_graph.bin"), scroll_graph)
+        scroll_graph_solved = load_graph_winding_angle_from_binary(os.path.join(os.path.dirname(save_path), "output_graph.bin"), scroll_graph)
 
         # save graph pickle
         scroll_graph_solved.save_graph(save_path.replace("blocks", "graph_BP_solved") + ".pkl")
