@@ -1384,7 +1384,7 @@ class WalkToSheet():
         mesh_path = os.path.join(self.save_path, "mesh.obj")
 
         # Set to false to load precomputed partial results during development
-        start_fresh = False
+        start_fresh = True
         if start_fresh: 
             # Set to false to load precomputed partial results during development
             start_fresh_build_points = True
