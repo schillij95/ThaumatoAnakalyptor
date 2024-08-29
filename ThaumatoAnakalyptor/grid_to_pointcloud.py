@@ -760,3 +760,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# Example: python3 -m ThaumatoAnakalyptor.grid_to_pointcloud --base_path "" --volume_subpath /scroll.volpkg/volumes/ --disk_load_save "" "" --pointcloud_subpath /scroll2v2_surface_points/point_cloud --num_threads 16 --gpus 8

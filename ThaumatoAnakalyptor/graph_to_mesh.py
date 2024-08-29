@@ -1080,7 +1080,7 @@ class WalkToSheet():
         test_pointset_ply_path = os.path.join(test_folder, f"ordered_pointset_test_cpp.ply")
         self.pointcloud_from_ordered_pointset(pointset, os.path.join(self.save_path, test_pointset_ply_path))
            
-    def rolled_ordered_pointset(self, points, normals, debug=False, angle_step=1, z_spacing=10):
+    def rolled_ordered_pointset(self, points, normals, debug=False, angle_step=10, z_spacing=10):
         # some debugging visualization of seperate pointcloud windings
         if debug:
             # get winding angles
@@ -1470,4 +1470,4 @@ if __name__ == '__main__':
     # walk.save_graph_pointcloud(reference_path)
     walk.unroll(debug=args.debug)
 
-# Example command: python3 -m ThaumatoAnakalyptor.graph_to_mesh --path /scroll.volpkg/working/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks --graph /scroll.volpkg/working/scroll3_surface_points/1352_3600_5002/point_cloud_colorized_verso_subvolume_graph_RW_solved.pkl --start_point 1352 3600 5002 --debug
+# Example command: python3 -m ThaumatoAnakalyptor.graph_to_mesh --path /scroll.volpkg/working/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks --graph /scroll.volpkg/working/scroll3_surface_points/1352_3600_5002/point_cloud_colorized_verso_subvolume_graph_BP_solved.pkl --start_point 1352 3600 5002 --debug

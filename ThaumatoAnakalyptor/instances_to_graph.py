@@ -1382,6 +1382,7 @@ def random_walks():
                           "bad_edge_threshold": 3
                           }
     # Scroll 1: "winding_direction": -1.0
+    # Scroll 2: "winding_direction": 1.0
     # Scroll 3: "winding_direction": 1.0
 
     max_nr_walks = 10000

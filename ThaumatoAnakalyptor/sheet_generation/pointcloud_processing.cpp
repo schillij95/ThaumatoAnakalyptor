@@ -1477,6 +1477,7 @@ private:
         // Group data structures
         std::vector<std::vector<std::vector<float>>> grouped_points(4); // For angle and angle + 180
         std::vector<std::vector<std::vector<float>>> grouped_normals(4);
+        std::vector<std::vector<float>> grouped_distances(4);        
         std::vector<std::vector<float>> grouped_ts(4);
 
         // Thread-local storage for each group
@@ -1511,12 +1512,14 @@ private:
                 // std::cout << "Group index: " << group_indices[i] << std::endl;
                 grouped_points[group_indices[i]].push_back(points[i]);
                 grouped_normals[group_indices[i]].push_back(normals[i]);
+                grouped_distances[group_indices[i]].push_back(distances[i]);
                 grouped_ts[group_indices[i]].push_back(radii[i]);
             }
             if (std::abs(distances_plus_90[i]) <= max_eucledian_distance) {
                 // std::cout << "Group index: " << group_indices_plus_90[i] << std::endl;
                 grouped_points[group_indices_plus_90[i]].push_back(points[i]);
                 grouped_normals[group_indices_plus_90[i]].push_back(normals[i]);
+                grouped_distances[group_indices_plus_90[i]].push_back(distances_plus_90[i]);
                 grouped_ts[group_indices_plus_90[i]].push_back(radii[i]);
             }
         }
@@ -1538,17 +1541,20 @@ private:
             // Apply the sorted indices to reorder points, normals, and ts within each group
             std::vector<std::vector<float>> sorted_points(grouped_points[g].size());
             std::vector<std::vector<float>> sorted_normals(grouped_normals[g].size());
+            std::vector<float> sorted_distances(grouped_distances[g].size());
             std::vector<float> sorted_ts(grouped_ts[g].size());
 
             for (size_t i = 0; i < indices.size(); ++i) {
                 sorted_points[i] = std::move(grouped_points[g][indices[i]]);
                 sorted_normals[i] = std::move(grouped_normals[g][indices[i]]);
+                sorted_distances[i] = std::move(grouped_distances[g][indices[i]]);
                 sorted_ts[i] = std::move(grouped_ts[g][indices[i]]);
             }
 
             // Replace the original group with the sorted data
             grouped_points[g] = std::move(sorted_points);
             grouped_normals[g] = std::move(sorted_normals);
+            grouped_distances[g] = std::move(sorted_distances);
             grouped_ts[g] = std::move(sorted_ts);
         }
 
@@ -1560,6 +1566,7 @@ private:
             std::vector<float> angle_vector_ = angle_vectors[g];
             // Extract for each z position the points within the threshold range
             std::vector<std::vector<std::vector<float>>> ordered_pointset(totalAngles, std::vector<std::vector<float>>(z_positions.size()));
+            std::vector<std::vector<std::vector<float>>> ordered_distances(totalAngles, std::vector<std::vector<float>>(z_positions.size()));
             std::vector<std::vector<std::vector<std::vector<float>>>> ordered_points(totalAngles, std::vector<std::vector<std::vector<float>>>(z_positions.size()));
             std::vector<std::vector<std::vector<std::vector<float>>>> ordered_normals(totalAngles, std::vector<std::vector<std::vector<float>>>(z_positions.size()));
 
@@ -1596,6 +1603,7 @@ private:
             for (size_t o = 0; o < totalAngles; ++o) {
                 for (size_t i = 0; i < z_positions.size(); ++i) {
                     ordered_pointset[o][i].resize(counts[o][i]);
+                    ordered_distances[o][i].resize(counts[o][i]);
                     ordered_points[o][i].resize(counts[o][i]);
                     ordered_normals[o][i].resize(counts[o][i]);
                 }
@@ -1612,10 +1620,28 @@ private:
                     if (in_range[i][j]) {
                         int o = angle_index_o[i][j];
                         ordered_pointset[o][i][index[o]] = grouped_ts[g][j];
+                        ordered_distances[o][i][index[o]] = grouped_distances[g][j];
                         ordered_points[o][i][index[o]] = grouped_points[g][j];
                         ordered_normals[o][i][index[o]] = grouped_normals[g][j];
                         index[o]++;
                     }
+                }
+
+
+                if (i == z_positions.size() / 2) {
+                    // Check if the index is correct
+                    float min_angl = 10000000000;
+                    float max_angl = -10000000000;
+                    for (size_t p = 0; p < ordered_points[totalAngles/2][i].size(); ++p) {
+                        if (ordered_points[totalAngles/2][i][p][3] < min_angl) {
+                            min_angl = ordered_points[totalAngles/2][i][p][3];
+                        }
+                        if (ordered_points[totalAngles/2][i][p][3] > max_angl) {
+                            max_angl = ordered_points[totalAngles/2][i][p][3];
+                        }
+                    }
+
+                    std::cout << "Min and max winding angles for z position " << z_positions[i] << " are " << min_angl << ", " << max_angl << " size of points: " << ordered_points[totalAngles/2][i].size() << std::endl;
                 }
 
                 for (size_t o = 0; o < totalAngles; ++o) {
@@ -1631,12 +1657,12 @@ private:
                     // });
 
                     // sort points from closest to angle ray to furthest
-                    std::sort(indices.begin(), indices.end(), [&ordered_points, o, i, z_positions](size_t i1, size_t i2) {
-                        float x1 = ordered_points[o][i][i1][0];
+                    std::sort(indices.begin(), indices.end(), [&ordered_points, &ordered_distances, o, i, z_positions](size_t i1, size_t i2) {
+                        float x1 = ordered_distances[o][i][i1];
                         float z_diff1 = ordered_points[o][i][i1][1] - z_positions[i];
                         float dist1 = x1 * x1 + z_diff1 * z_diff1;
 
-                        float x2 = ordered_points[o][i][i2][0];
+                        float x2 = ordered_distances[o][i][i2];
                         float z_diff2 = ordered_points[o][i][i2][1] - z_positions[i];
                         float dist2 = x2 * x2 + z_diff2 * z_diff2;
 
@@ -1649,31 +1675,38 @@ private:
                     }
 
                     std::vector<float> ordered_pointset_(indices.size());
+                    std::vector<std::vector<float>> ordered_points_(indices.size());
                     std::vector<std::vector<float>> ordered_normals_(indices.size());
                     for (size_t j = 0; j < indices.size(); ++j) {
                         ordered_pointset_[j] = ordered_pointset[o][i][indices[j]];
+                        ordered_points_[j] = ordered_points[o][i][indices[j]];
                         ordered_normals_[j] = ordered_normals[o][i][indices[j]];
                     }
 
                     // std move to avoid copying
                     ordered_pointset[o][i] = std::move(ordered_pointset_);
+                    ordered_points[o][i] = std::move(ordered_points_);
                     ordered_normals[o][i] = std::move(ordered_normals_);
 
-                    // if (i == z_positions.size() / 2 && o == totalAngles / 2) {
-                    //     // Find mean and std of winding angles of the points
-                    //     float mean_winding_angle = 0.0;
-                    //     float std_winding_angle = 0.0;
-                    //     for (size_t p = 0; p < ordered_points[o][i].size(); ++p) {
-                    //         mean_winding_angle += ordered_points[o][i][p][3];
-                    //     }
-                    //     mean_winding_angle /= ordered_points[o][i].size();
-                    //     for (size_t p = 0; p < ordered_points[o][i].size(); ++p) {
-                    //         std_winding_angle += std::pow(ordered_points[o][i][p][3] - mean_winding_angle, 2);
-                    //     }
-                    //     std_winding_angle = std::sqrt(std_winding_angle / ordered_points[o][i].size());
-
-                    //     std::cout << "Angle: " << angles[g] << " Mean winding angle: " << mean_winding_angle << " Std winding angle: " << std_winding_angle << std::endl;
-                    // }
+                    if (i == z_positions.size() / 2 && o == totalAngles / 2) {
+                        // Find mean and std of winding angles of the points
+                        float mean_winding_angle = 0.0;
+                        float std_winding_angle = 0.0;
+                        for (size_t p = 0; p < ordered_points[o][i].size(); ++p) {
+                            mean_winding_angle += ordered_points[o][i][p][3];
+                        }
+                        mean_winding_angle /= ordered_points[o][i].size();
+                        for (size_t p = 0; p < ordered_points[o][i].size(); ++p) {
+                            std_winding_angle += std::pow(ordered_points[o][i][p][3] - mean_winding_angle, 2);
+                        }
+                        std_winding_angle = std::sqrt(std_winding_angle / ordered_points[o][i].size());
+                        float closest_angle = mean_winding_angle - angles[g]; // find closest angle for mean
+                        closest_angle = closest_angle / 360.0;
+                        closest_angle = std::round(closest_angle);
+                        closest_angle = closest_angle * 360.0 + angles[g]; // use offset from mean winding angle
+                        float alternative_alternative_angle = minWind + o*360.0f + angles[g]; // use offset from min winding angle
+                        std::cout << "Angle: " << angles[g] << " Closest angle: " << closest_angle << " Closest angle alternative calculation: " << alternative_alternative_angle << " Mean winding angle: " << mean_winding_angle << " Std winding angle: " << std_winding_angle << std::endl;
+                    }
                 }
             }
 
