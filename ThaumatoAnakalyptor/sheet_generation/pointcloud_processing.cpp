@@ -379,7 +379,8 @@ private:
 
 class PointCloudProcessor {
 public:
-    explicit PointCloudProcessor(PointCloud& cloud, bool verbose) : cloud_(cloud), verbose(verbose) {}
+    explicit PointCloudProcessor(PointCloud&& cloud, bool verbose)
+        : cloud_(std::move(cloud)), verbose(verbose) {}
 
     void deleteMarkedPoints() {
         std::cout << "Deleting marked points..." << std::endl;
