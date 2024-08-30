@@ -125,6 +125,9 @@ float closest_valid_winding_angle(float f_init, float f_target) {
     if (std::abs(f_target - result) > 10.0f) {
         std::cout << "Difference between f_target and result: " << std::abs(f_target - result) << std::endl;
     }
+    if (std::abs(x - (f_target - f_init) / 360.0f) > 1e-5) {
+        std::cout << "Difference between x and (f_target - f_init) / 360.0f: " << std::abs(x - (f_target - f_init) / 360.0f) << std::endl;
+    }
     return result;
 }
 
