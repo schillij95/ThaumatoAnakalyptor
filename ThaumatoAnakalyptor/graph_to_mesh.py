@@ -232,7 +232,7 @@ def compute_means_adjacent(adjacent_ts, adjacent_normals, winding_direction):
                 fixed[sorted_index] = 1
                 current_fix_count += 1
             if nr_fixing <= current_fix_count:
-                break         
+                break
 
         # # Alternative fix top % of selected t values
         # top_percentage = 0.25
@@ -492,6 +492,9 @@ class WalkToSheet():
                 next_mean = prev_mean - mean_dist * abs(next_ind - prev_ind) / length_ts
                 if next_mean > 0.0:
                     next_mean = 0.0
+
+            if next_mean == prev_mean: # if next and prev mean are the same, space them apart
+                next_mean = prev_mean + mean_dist
             
             return prev_mean, prev_ind, next_mean, next_ind
 
