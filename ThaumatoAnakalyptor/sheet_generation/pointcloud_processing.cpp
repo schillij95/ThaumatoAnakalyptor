@@ -380,7 +380,9 @@ private:
 class PointCloudProcessor {
 public:
     explicit PointCloudProcessor(PointCloud&& cloud, bool verbose)
-        : cloud_(std::move(cloud)), verbose(verbose) {}
+        : cloud_(std::move(cloud)), verbose(verbose) {
+            std::cout << "Refining point cloud with " << cloud_.size() << " points" << std::endl;
+        }
 
     void deleteMarkedPoints() {
         std::cout << "Deleting marked points..." << std::endl;
