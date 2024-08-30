@@ -573,14 +573,20 @@ private:
             ++end_it;  // Expand the end index to include more points
         }
 
-        // Now mark all points for deletion except the best mean w value
+        // Now mark all points for deletion
         for (auto it = begin; it != end; ++it) {
             it->marked_for_deletion = true;  // Mark all for deletion
         }
 
-        // Unmark the point that is part of the best range
+        // find w value that is closest to the best w value
+        for (auto it = begin; it != end; ++it) {
+            if (std::abs(it->w - best_w) < std::abs(begin->w - best_w)) {
+                begin = it;
+            }
+        }
+
+        // Unmark the point that is closest to the best w value
         begin->marked_for_deletion = false;
-        begin->w = best_w;  // Update the w value to the best_w
     }
 
     void processSubset(MyKDTree* index, size_t start, size_t end, double spatial_threshold, double angle_threshold) {
