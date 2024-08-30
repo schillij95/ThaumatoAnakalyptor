@@ -397,53 +397,53 @@ public:
         }
     }
 
-    void sortPointsWZYX() {
-        std::sort(std::execution::par_unseq, cloud_.pts.begin(), cloud_.pts.end(), [](const Point& a, const Point& b) {
-            if (a.w != b.w) return a.w < b.w;
-            if (a.z != b.z) return a.z < b.z;
-            if (a.y != b.y) return a.y < b.y;
-            return a.x < b.x;
-        });
-    }
-
-    void sortPointsXYZW() {
-        std::sort(std::execution::par_unseq, cloud_.pts.begin(), cloud_.pts.end(), [](const Point& a, const Point& b) {
-            if (a.x != b.x) return a.x < b.x;
-            if (a.y != b.y) return a.y < b.y;
-            if (a.z != b.z) return a.z < b.z;
-            return a.w < b.w;
-        });
-    }
-
     // void sortPointsWZYX() {
-    //     unsigned int available_threads = std::thread::hardware_concurrency();
-    //     unsigned int num_threads = std::min(available_threads, 32u); // Use up to 32 threads, or fewer if not available
-    
-    //     tbb::task_arena limited_arena(num_threads); // limit to 32 threads, for example
-    //     limited_arena.execute([&] {
-    //         std::sort(std::execution::par_unseq, cloud_.pts.begin(), cloud_.pts.end(), [](const Point& a, const Point& b) {
-    //             if (a.w != b.w) return a.w < b.w;
-    //             if (a.z != b.z) return a.z < b.z;
-    //             if (a.y != b.y) return a.y < b.y;
-    //             return a.x < b.x;
-    //         });
+    //     std::sort(std::execution::par_unseq, cloud_.pts.begin(), cloud_.pts.end(), [](const Point& a, const Point& b) {
+    //         if (a.w != b.w) return a.w < b.w;
+    //         if (a.z != b.z) return a.z < b.z;
+    //         if (a.y != b.y) return a.y < b.y;
+    //         return a.x < b.x;
     //     });
     // }
 
     // void sortPointsXYZW() {
-    //     unsigned int available_threads = std::thread::hardware_concurrency();
-    //     unsigned int num_threads = std::min(available_threads, 32u); // Use up to 32 threads, or fewer if not available
-    
-    //     tbb::task_arena limited_arena(num_threads); // limit to 32 threads, for example
-    //     limited_arena.execute([&] {
-    //         std::sort(std::execution::par_unseq, cloud_.pts.begin(), cloud_.pts.end(), [](const Point& a, const Point& b) {
-    //             if (a.x != b.x) return a.x < b.x;
-    //             if (a.y != b.y) return a.y < b.y;
-    //             if (a.z != b.z) return a.z < b.z;
-    //             return a.w < b.w;
-    //         });
+    //     std::sort(std::execution::par_unseq, cloud_.pts.begin(), cloud_.pts.end(), [](const Point& a, const Point& b) {
+    //         if (a.x != b.x) return a.x < b.x;
+    //         if (a.y != b.y) return a.y < b.y;
+    //         if (a.z != b.z) return a.z < b.z;
+    //         return a.w < b.w;
     //     });
     // }
+
+    void sortPointsWZYX() {
+        unsigned int available_threads = std::thread::hardware_concurrency();
+        unsigned int num_threads = std::min(available_threads, 32u); // Use up to 32 threads, or fewer if not available
+    
+        tbb::task_arena limited_arena(num_threads); // limit to 32 threads, for example
+        limited_arena.execute([&] {
+            std::sort(std::execution::par_unseq, cloud_.pts.begin(), cloud_.pts.end(), [](const Point& a, const Point& b) {
+                if (a.w != b.w) return a.w < b.w;
+                if (a.z != b.z) return a.z < b.z;
+                if (a.y != b.y) return a.y < b.y;
+                return a.x < b.x;
+            });
+        });
+    }
+
+    void sortPointsXYZW() {
+        unsigned int available_threads = std::thread::hardware_concurrency();
+        unsigned int num_threads = std::min(available_threads, 32u); // Use up to 32 threads, or fewer if not available
+    
+        tbb::task_arena limited_arena(num_threads); // limit to 32 threads, for example
+        limited_arena.execute([&] {
+            std::sort(std::execution::par_unseq, cloud_.pts.begin(), cloud_.pts.end(), [](const Point& a, const Point& b) {
+                if (a.x != b.x) return a.x < b.x;
+                if (a.y != b.y) return a.y < b.y;
+                if (a.z != b.z) return a.z < b.z;
+                return a.w < b.w;
+            });
+        });
+    }
 
     // void sortPointsWZYX() {
     //     // Sequential in-place sort
