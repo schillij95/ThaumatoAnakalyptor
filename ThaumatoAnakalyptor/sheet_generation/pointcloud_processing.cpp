@@ -542,7 +542,7 @@ public:
     }
 
 private:
-    PointCloud& cloud_;
+    PointCloud cloud_;
     size_t progress = 0;
     size_t problem_size = -1;
     bool verbose;
