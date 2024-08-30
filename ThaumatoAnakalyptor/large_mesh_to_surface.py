@@ -67,4 +67,4 @@ if __name__ == "__main__":
         process_rendering = subprocess.Popen(command)
         process_rendering.wait()
 
-# Example command: python3 -m ThaumatoAnakalyptor.large_mesh_to_surface --input_mesh /scroll.volpkg/working/scroll3_surface_points/1352_3600_5002/point_cloud_colorized_verso_subvolume_blocks/windowed_mesh_20240820180403 --scroll /scroll.volpkg/volumes/2dtifs_8um_grids --display
+# Example command (on transformed mesh): python3 -m ThaumatoAnakalyptor.large_mesh_to_surface --input_mesh /scroll.volpkg/working/scroll3_surface_points/1352_3600_5002/point_cloud_colorized_verso_subvolume_blocks/windowed_mesh_20240830103110_20231117143551 --scroll /scroll.volpkg/volumes/20231117143551_standardized.zarr --display

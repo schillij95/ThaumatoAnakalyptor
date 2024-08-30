@@ -104,13 +104,13 @@ public:
     PointCloud(PointCloud&& other) noexcept 
         : pts(std::move(other.pts)) { }
 
-    // Move assignment operator
-    PointCloud& operator=(PointCloud&& other) noexcept {
-        if (this != &other) {
-            pts = std::move(other.pts);
-        }
-        return *this;
-    }
+    // // Move assignment operator
+    // PointCloud& operator=(PointCloud&& other) noexcept {
+    //     if (this != &other) {
+    //         pts = std::move(other.pts);
+    //     }
+    //     return *this;
+    // }
 
     // Add a point to the cloud
     void addPoint(const Point& point) {
@@ -756,12 +756,18 @@ py::array_t<bool> vector_to_array(std::vector<bool> selected_originals) {
 }
 
 std::tuple<py::array_t<float>, py::array_t<float>, py::array_t<float>> load_pointclouds(const std::vector<std::tuple<std::vector<int>, int, double>>& nodes, const std::string& path, bool verbose = true) {
-    PointCloudLoader loader(nodes, path, verbose);
-    loader.load_all();
-    // PointCloud vector_points = loader.get_results();
-    PointCloudProcessor processor(loader.get_results(), verbose);
-    // Delete loader
-    loader.~PointCloudLoader();
+    std::unique_ptr<PointCloudLoader> loader = std::make_unique<PointCloudLoader>(nodes, path, verbose);
+    loader->load_all();
+    PointCloudProcessor processor(loader->get_results(), verbose);
+    // Manually reset the loader to free memory
+    loader.reset();
+
+    // PointCloudLoader loader(nodes, path, verbose);
+    // loader.load_all();
+    // // PointCloud vector_points = loader.get_results();
+    // PointCloudProcessor processor(loader.get_results(), verbose);
+    // // Delete loader
+    // loader.~PointCloudLoader();
     if (verbose) {
         std::cout << "Deleted loader" << std::endl;
     }
