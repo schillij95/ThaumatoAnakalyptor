@@ -744,7 +744,7 @@ std::tuple<py::array_t<float>, py::array_t<float>, py::array_t<float>> load_poin
     PointCloudLoader loader(nodes, path, verbose);
     loader.load_all();
     PointCloud vector_points = loader.get_results();
-    PointCloudProcessor processor(vector_points, verbose);
+    PointCloudProcessor processor(std::move(vector_points), verbose);
     processor.sortPointsXYZW();
     if (verbose) {
         std::cout << "Sorted points by XYZW" << std::endl;
