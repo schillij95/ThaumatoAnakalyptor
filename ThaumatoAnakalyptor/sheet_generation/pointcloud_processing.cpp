@@ -762,6 +762,9 @@ std::tuple<py::array_t<float>, py::array_t<float>, py::array_t<float>> load_poin
     PointCloudProcessor processor(loader.get_results(), verbose);
     // Delete loader
     loader.~PointCloudLoader();
+    if (verbose) {
+        std::cout << "Deleted loader" << std::endl;
+    }
     processor.sortPointsXYZW();
     if (verbose) {
         std::cout << "Sorted points by XYZW" << std::endl;
