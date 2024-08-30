@@ -100,6 +100,18 @@ public:
         }
     }
 
+    // Move constructor
+    PointCloud(PointCloud&& other) noexcept 
+        : pts(std::move(other.pts)) { }
+
+    // Move assignment operator
+    PointCloud& operator=(PointCloud&& other) noexcept {
+        if (this != &other) {
+            pts = std::move(other.pts);
+        }
+        return *this;
+    }
+
     // Add a point to the cloud
     void addPoint(const Point& point) {
         pts.push_back(point);
@@ -743,8 +755,8 @@ py::array_t<bool> vector_to_array(std::vector<bool> selected_originals) {
 std::tuple<py::array_t<float>, py::array_t<float>, py::array_t<float>> load_pointclouds(const std::vector<std::tuple<std::vector<int>, int, double>>& nodes, const std::string& path, bool verbose = true) {
     PointCloudLoader loader(nodes, path, verbose);
     loader.load_all();
-    PointCloud vector_points = loader.get_results();
-    PointCloudProcessor processor(std::move(vector_points), verbose);
+    // PointCloud vector_points = loader.get_results();
+    PointCloudProcessor processor(loader.get_results(), verbose);
     processor.sortPointsXYZW();
     if (verbose) {
         std::cout << "Sorted points by XYZW" << std::endl;
