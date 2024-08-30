@@ -364,6 +364,11 @@ public:
         return PointCloud(std::move(all_points));  // Move the points instead of copying
     }
 
+    void free_memory() {
+        all_points.clear();
+        all_points.shrink_to_fit();
+    }
+
 private:
     std::vector<std::tuple<std::vector<int>, int, double>> node_data_;
     // Preallocated NumPy arrays
@@ -756,20 +761,14 @@ py::array_t<bool> vector_to_array(std::vector<bool> selected_originals) {
 }
 
 std::tuple<py::array_t<float>, py::array_t<float>, py::array_t<float>> load_pointclouds(const std::vector<std::tuple<std::vector<int>, int, double>>& nodes, const std::string& path, bool verbose = true) {
-    std::unique_ptr<PointCloudLoader> loader = std::make_unique<PointCloudLoader>(nodes, path, verbose);
-    loader->load_all();
-    PointCloudProcessor processor(loader->get_results(), verbose);
-    // Manually reset the loader to free memory
-    loader.reset();
-
-    // PointCloudLoader loader(nodes, path, verbose);
-    // loader.load_all();
-    // // PointCloud vector_points = loader.get_results();
-    // PointCloudProcessor processor(loader.get_results(), verbose);
-    // // Delete loader
-    // loader.~PointCloudLoader();
+    PointCloudLoader loader(nodes, path, verbose);
+    loader.load_all();
+    // PointCloud vector_points = loader.get_results();
+    PointCloudProcessor processor(loader.get_results(), verbose);
+    // Delete loader pointcloud
+    loader.free_memory();
     if (verbose) {
-        std::cout << "Deleted loader" << std::endl;
+        std::cout << "Liberated memory in loader" << std::endl;
     }
     processor.sortPointsXYZW();
     if (verbose) {
