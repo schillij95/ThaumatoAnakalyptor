@@ -1083,7 +1083,7 @@ class WalkToSheet():
         test_pointset_ply_path = os.path.join(test_folder, f"ordered_pointset_test_cpp.ply")
         self.pointcloud_from_ordered_pointset(pointset, os.path.join(self.save_path, test_pointset_ply_path))
            
-    def rolled_ordered_pointset(self, points, normals, debug=False, angle_step=1, z_spacing=10):
+    def rolled_ordered_pointset(self, points, normals, debug=False, angle_step=0.5, z_spacing=10):
         # some debugging visualization of seperate pointcloud windings
         if debug:
             # get winding angles
