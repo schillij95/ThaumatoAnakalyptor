@@ -397,23 +397,23 @@ public:
         }
     }
 
-    // void sortPointsWZYX() {
-    //     std::sort(std::execution::par_unseq, cloud_.pts.begin(), cloud_.pts.end(), [](const Point& a, const Point& b) {
-    //         if (a.w != b.w) return a.w < b.w;
-    //         if (a.z != b.z) return a.z < b.z;
-    //         if (a.y != b.y) return a.y < b.y;
-    //         return a.x < b.x;
-    //     });
-    // }
+    void sortPointsWZYX() {
+        std::sort(std::execution::par_unseq, cloud_.pts.begin(), cloud_.pts.end(), [](const Point& a, const Point& b) {
+            if (a.w != b.w) return a.w < b.w;
+            if (a.z != b.z) return a.z < b.z;
+            if (a.y != b.y) return a.y < b.y;
+            return a.x < b.x;
+        });
+    }
 
-    // void sortPointsXYZW() {
-    //     std::sort(std::execution::par_unseq, cloud_.pts.begin(), cloud_.pts.end(), [](const Point& a, const Point& b) {
-    //         if (a.x != b.x) return a.x < b.x;
-    //         if (a.y != b.y) return a.y < b.y;
-    //         if (a.z != b.z) return a.z < b.z;
-    //         return a.w < b.w;
-    //     });
-    // }
+    void sortPointsXYZW() {
+        std::sort(std::execution::par_unseq, cloud_.pts.begin(), cloud_.pts.end(), [](const Point& a, const Point& b) {
+            if (a.x != b.x) return a.x < b.x;
+            if (a.y != b.y) return a.y < b.y;
+            if (a.z != b.z) return a.z < b.z;
+            return a.w < b.w;
+        });
+    }
 
     // void sortPointsWZYX() {
     //     unsigned int available_threads = std::thread::hardware_concurrency();
@@ -445,25 +445,25 @@ public:
     //     });
     // }
 
-    void sortPointsWZYX() {
-        // Sequential in-place sort
-        std::sort(cloud_.pts.begin(), cloud_.pts.end(), [](const Point& a, const Point& b) {
-            if (a.w != b.w) return a.w < b.w;
-            if (a.z != b.z) return a.z < b.z;
-            if (a.y != b.y) return a.y < b.y;
-            return a.x < b.x;
-        });
-    }
+    // void sortPointsWZYX() {
+    //     // Sequential in-place sort
+    //     std::sort(cloud_.pts.begin(), cloud_.pts.end(), [](const Point& a, const Point& b) {
+    //         if (a.w != b.w) return a.w < b.w;
+    //         if (a.z != b.z) return a.z < b.z;
+    //         if (a.y != b.y) return a.y < b.y;
+    //         return a.x < b.x;
+    //     });
+    // }
 
-    void sortPointsXYZW() {
-        // Sequential in-place sort
-        std::sort(cloud_.pts.begin(), cloud_.pts.end(), [](const Point& a, const Point& b) {
-            if (a.x != b.x) return a.x < b.x;
-            if (a.y != b.y) return a.y < b.y;
-            if (a.z != b.z) return a.z < b.z;
-            return a.w < b.w;
-        });
-    }
+    // void sortPointsXYZW() {
+    //     // Sequential in-place sort
+    //     std::sort(cloud_.pts.begin(), cloud_.pts.end(), [](const Point& a, const Point& b) {
+    //         if (a.x != b.x) return a.x < b.x;
+    //         if (a.y != b.y) return a.y < b.y;
+    //         if (a.z != b.z) return a.z < b.z;
+    //         return a.w < b.w;
+    //     });
+    // }
 
     void processDuplicates() {
         size_t num_threads = std::thread::hardware_concurrency();
