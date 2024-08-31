@@ -1366,7 +1366,7 @@ public:
 
     std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<std::vector<float>>>, std::vector<std::vector<float>>, std::vector<float>>>
     processPointset(
-        const std::vector<std::vector<float>>& original_points,
+        std::vector<std::vector<float>>& original_points,
         const std::vector<std::vector<float>>& original_normals,
         const std::vector<std::vector<float>>& umbilicus_points,
         float angleStep, int z_spacing, float max_eucledian_distance) 
