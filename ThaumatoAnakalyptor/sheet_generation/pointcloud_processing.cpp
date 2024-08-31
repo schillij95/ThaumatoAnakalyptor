@@ -1396,6 +1396,12 @@ public:
 
         std::cout << "Calculated z positions" << std::endl;
 
+        // Clear the original points to save memory
+        original_points.clear();
+        original_points.shrink_to_fit();
+
+        std::cout << "Cleared original points" << std::endl;
+
         std::vector<std::vector<float>> ordered_umbilicus_points(zPositions.size());
         for (size_t i = 0; i < zPositions.size(); ++i) {
             ordered_umbilicus_points[i] = umbilicus_xz_at_y(umbilicus_points, zPositions[i]);
