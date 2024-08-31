@@ -764,7 +764,7 @@ std::tuple<py::array_t<float>, py::array_t<float>, py::array_t<float>> load_poin
     PointCloudLoader loader(nodes, path, verbose);
     loader.load_all();
     // PointCloud vector_points = loader.get_results();
-    PointCloudProcessor processor(loader.get_results(), verbose);
+    PointCloudProcessor processor(std::move(loader.get_results()), verbose);
     // Delete loader pointcloud
     loader.free_memory();
     if (verbose) {
@@ -1752,8 +1752,8 @@ private:
                     });
 
                     // Take maximaly 40 smallest normals and pointset
-                    if (indices.size() > 40) {
-                        indices.resize(40);
+                    if (indices.size() > 10) {
+                        indices.resize(10);
                     }
 
                     std::vector<float> ordered_pointset_(indices.size());
@@ -1845,7 +1845,7 @@ std::vector<std::tuple<std::vector<std::vector<float>>, std::vector<std::vector<
     if (verbose) {
         std::cout << "Creating ordered pointset" << std::endl;
     }
-    return std::move(processor.create_ordered_pointset_processor(original_points, original_normals, umbilicus_points, angleStep, z_spacing, max_eucledian_distance));
+    return std::move(processor.create_ordered_pointset_processor(std::move(original_points), std::move(original_normals), umbilicus_points, angleStep, z_spacing, max_eucledian_distance));
     if (verbose) {
         std::cout << "Finished creating ordered pointset" << std::endl;
     }
