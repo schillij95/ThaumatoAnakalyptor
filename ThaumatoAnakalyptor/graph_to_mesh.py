@@ -549,13 +549,17 @@ class WalkToSheet():
                 if winding_direction:
                     if i_pos_in_same_vector > 0 and interpolated_ts[i][j] >= interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]:
                         print(f"low side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not >= {interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]}")
+                        interpolated_ts[i][j], interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j], interpolated_ts[i][j]
                     if i_pos_in_same_vector < len(same_vector_indices) - 1 and interpolated_ts[i][j] <= interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]:
                         print(f"high side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not <= {interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]}")
+                        interpolated_ts[i][j], interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j], interpolated_ts[i][j]
                 else:
                     if i_pos_in_same_vector > 0 and interpolated_ts[i][j] <= interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]:
                         print(f"low side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not <= {interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]}")
+                        interpolated_ts[i][j], interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j], interpolated_ts[i][j]
                     if i_pos_in_same_vector < len(same_vector_indices) - 1 and interpolated_ts[i][j] >= interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]:
                         print(f"high side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not >= {interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]}")
+                        interpolated_ts[i][j], interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j], interpolated_ts[i][j]
 
         return interpolated_ts, interpolated_normals, fixed_points
     
