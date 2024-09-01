@@ -2069,7 +2069,8 @@ private:
             if (!invalid_l) {
                 auto [side_new_l, invalid_new_l] = side_of(old_ts + new_ts_d, ts_l);
                 if (side_old_l != side_new_l) {
-                    new_ts_d = (ts_l - old_ts) * 0.5;
+                    // new_ts_d = (ts_l - old_ts) * 0.5;
+                    new_ts_d = 0.0f;
                 }
             }
         }
@@ -2081,7 +2082,8 @@ private:
             if (!invalid_r) {
                 auto [side_new_r, invalid_new_r] = side_of(old_ts + new_ts_d, ts_r);
                 if (side_old_r != side_new_r) {
-                    new_ts_d = (ts_r - old_ts) * 0.5;
+                    // new_ts_d = (ts_r - old_ts) * 0.5;
+                    new_ts_d = 0.0f;
                 }
             }
         }
@@ -2093,7 +2095,8 @@ private:
             if (!invalid_ln) {
                 auto [side_new_ln, invalid_new_ln] = side_of(old_ts + new_ts_d, ts_ln);
                 if (side_old_ln != side_new_ln) {
-                    new_ts_d = (ts_ln - old_ts) * 0.5;
+                    // new_ts_d = (ts_ln - old_ts) * 0.5;
+                    new_ts_d = 0.0f;
                 }
             }
         }
@@ -2105,7 +2108,8 @@ private:
             if (!invalid_rn) {
                 auto [side_new_rn, invalid_new_rn] = side_of(old_ts + new_ts_d, ts_rn);
                 if (side_old_rn != side_new_rn) {
-                    new_ts_d = (ts_rn - old_ts) * 0.5;
+                    // new_ts_d = (ts_rn - old_ts) * 0.5;
+                    new_ts_d = 0.0f;
                 }
             }
         }
