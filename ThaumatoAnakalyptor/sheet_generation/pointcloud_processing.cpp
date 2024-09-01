@@ -1445,7 +1445,7 @@ public:
             results.clear();
         }
 
-        return results;
+        return std::move(results);
     }
 
 private:

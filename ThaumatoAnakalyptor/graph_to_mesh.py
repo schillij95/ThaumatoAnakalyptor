@@ -1124,7 +1124,7 @@ class WalkToSheet():
         
         print("Using Cpp rolled_ordered_pointset")
         # Set to false to load precomputed partial results during development
-        fresh_start = True
+        fresh_start = False
         if fresh_start:
             result = pointcloud_processing.create_ordered_pointset(points, normals, self.graph.umbilicus_data, angleStep=float(angle_step), z_spacing=int(z_spacing), max_eucledian_distance=10) # named parameters for mesh detail level: float angleStep, int z_spacing, float max_eucledian_distance, bool verbose
             # save result as pkl
