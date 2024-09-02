@@ -537,92 +537,99 @@ class WalkToSheet():
                     interpolated_normals[j][z] = normal
                     fixed_points[j][z] = False
 
-        # Adjust for at least 0.001 difference between t values
-        abs_thresh = 0.001
-        abs_iterations = 0
-        total_interpolations = 0
         while True:
-            abs_interpolations = 0
-            for i in range(len(interpolated_ts)):
-                curve_angle_vector = angle_vector[i]
-                # get all indices with the same angle vector
-                same_vector_indices = self.extract_all_same_vector(angle_vector, curve_angle_vector)
-                i_pos_in_same_vector = same_vector_indices.index(i)
-                for j in range(len(interpolated_ts[i])):
-                    if interpolated_ts[i][j] is None:
-                        continue
-                    if winding_direction:
-                        if i_pos_in_same_vector > 0 and abs(interpolated_ts[i][j] - interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]) < abs_thresh:
-                            abs_interpolations += 1
-                            print(f"low side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not >= {interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]}")
-                            interpolated_ts[i][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j] - 2 * abs_thresh
-                        if i_pos_in_same_vector < len(same_vector_indices) - 1 and abs(interpolated_ts[i][j] - interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]) < abs_thresh:
-                            abs_interpolations += 1
-                            print(f"high side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not <= {interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]}")
-                            interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j] = interpolated_ts[i][j] - 2 * abs_thresh
-                    else:
-                        if i_pos_in_same_vector > 0 and abs(interpolated_ts[i][j] - interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]) < abs_thresh:
-                            abs_interpolations += 1
-                            print(f"low side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not <= {interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]}")
-                            interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j] = interpolated_ts[i][j] - 2 * abs_thresh
-                        if i_pos_in_same_vector < len(same_vector_indices) - 1 and abs(interpolated_ts[i][j] - interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]) < abs_thresh:
-                            abs_interpolations += 1
-                            print(f"high side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not >= {interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]}")
-                            interpolated_ts[i][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j] - 2 * abs_thresh
+            anything_changed = False
+            # Adjust for at least 0.001 difference between t values
+            abs_thresh = 0.001
+            abs_iterations = 0
+            total_interpolations = 0
+            while True:
+                abs_interpolations = 0
+                for i in range(len(interpolated_ts)):
+                    curve_angle_vector = angle_vector[i]
+                    # get all indices with the same angle vector
+                    same_vector_indices = self.extract_all_same_vector(angle_vector, curve_angle_vector)
+                    i_pos_in_same_vector = same_vector_indices.index(i)
+                    for j in range(len(interpolated_ts[i])):
+                        if interpolated_ts[i][j] is None:
+                            continue
+                        if winding_direction:
+                            if i_pos_in_same_vector > 0 and abs(interpolated_ts[i][j] - interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]) < abs_thresh:
+                                abs_interpolations += 1
+                                # print(f"low side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not >= {interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]}")
+                                interpolated_ts[i][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j] - 2 * abs_thresh
+                            if i_pos_in_same_vector < len(same_vector_indices) - 1 and abs(interpolated_ts[i][j] - interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]) < abs_thresh:
+                                abs_interpolations += 1
+                                # print(f"high side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not <= {interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]}")
+                                interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j] = interpolated_ts[i][j] - 2 * abs_thresh
+                        else:
+                            if i_pos_in_same_vector > 0 and abs(interpolated_ts[i][j] - interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]) < abs_thresh:
+                                abs_interpolations += 1
+                                # print(f"low side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not <= {interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]}")
+                                interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j] = interpolated_ts[i][j] - 2 * abs_thresh
+                            if i_pos_in_same_vector < len(same_vector_indices) - 1 and abs(interpolated_ts[i][j] - interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]) < abs_thresh:
+                                abs_interpolations += 1
+                                # print(f"high side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not >= {interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]}")
+                                interpolated_ts[i][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j] - 2 * abs_thresh
 
-            total_interpolations += abs_interpolations
-            if abs_interpolations == 0:
+                total_interpolations += abs_interpolations
+                if abs_interpolations == 0:
+                    break
+                else:
+                    anything_changed = True
+                    print(f"Fixed {abs_interpolations} with total {total_interpolations} interpolations at iteration {abs_iterations}")
+                abs_iterations += 1
+
+            # Check interpolated
+            check_iterations = 0
+            total_interpolations = 0
+            while True:
+                flipped_interpolations = 0
+                for i in range(len(interpolated_ts)):
+                    curve_angle_vector = angle_vector[i]
+                    # get all indices with the same angle vector
+                    same_vector_indices = self.extract_all_same_vector(angle_vector, curve_angle_vector)
+                    i_pos_in_same_vector = same_vector_indices.index(i)
+                    for j in range(len(interpolated_ts[i])):
+                        if interpolated_ts[i][j] is None:
+                            print(f"Interpolated ts is None at {i}, {j}")
+                        if winding_direction:
+                            if i_pos_in_same_vector > 0 and interpolated_ts[i][j] >= interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]:
+                                flipped_interpolations += 1
+                                # print(f"low side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not >= {interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]}")
+                                interpolated_ts[i][j], interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j], interpolated_ts[i][j]
+                                fixed_points[i][j] = False
+                                fixed_points[same_vector_indices[i_pos_in_same_vector-1]][j] = False
+                            if i_pos_in_same_vector < len(same_vector_indices) - 1 and interpolated_ts[i][j] <= interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]:
+                                flipped_interpolations += 1
+                                # print(f"high side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not <= {interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]}")
+                                interpolated_ts[i][j], interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j], interpolated_ts[i][j]
+                                fixed_points[i][j] = False
+                                fixed_points[same_vector_indices[i_pos_in_same_vector+1]][j] = False
+                        else:
+                            if i_pos_in_same_vector > 0 and interpolated_ts[i][j] <= interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]:
+                                flipped_interpolations += 1
+                                # print(f"low side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not <= {interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]}")
+                                interpolated_ts[i][j], interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j], interpolated_ts[i][j]
+                                fixed_points[i][j] = False
+                                fixed_points[same_vector_indices[i_pos_in_same_vector-1]][j] = False
+                            if i_pos_in_same_vector < len(same_vector_indices) - 1 and interpolated_ts[i][j] >= interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]:
+                                flipped_interpolations += 1
+                                # print(f"high side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not >= {interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]}")
+                                interpolated_ts[i][j], interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j], interpolated_ts[i][j]
+                                fixed_points[i][j] = False
+                                fixed_points[same_vector_indices[i_pos_in_same_vector+1]][j] = False
+
+                total_interpolations += flipped_interpolations
+                if flipped_interpolations == 0:
+                    break
+                else:
+                    anything_changed = True
+                    print(f"Flipped {flipped_interpolations} with total {total_interpolations} interpolations at iteration {check_iterations}")
+                check_iterations += 1
+            
+            if not anything_changed:
                 break
-            else:
-                print(f"Fixed {abs_interpolations} with total {total_interpolations} interpolations at iteration {abs_iterations}")
-            abs_iterations += 1
-
-        # Check interpolated
-        check_iterations = 0
-        total_interpolations = 0
-        while True:
-            flipped_interpolations = 0
-            for i in range(len(interpolated_ts)):
-                curve_angle_vector = angle_vector[i]
-                # get all indices with the same angle vector
-                same_vector_indices = self.extract_all_same_vector(angle_vector, curve_angle_vector)
-                i_pos_in_same_vector = same_vector_indices.index(i)
-                for j in range(len(interpolated_ts[i])):
-                    if interpolated_ts[i][j] is None:
-                        print(f"Interpolated ts is None at {i}, {j}")
-                    if winding_direction:
-                        if i_pos_in_same_vector > 0 and interpolated_ts[i][j] >= interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]:
-                            flipped_interpolations += 1
-                            # print(f"low side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not >= {interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]}")
-                            interpolated_ts[i][j], interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j], interpolated_ts[i][j]
-                            fixed_points[i][j] = False
-                            fixed_points[same_vector_indices[i_pos_in_same_vector-1]][j] = False
-                        if i_pos_in_same_vector < len(same_vector_indices) - 1 and interpolated_ts[i][j] <= interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]:
-                            flipped_interpolations += 1
-                            # print(f"high side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not <= {interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]}")
-                            interpolated_ts[i][j], interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j], interpolated_ts[i][j]
-                            fixed_points[i][j] = False
-                            fixed_points[same_vector_indices[i_pos_in_same_vector+1]][j] = False
-                    else:
-                        if i_pos_in_same_vector > 0 and interpolated_ts[i][j] <= interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]:
-                            flipped_interpolations += 1
-                            # print(f"low side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not <= {interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]}")
-                            interpolated_ts[i][j], interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j], interpolated_ts[i][j]
-                            fixed_points[i][j] = False
-                            fixed_points[same_vector_indices[i_pos_in_same_vector-1]][j] = False
-                        if i_pos_in_same_vector < len(same_vector_indices) - 1 and interpolated_ts[i][j] >= interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]:
-                            flipped_interpolations += 1
-                            # print(f"high side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not >= {interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]}")
-                            interpolated_ts[i][j], interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j], interpolated_ts[i][j]
-                            fixed_points[i][j] = False
-                            fixed_points[same_vector_indices[i_pos_in_same_vector+1]][j] = False
-
-            total_interpolations += flipped_interpolations
-            if flipped_interpolations == 0:
-                break
-            else:
-                print(f"Flipped {flipped_interpolations} with total {total_interpolations} interpolations at iteration {check_iterations}")
-            check_iterations += 1
 
         return interpolated_ts, interpolated_normals, fixed_points
     
