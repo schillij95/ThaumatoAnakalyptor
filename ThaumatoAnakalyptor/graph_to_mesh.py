@@ -537,37 +537,84 @@ class WalkToSheet():
                     interpolated_normals[j][z] = normal
                     fixed_points[j][z] = False
 
+        # Adjust for at least 0.001 difference between t values
+        abs_thresh = 0.001
+        abs_iterations = 0
+        while True:
+            abs_interpolations = 0
+            for i in range(len(interpolated_ts)):
+                curve_angle_vector = angle_vector[i]
+                # get all indices with the same angle vector
+                same_vector_indices = self.extract_all_same_vector(angle_vector, curve_angle_vector)
+                i_pos_in_same_vector = same_vector_indices.index(i)
+                for j in range(len(interpolated_ts[i])):
+                    if interpolated_ts[i][j] is None:
+                        continue
+                    if winding_direction:
+                        if i_pos_in_same_vector > 0 and abs(interpolated_ts[i][j] - interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]) < abs_thresh:
+                            abs_interpolations += 1
+                            interpolated_ts[i][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j] - abs_thresh
+                        if i_pos_in_same_vector < len(same_vector_indices) - 1 and abs(interpolated_ts[i][j] - interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]) < abs_thresh:
+                            abs_interpolations += 1
+                            interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j] = interpolated_ts[i][j] - abs_thresh
+                    else:
+                        if i_pos_in_same_vector > 0 and abs(interpolated_ts[i][j] - interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]) < abs_thresh:
+                            abs_interpolations += 1
+                            interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j] = interpolated_ts[i][j] - abs_thresh
+                        if i_pos_in_same_vector < len(same_vector_indices) - 1 and abs(interpolated_ts[i][j] - interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]) < abs_thresh:
+                            abs_interpolations += 1
+                            interpolated_ts[i][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j] - abs_thresh
+
+            if abs_interpolations == 0:
+                break
+            else:
+                print(f"Fixed {abs_interpolations} interpolations at iteration {abs_iterations}")
+            abs_iterations += 1
+
         # Check interpolated
-        for i in range(len(interpolated_ts)):
-            curve_angle_vector = angle_vector[i]
-            # get all indices with the same angle vector
-            same_vector_indices = self.extract_all_same_vector(angle_vector, curve_angle_vector)
-            i_pos_in_same_vector = same_vector_indices.index(i)
-            for j in range(len(interpolated_ts[i])):
-                if interpolated_ts[i][j] is None:
-                    print(f"Interpolated ts is None at {i}, {j}")
-                if winding_direction:
-                    if i_pos_in_same_vector > 0 and interpolated_ts[i][j] >= interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]:
-                        print(f"low side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not >= {interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]}")
-                        interpolated_ts[i][j], interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j], interpolated_ts[i][j]
-                        fixed_points[i][j] = False
-                        fixed_points[same_vector_indices[i_pos_in_same_vector-1]][j] = False
-                    if i_pos_in_same_vector < len(same_vector_indices) - 1 and interpolated_ts[i][j] <= interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]:
-                        print(f"high side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not <= {interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]}")
-                        interpolated_ts[i][j], interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j], interpolated_ts[i][j]
-                        fixed_points[i][j] = False
-                        fixed_points[same_vector_indices[i_pos_in_same_vector+1]][j] = False
-                else:
-                    if i_pos_in_same_vector > 0 and interpolated_ts[i][j] <= interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]:
-                        print(f"low side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not <= {interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]}")
-                        interpolated_ts[i][j], interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j], interpolated_ts[i][j]
-                        fixed_points[i][j] = False
-                        fixed_points[same_vector_indices[i_pos_in_same_vector-1]][j] = False
-                    if i_pos_in_same_vector < len(same_vector_indices) - 1 and interpolated_ts[i][j] >= interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]:
-                        print(f"high side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not >= {interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]}")
-                        interpolated_ts[i][j], interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j], interpolated_ts[i][j]
-                        fixed_points[i][j] = False
-                        fixed_points[same_vector_indices[i_pos_in_same_vector+1]][j] = False
+        check_iterations = 0
+        while True:
+            flipped_interpolations = 0
+            for i in range(len(interpolated_ts)):
+                curve_angle_vector = angle_vector[i]
+                # get all indices with the same angle vector
+                same_vector_indices = self.extract_all_same_vector(angle_vector, curve_angle_vector)
+                i_pos_in_same_vector = same_vector_indices.index(i)
+                for j in range(len(interpolated_ts[i])):
+                    if interpolated_ts[i][j] is None:
+                        print(f"Interpolated ts is None at {i}, {j}")
+                    if winding_direction:
+                        if i_pos_in_same_vector > 0 and interpolated_ts[i][j] >= interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]:
+                            flipped_interpolations += 1
+                            # print(f"low side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not >= {interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]}")
+                            interpolated_ts[i][j], interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j], interpolated_ts[i][j]
+                            fixed_points[i][j] = False
+                            fixed_points[same_vector_indices[i_pos_in_same_vector-1]][j] = False
+                        if i_pos_in_same_vector < len(same_vector_indices) - 1 and interpolated_ts[i][j] <= interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]:
+                            flipped_interpolations += 1
+                            # print(f"high side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not <= {interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]}")
+                            interpolated_ts[i][j], interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j], interpolated_ts[i][j]
+                            fixed_points[i][j] = False
+                            fixed_points[same_vector_indices[i_pos_in_same_vector+1]][j] = False
+                    else:
+                        if i_pos_in_same_vector > 0 and interpolated_ts[i][j] <= interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]:
+                            flipped_interpolations += 1
+                            # print(f"low side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not <= {interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]}")
+                            interpolated_ts[i][j], interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j], interpolated_ts[i][j]
+                            fixed_points[i][j] = False
+                            fixed_points[same_vector_indices[i_pos_in_same_vector-1]][j] = False
+                        if i_pos_in_same_vector < len(same_vector_indices) - 1 and interpolated_ts[i][j] >= interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]:
+                            flipped_interpolations += 1
+                            # print(f"high side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not >= {interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]}")
+                            interpolated_ts[i][j], interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j], interpolated_ts[i][j]
+                            fixed_points[i][j] = False
+                            fixed_points[same_vector_indices[i_pos_in_same_vector+1]][j] = False
+
+            if flipped_interpolations == 0:
+                break
+            else:
+                print(f"Flipped {flipped_interpolations} interpolations at iteration {check_iterations}")
+            check_iterations += 1
 
         return interpolated_ts, interpolated_normals, fixed_points
     
@@ -1157,7 +1204,7 @@ class WalkToSheet():
         mean_innermost_ts, mean_outermost_ts, winding_direction = self.find_inner_outermost_winding_direction(t_means, angle_vector)
 
         # Set to false to load precomputed partial results during development
-        fresh_start2 = True
+        fresh_start2 = False
         if fresh_start2:
             result_ts, result_normals = self.interpolate_ordered_pointset_multithreaded(ordered_pointset, ordered_normals, angle_vector, winding_direction)
             interpolated_ts, interpolated_normals = result_ts, result_normals
@@ -1427,7 +1474,7 @@ class WalkToSheet():
             with open(os.path.join(self.save_path, "points_selected.npz"), 'wb') as f:
                 np.savez(f, points=points_originals_selected, normals=normals_originals_selected)
         else:
-            load_points = True
+            load_points = False
             if load_points:
                 # Open the npz file
                 with open(os.path.join(self.save_path, "points_selected.npz"), 'rb') as f:
@@ -1473,11 +1520,11 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     graph_path = os.path.join(os.path.dirname(args.path), args.graph)
-    graph = load_graph(graph_path)
-    min_z = min([graph.nodes[node]["centroid"][1] for node in graph.nodes])
-    max_z = max([graph.nodes[node]["centroid"][1] for node in graph.nodes])
-    print(f"Min z: {min_z}, Max z: {max_z}")
-    # graph = None
+    # graph = load_graph(graph_path)
+    # min_z = min([graph.nodes[node]["centroid"][1] for node in graph.nodes])
+    # max_z = max([graph.nodes[node]["centroid"][1] for node in graph.nodes])
+    # print(f"Min z: {min_z}, Max z: {max_z}")
+    graph = None
     reference_path = graph_path.replace("evolved_graph", "subgraph")
     start_point = args.start_point
     scale_factor = args.scale_factor
@@ -1486,3 +1533,4 @@ if __name__ == '__main__':
     walk.unroll(debug=args.debug)
 
 # Example command: python3 -m ThaumatoAnakalyptor.graph_to_mesh --path /scroll.volpkg/working/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks --graph /scroll.volpkg/working/scroll3_surface_points/1352_3600_5002/point_cloud_colorized_verso_subvolume_graph_BP_solved.pkl --start_point 1352 3600 5002 --debug
+# python3 -m ThaumatoAnakalyptor.graph_to_mesh --path /scroll2v2_surface_points/point_cloud_colorized_verso_subvolume_blocks --graph /scroll2v2_surface_points/1352_3600_5002/point_cloud_colorized_verso_subvolume_graph_BP_solved.pkl --start_point 1352 3600 5002
