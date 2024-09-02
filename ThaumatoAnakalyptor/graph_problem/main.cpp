@@ -210,12 +210,12 @@ void dfs_assign_f_star(int node_index, std::vector<Node>& graph, std::vector<boo
 }
 
 void assign_winding_angles_dfs(std::vector<Node>& graph) {
-    int num_nodes = graph.size();
+    size_t num_nodes = graph.size();
     std::vector<bool> visited(num_nodes, false);
 
     // Find a non-deleted node in the largest connected component to start the DFS
-    int start_node = -1;
-    for (int i = 0; i < num_nodes; ++i) {
+    size_t start_node = -1;
+    for (size_t i = 0; i < num_nodes; ++i) {
         if (!graph[i].deleted) {
             start_node = i;
             break;
@@ -233,11 +233,11 @@ void assign_winding_angles_dfs(std::vector<Node>& graph) {
 
 using EdgeWithCertainty = std::pair<float, int>;  // {certainty, target_node}
 
-void prim_mst_assign_f_star(int start_node, std::vector<Node>& graph, float scale) {
+void prim_mst_assign_f_star(size_t start_node, std::vector<Node>& graph, float scale) {
     size_t num_nodes = graph.size();
     std::vector<bool> in_mst(num_nodes, false);
     std::vector<float> min_k_delta(num_nodes, std::numeric_limits<float>::max());
-    std::vector<int> parent(num_nodes, -1);
+    std::vector<size_t> parent(num_nodes, -1);
 
     // Priority queue to pick the edge with the minimum k delta
     std::priority_queue<EdgeWithCertainty, std::vector<EdgeWithCertainty>, std::greater<EdgeWithCertainty>> pq;
@@ -246,14 +246,14 @@ void prim_mst_assign_f_star(int start_node, std::vector<Node>& graph, float scal
     min_k_delta[start_node] = 0.0f;
 
     while (!pq.empty()) {
-        int u = pq.top().second;
+        size_t u = pq.top().second;
         pq.pop();
 
         if (in_mst[u]) continue;
         in_mst[u] = true;
 
         for (const auto& edge : graph[u].edges) {
-            int v = edge.target_node;
+            size_t v = edge.target_node;
             // float k_delta = std::abs((graph[v].f_tilde - graph[u].f_tilde) - edge.k) / std::abs(edge.k); // difference between BP solution and estimated k from the graph
             // float k_delta = std::abs((graph[v].f_tilde - graph[u].f_tilde) - edge.k); // difference between BP solution and estimated k from the graph
             float k_delta = std::abs(scale * (graph[v].f_tilde - graph[u].f_tilde) - edge.k); // difference between BP solution and estimated k from the graph
@@ -271,8 +271,8 @@ void prim_mst_assign_f_star(int start_node, std::vector<Node>& graph, float scal
     graph[start_node].f_tilde = graph[start_node].f_init;
 
     // Find for each node the children
-    std::vector<std::vector<unsigned int>> children(num_nodes);
-    for (unsigned int i = 0; i < num_nodes; ++i) {
+    std::vector<std::vector<size_t>> children(num_nodes);
+    for (size_t i = 0; i < num_nodes; ++i) {
         if (parent[i] != -1) {
             children[parent[i]].push_back(i);
         }
@@ -308,11 +308,11 @@ void prim_mst_assign_f_star(int start_node, std::vector<Node>& graph, float scal
 }
 
 void assign_winding_angles(std::vector<Node>& graph, float scale) {
-    int num_nodes = graph.size();
+    size_t num_nodes = graph.size();
     
     // Find a non-deleted node in the largest connected component to start the MST
-    int start_node = -1;
-    for (int i = 0; i < num_nodes; ++i) {
+    size_t start_node = -1;
+    for (size_t i = 0; i < num_nodes; ++i) {
         if (!graph[i].deleted) {
             start_node = i;
             break;
@@ -580,7 +580,7 @@ bool remove_invalid_edges(std::vector<Node>& graph, float threshold = 0.1) {
 
 void update_nodes(std::vector<Node>& graph, float o, float spring_constant) {
     #pragma omp parallel for
-    for (unsigned int i = 0; i < graph.size(); ++i) {
+    for (size_t i = 0; i < graph.size(); ++i) {
         if (graph[i].deleted) {
             continue;
         }
@@ -591,7 +591,7 @@ void update_nodes(std::vector<Node>& graph, float o, float spring_constant) {
             if (graph[edge.target_node].deleted) {
                 continue;
             }
-            unsigned int neighbor_node = edge.target_node;
+            size_t neighbor_node = edge.target_node;
             // sum_w_f_tilde_k += edge.certainty_factored * (graph[neighbor_node].f_tilde - spring_constant * edge.k);
             // sum_w += edge.certainty_factored;
             sum_w_f_tilde_k += edge.certainty * (graph[neighbor_node].f_tilde - spring_constant * edge.k);
@@ -604,7 +604,7 @@ void update_nodes(std::vector<Node>& graph, float o, float spring_constant) {
 
     // Update f_tilde with the newly computed f_star values
     #pragma omp parallel for
-    for (unsigned int i = 0; i < graph.size(); ++i) {
+    for (size_t i = 0; i < graph.size(); ++i) {
         graph[i].f_tilde = graph[i].f_star;
     }
 }
