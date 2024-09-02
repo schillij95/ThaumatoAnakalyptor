@@ -555,20 +555,20 @@ class WalkToSheet():
                         if i_pos_in_same_vector > 0 and abs(interpolated_ts[i][j] - interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]) < abs_thresh:
                             abs_interpolations += 1
                             print(f"low side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not >= {interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]}")
-                            interpolated_ts[i][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j] - abs_thresh
+                            interpolated_ts[i][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j] - 2 * abs_thresh
                         if i_pos_in_same_vector < len(same_vector_indices) - 1 and abs(interpolated_ts[i][j] - interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]) < abs_thresh:
                             abs_interpolations += 1
                             print(f"high side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not <= {interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]}")
-                            interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j] = interpolated_ts[i][j] - abs_thresh
+                            interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j] = interpolated_ts[i][j] - 2 * abs_thresh
                     else:
                         if i_pos_in_same_vector > 0 and abs(interpolated_ts[i][j] - interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]) < abs_thresh:
                             abs_interpolations += 1
                             print(f"low side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not <= {interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]}")
-                            interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j] = interpolated_ts[i][j] - abs_thresh
+                            interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j] = interpolated_ts[i][j] - 2 * abs_thresh
                         if i_pos_in_same_vector < len(same_vector_indices) - 1 and abs(interpolated_ts[i][j] - interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]) < abs_thresh:
                             abs_interpolations += 1
                             print(f"high side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not >= {interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]}")
-                            interpolated_ts[i][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j] - abs_thresh
+                            interpolated_ts[i][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j] - 2 * abs_thresh
 
             total_interpolations += abs_interpolations
             if abs_interpolations == 0:
