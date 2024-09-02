@@ -1564,7 +1564,7 @@ class WalkToSheet():
             mesh, uv_image = self.mesh_from_ordered_pointset(ordered_pointsets)
             self.save_mesh(mesh, uv_image, mesh_path)
 
-        split_mesh_paths = self.split(mesh_path, split_width=self.split_width, fresh_start=True)
+        split_mesh_paths = self.split(mesh_path, split_width=self.split_width, fresh_start=(continue_from <= 6))
 
         # Flatten mesh
         args = [(self.save_path, split_mesh_path) for split_mesh_path in split_mesh_paths]
@@ -1584,7 +1584,7 @@ if __name__ == '__main__':
     parser.add_argument('--start_point', type=int, nargs=3, default=start_point, help='Start point for the unrolling')
     parser.add_argument('--scale_factor', type=float, default=1.0, help='Scale factor for the mesh')
     parser.add_argument('--split_width', type=int, default=50000, help='Width for the mesh splitting')
-    parser.add_argument('--continue_from', type=int, default=0, help='Continue from a specific processing step. 0: beginning, 1: build points, 2: rolled ordered pointset, 3: interpolate ordered pointset, 4: optimize pointset, 5: meshing, 6: flattening')
+    parser.add_argument('--continue_from', type=int, default=0, help='Continue from a specific processing step. 0: beginning, 1: build points, 2: rolled ordered pointset, 3: interpolate ordered pointset, 4: optimize pointset, 5: meshing, 6: splitting mesh, 7: flattening')
 
     args = parser.parse_args()
 
