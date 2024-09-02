@@ -2065,6 +2065,9 @@ private:
         // Check left boundary
         if (ts_l != 1) {
             auto [side_old_l, invalid_l] = side_of(old_ts, ts_l);
+            if (invalid_l) {
+                std::cout << "Invalid left boundary for point " << i << ", " << j << " with ts_l: " << ts_l << " and old_ts: " << old_ts << std::endl;
+            }
             assert(!invalid_l);
             if (!invalid_l) {
                 auto [side_new_l, invalid_new_l] = side_of(old_ts + new_ts_d, ts_l);
@@ -2078,6 +2081,9 @@ private:
         // Check right boundary
         if (ts_r != 1) {
             auto [side_old_r, invalid_r] = side_of(old_ts, ts_r);
+            if (invalid_r) {
+                std::cout << "Invalid right boundary for point " << i << ", " << j << " with ts_r: " << ts_r << " and old_ts: " << old_ts << std::endl;
+            }
             assert(!invalid_r);
             if (!invalid_r) {
                 auto [side_new_r, invalid_new_r] = side_of(old_ts + new_ts_d, ts_r);
@@ -2091,6 +2097,9 @@ private:
         // Check new left boundary
         if (ts_ln != 1) {
             auto [side_old_ln, invalid_ln] = side_of(old_ts, ts_ln);
+            if (invalid_ln) {
+                std::cout << "Invalid new left boundary for point " << i << ", " << j << " with ts_ln: " << ts_ln << " and old_ts: " << old_ts << std::endl;
+            }
             assert(!invalid_ln);
             if (!invalid_ln) {
                 auto [side_new_ln, invalid_new_ln] = side_of(old_ts + new_ts_d, ts_ln);
@@ -2104,6 +2113,9 @@ private:
         // Check new right boundary
         if (ts_rn != 1) {
             auto [side_old_rn, invalid_rn] = side_of(old_ts, ts_rn);
+            if (invalid_rn) {
+                std::cout << "Invalid new right boundary for point " << i << ", " << j << " with ts_rn: " << ts_rn << " and old_ts: " << old_ts << std::endl;
+            }
             assert(!invalid_rn);
             if (!invalid_rn) {
                 auto [side_new_rn, invalid_new_rn] = side_of(old_ts + new_ts_d, ts_rn);
