@@ -625,7 +625,7 @@ class WalkToSheet():
                     # get all indices with the same angle vector
                     same_vector_indices = self.extract_all_same_vector(angle_vector, curve_angle_vector)
                     i_pos_in_same_vector = same_vector_indices.index(i)
-                    for j in range(len(interpolated_ts[i])):
+                    for j in range(len(interpolated_ts[i])-1, -1, -1):
                         if interpolated_ts[i][j] is None:
                             print(f"Interpolated ts is None at {i}, {j}")
                         if winding_direction:
