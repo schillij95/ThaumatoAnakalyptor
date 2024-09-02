@@ -620,6 +620,41 @@ class WalkToSheet():
                                 fixed_points[i][j] = False
                                 fixed_points[same_vector_indices[i_pos_in_same_vector+1]][j] = False
 
+                for i in range(len(interpolated_ts)-1, -1, -1):
+                    curve_angle_vector = angle_vector[i]
+                    # get all indices with the same angle vector
+                    same_vector_indices = self.extract_all_same_vector(angle_vector, curve_angle_vector)
+                    i_pos_in_same_vector = same_vector_indices.index(i)
+                    for j in range(len(interpolated_ts[i])):
+                        if interpolated_ts[i][j] is None:
+                            print(f"Interpolated ts is None at {i}, {j}")
+                        if winding_direction:
+                            if i_pos_in_same_vector > 0 and interpolated_ts[i][j] >= interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]:
+                                flipped_interpolations += 1
+                                # print(f"low side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not >= {interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]}")
+                                interpolated_ts[i][j], interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j], interpolated_ts[i][j]
+                                fixed_points[i][j] = False
+                                fixed_points[same_vector_indices[i_pos_in_same_vector-1]][j] = False
+                            if i_pos_in_same_vector < len(same_vector_indices) - 1 and interpolated_ts[i][j] <= interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]:
+                                flipped_interpolations += 1
+                                # print(f"high side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not <= {interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]}")
+                                interpolated_ts[i][j], interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j], interpolated_ts[i][j]
+                                fixed_points[i][j] = False
+                                fixed_points[same_vector_indices[i_pos_in_same_vector+1]][j] = False
+                        else:
+                            if i_pos_in_same_vector > 0 and interpolated_ts[i][j] <= interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]:
+                                flipped_interpolations += 1
+                                # print(f"low side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not <= {interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j]}")
+                                interpolated_ts[i][j], interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector-1]][j], interpolated_ts[i][j]
+                                fixed_points[i][j] = False
+                                fixed_points[same_vector_indices[i_pos_in_same_vector-1]][j] = False
+                            if i_pos_in_same_vector < len(same_vector_indices) - 1 and interpolated_ts[i][j] >= interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]:
+                                flipped_interpolations += 1
+                                # print(f"high side: Interpolated ts is not sorted at {i}, {j} with {interpolated_ts[i][j]} not >= {interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j]}")
+                                interpolated_ts[i][j], interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j] = interpolated_ts[same_vector_indices[i_pos_in_same_vector+1]][j], interpolated_ts[i][j]
+                                fixed_points[i][j] = False
+                                fixed_points[same_vector_indices[i_pos_in_same_vector+1]][j] = False
+
                 total_interpolations += flipped_interpolations
                 if flipped_interpolations == 0:
                     break
