@@ -143,7 +143,7 @@ def _find_mean_vector_kernel(vectors, random_vectors):
 n_vectors = 200
 find_mean_vector_kernel = torch.jit.trace(_find_mean_vector_kernel, (torch.rand((729,3)), torch.rand((n_vectors,3))))
 
-# Function to find the vector that is the propper mean vector for the input vectors vs when -v = v
+# Function to find the vector that is the proper mean vector for the input vectors vs when -v = v
 def find_mean_indiscriminative_vector(vectors, n, device):
     # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
