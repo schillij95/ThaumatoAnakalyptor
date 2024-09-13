@@ -166,7 +166,7 @@ def compute_means_adjacent(adjacent_ts, adjacent_normals, winding_direction):
 
     # Function to refine means based on adjacent means
     def refine_means(t_means, fixed, fixed_adjacent_ts):
-        for u in range(len(original_ts)) if random.random() < 0.5 else range(len(original_ts)-1, -1, -1): # randomly choose direction in which to iterate and refine
+        for u in range(len(original_ts)) if random.random() < 0.5 else range(len(original_ts)-1, -1, -1): # randomly choose direction in which to iterate and refine # Giorgio says: why random?
             for i in range(len(original_ts[u])):
                 # Determine the valid next mean
                 next_mean = next((t_means[j][i] for j in range(u-1, -1, -1) if t_means[j][i] is not None), None)
@@ -175,7 +175,7 @@ def compute_means_adjacent(adjacent_ts, adjacent_normals, winding_direction):
                 # Filter t values based on previous and next means
                 if not winding_direction:
                     prev_mean, next_mean = next_mean, prev_mean
-                adjacent_ts[u][i] = [t for t in original_ts[u][i] if (prev_mean is None or t > prev_mean) and (next_mean is None or t < next_mean)] if ((prev_mean is not None) or (random.random() < 0.75)) and ((next_mean is not None) or (random.random() < 0.75)) else []
+                adjacent_ts[u][i] = [t for t in original_ts[u][i] if (prev_mean is None or t > prev_mean) and (next_mean is None or t < next_mean)] if ((prev_mean is not None) or (random.random() < 0.75)) and ((next_mean is not None) or (random.random() < 0.75)) else [] # Giorgio says: why random?
                 if len(adjacent_ts[u][i]) == 0: # ensure that the t value is fixed if no valid t values are found
                     if fixed[u] == 1:
                         adjacent_ts[u][i] = fixed_adjacent_ts[u][i]
@@ -189,7 +189,7 @@ def compute_means_adjacent(adjacent_ts, adjacent_normals, winding_direction):
         for _ in range(max_iterations):
             previous_means = t_means[:]
             t_means = refine_means(t_means, fixed, fixed_adjacent_ts)
-            # Randomly set some t values to None
+            # Randomly set some t values to None # Giorgio says: why?
             for u in range(len(t_means)):
                 for i in range(len(t_means[u])):
                     if random.random() < 0.1:
@@ -1298,8 +1298,11 @@ class WalkToSheet():
             neighbours_dict = self.deduct_ordered_pointset_neighbours(interpolated_ts, angle_vector, winding_direction)
 
             # Optimize the full pointset for smooth surface with best guesses for interpolated t values
+            # interpolated_ts = self.optimize_adjacent_cpp(interpolated_ts, neighbours_dict, fixed_points, 
+            #                                             learning_rate=0.1, iterations=7, error_val_d=0.0001, unfix_factor=5.0,
+            #                                             verbose=True)
             interpolated_ts = self.optimize_adjacent_cpp(interpolated_ts, neighbours_dict, fixed_points, 
-                                                        learning_rate=0.1, iterations=7, error_val_d=0.0001, unfix_factor=5.0,
+                                                        learning_rate=0.2, iterations=11, error_val_d=0.0001, unfix_factor=2.5,
                                                         verbose=True)
 
             # Clip away invalid z values
