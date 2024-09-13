@@ -12,7 +12,7 @@ import os
 from datetime import datetime
 
 class MeshSplitter:
-    def __init__(self, mesh_path, umbilicus_path):
+    def __init__(self, mesh_path, umbilicus_path, scale_factor=1.0):
         # Load mesh
         self.mesh_path = mesh_path
         self.mesh = o3d.io.read_triangle_mesh(mesh_path)
@@ -25,7 +25,7 @@ class MeshSplitter:
         # Load the umbilicus data
         umbilicus_data = load_xyz_from_file(umbilicus_path)
         # scale and swap axis
-        umbilicus_data = scale_points(umbilicus_data, 1.0, axis_offset=-500)
+        umbilicus_data = scale_points(umbilicus_data, 1.0, axis_offset=-500) * scale_factor
         umbilicus_data, _ = shuffling_points_axis(umbilicus_data, umbilicus_data, axis_indices)
         # Separate the coordinates
         x, y, z = umbilicus_data.T
