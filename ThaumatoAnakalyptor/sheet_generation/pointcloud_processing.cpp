@@ -158,8 +158,8 @@ std::string format_filename(int number) {
 
 class PointCloudLoader {
 public:
-    PointCloudLoader(const std::vector<std::tuple<std::vector<int>, int, double>>& node_data, const std::string& base_path, bool verbose)
-        : node_data_(node_data), base_path_(base_path), verbose(verbose) {}
+    PointCloudLoader(const std::vector<std::tuple<std::vector<int>, int, double>>& node_data, const std::string& base_path, const int start_z, const int end_z, bool verbose)
+        : node_data_(node_data), base_path_(base_path), start_z_(start_z), end_z_(end_z), verbose(verbose) {}
 
     bool extract_ply_from_tar(const std::string& tar_path, const std::string& ply_filename, std::string& out_ply_content) {
         struct archive *a;
@@ -202,6 +202,13 @@ public:
             const auto& xyz = std::get<0>(node);
             size_t patch_nr = std::get<1>(node);
             double winding_angle = std::get<2>(node);
+
+            // Check if xyz[1] is within the specified range
+            if (xyz[1] < start_z_ || xyz[1] > end_z_) {
+                std::lock_guard<std::mutex> lock(mutex_);
+                print_progress();
+                continue;
+            }
 
             std::string tar_path = base_path_ + "/" + format_filename(xyz[0]) + "_" + format_filename(xyz[1]) + "_" + format_filename(xyz[2]) + ".tar";
             std::string ply_file_name = "surface_" + std::to_string(patch_nr) + ".ply";
@@ -246,27 +253,24 @@ public:
 
                 std::lock_guard<std::mutex> lock(mutex_);
                 print_progress();
-                all_points.insert(all_points.end(), points.begin(), points.end());
+                cloud_.pts.insert(cloud_.pts.end(), points.begin(), points.end());
             } catch (const std::exception& e) {
                 std::cerr << "Error processing node: " << e.what() << std::endl;
             }
         }
     }
 
-    void print_progress() {
-        if (!verbose) {
-            return;
-        }
-        progress++;
-        // print on one line
-        std::cout << "Progress: " << progress << "/" << problem_size << "\r";
-        std::cout.flush();
-    }
-
     void find_vertex_counts(size_t start, size_t end) {
         for (size_t index = start; index < end; ++index) {
             const auto& xyz = std::get<0>(node_data_[index]);
             size_t patch_nr = std::get<1>(node_data_[index]);
+
+            // Check if xyz[1] is within the specified range
+            if (xyz[1] < start_z_ || xyz[1] > end_z_) {
+                std::lock_guard<std::mutex> lock(mutex_);
+                print_progress();
+                continue;
+            }
 
             std::string tar_path = base_path_ + "/" + format_filename(xyz[0]) + "_" + format_filename(xyz[1]) + "_" + format_filename(xyz[2]) + ".tar";
             std::string ply_file_name = "surface_" + std::to_string(patch_nr) + ".ply";
@@ -280,10 +284,8 @@ public:
                     offset_per_node[index] = plyData.getElement("vertex").getProperty<double>("x").size();
                 }
             }
-            {
-                std::lock_guard<std::mutex> lock(mutex_);
-                print_progress();
-            }
+            std::lock_guard<std::mutex> lock(mutex_);
+            print_progress();
         }
     }
 
@@ -332,7 +334,7 @@ public:
             std::cout << "Loading all nodes..." << std::endl;
         }
         size_t total_points = find_total_points();
-        all_points.reserve(total_points);
+        cloud_.pts.reserve(total_points);
         if (verbose) {
             std::cout << "Total points: " << total_points << std::endl;
         }
@@ -360,34 +362,10 @@ public:
         }   
     }
 
-    PointCloud get_results() {
-        return PointCloud(std::move(all_points));  // Move the points instead of copying
-    }
-
     void free_memory() {
-        all_points.clear();
-        all_points.shrink_to_fit();
+        cloud_.pts.clear();
+        cloud_.pts.shrink_to_fit();
     }
-
-private:
-    std::vector<std::tuple<std::vector<int>, int, double>> node_data_;
-    // Preallocated NumPy arrays
-    // py::array_t<float> points, normals, colors;
-    std::vector<Point> all_points;
-    std::unique_ptr<size_t[]> offset_per_node;
-    std::string base_path_;
-    mutable std::mutex mutex_;
-    size_t progress = 0;
-    size_t problem_size = -1;
-    bool verbose;
-};
-
-class PointCloudProcessor {
-public:
-    explicit PointCloudProcessor(PointCloud&& cloud, bool verbose)
-        : cloud_(std::move(cloud)), verbose(verbose) {
-            std::cout << "Refining point cloud with " << cloud_.size() << " points" << std::endl;
-        }
 
     void deleteMarkedPoints() {
         std::cout << "Deleting marked points..." << std::endl;
@@ -479,7 +457,7 @@ public:
         std::vector<size_t> chunk_starts = getChunkStarts(num_threads, total_points, chunk_size);
 
         for (size_t i = 0; i < num_threads; ++i) {
-            threads.emplace_back(&PointCloudProcessor::processDuplicatesThreaded, this, chunk_starts[i], (i + 1 < num_threads) ? chunk_starts[i + 1] : total_points);
+            threads.emplace_back(&PointCloudLoader::processDuplicatesThreaded, this, chunk_starts[i], (i + 1 < num_threads) ? chunk_starts[i + 1] : total_points);
         }
 
         for (auto& thread : threads) {
@@ -523,7 +501,7 @@ public:
             try {
                 size_t start = i * part_length;
                 size_t end = (i == num_threads - 1) ? cloud_.pts.size() : start + part_length;
-                threads[i] = std::thread(&PointCloudProcessor::processSubset, this, index, start, end, spatial_threshold, angle_threshold);
+                threads[i] = std::thread(&PointCloudLoader::processSubset, this, index, start, end, spatial_threshold, angle_threshold);
             }
             catch (...) {
                 std::cerr << "Error processing subset" << std::endl;
@@ -545,15 +523,23 @@ public:
     }
 
     PointCloud get_results() {
-        return PointCloud(std::move(cloud_));  // Move the points instead of copying
+        return std::move(cloud_);  // Move the points instead of copying
     }
 
+
 private:
+    const int start_z_;
+    const int end_z_;
+    std::vector<std::tuple<std::vector<int>, int, double>> node_data_;
+    // Preallocated NumPy arrays
+    // py::array_t<float> points, normals, colors;
     PointCloud cloud_;
+    std::unique_ptr<size_t[]> offset_per_node;
+    std::string base_path_;
+    mutable std::mutex mutex_;
     size_t progress = 0;
     size_t problem_size = -1;
     bool verbose;
-    std::mutex mutex_;
 
     void print_progress() {
         if (!verbose) {
@@ -760,16 +746,9 @@ py::array_t<bool> vector_to_array(std::vector<bool> selected_originals) {
     return points_mask;
 }
 
-std::tuple<py::array_t<float>, py::array_t<float>, py::array_t<float>> load_pointclouds(const std::vector<std::tuple<std::vector<int>, int, double>>& nodes, const std::string& path, bool verbose = true) {
-    PointCloudLoader loader(nodes, path, verbose);
-    loader.load_all();
-    // PointCloud vector_points = loader.get_results();
-    PointCloudProcessor processor(std::move(loader.get_results()), verbose);
-    // Delete loader pointcloud
-    loader.free_memory();
-    if (verbose) {
-        std::cout << "Liberated memory in loader" << std::endl;
-    }
+std::tuple<py::array_t<float>, py::array_t<float>, py::array_t<float>> load_pointclouds(const std::vector<std::tuple<std::vector<int>, int, double>>& nodes, const std::string& path, const int start_z, const int end_z, bool verbose = true) {
+    PointCloudLoader processor(nodes, path, start_z, end_z, verbose);
+    processor.load_all();
     processor.sortPointsXYZW();
     if (verbose) {
         std::cout << "Sorted points by XYZW" << std::endl;
@@ -790,7 +769,7 @@ std::tuple<py::array_t<float>, py::array_t<float>, py::array_t<float>> load_poin
     if (verbose) {
         std::cout << "Sorted points by WZYX" << std::endl;
     }
-    PointCloud processed_points = processor.get_results();
+    PointCloud processed_points = std::move(processor.get_results());
     return to_array(std::move(processed_points));
 }
 

@@ -214,15 +214,17 @@ void assign_winding_angles_dfs(std::vector<Node>& graph) {
     std::vector<bool> visited(num_nodes, false);
 
     // Find a non-deleted node in the largest connected component to start the DFS
-    size_t start_node = -1;
+    size_t start_node = 0;
+    bool found_start_node = false;
     for (size_t i = 0; i < num_nodes; ++i) {
         if (!graph[i].deleted) {
             start_node = i;
+            found_start_node = true;
             break;
         }
     }
 
-    if (start_node == -1) {
+    if (!found_start_node) {
         std::cerr << "No non-deleted nodes found in the graph." << std::endl;
         return;
     }
@@ -311,15 +313,17 @@ void assign_winding_angles(std::vector<Node>& graph, float scale) {
     size_t num_nodes = graph.size();
     
     // Find a non-deleted node in the largest connected component to start the MST
-    size_t start_node = -1;
+    size_t start_node = 0;
+    bool found_start_node = false;
     for (size_t i = 0; i < num_nodes; ++i) {
         if (!graph[i].deleted) {
             start_node = i;
+            found_start_node = true;
             break;
         }
     }
 
-    if (start_node == -1) {
+    if (!found_start_node) {
         std::cerr << "No non-deleted nodes found in the graph." << std::endl;
         return;
     }

@@ -286,7 +286,7 @@ class WalkToSheet():
         self.save_path = os.path.dirname(path) + f"/{start_point[0]}_{start_point[1]}_{start_point[2]}/" + path.split("/")[-1]
         self.lock = threading.Lock()
 
-    def build_points(self):
+    def build_points(self, z_range=None):
         # Building the pointcloud 4D (position) + 3D (Normal) + 3D (Color, randomness) representation of the graph
         points = []
         normals = []
@@ -301,7 +301,7 @@ class WalkToSheet():
             patch_sheet_patch_info = (block, int(patch_id), winding_angle)
             sheet_infos.append(patch_sheet_patch_info)
         time_start = time.time()
-        points, normals, colors = pointcloud_processing.load_pointclouds(sheet_infos, self.path, True)
+        points, normals, colors = pointcloud_processing.load_pointclouds(sheet_infos, self.path, z_range[0], z_range[1], True)
         print(f"Time to load pointclouds: {time.time() - time_start}")
         print(f"Shape of patch_points: {np.array(points).shape}")
 
@@ -1510,7 +1510,7 @@ class WalkToSheet():
         # Return the paths to the split meshes
         return split_mesh_paths
 
-    def unroll(self, debug=False, continue_from=0):
+    def unroll(self, debug=False, continue_from=0, z_range=None, angle_step=1):
         mesh_path = os.path.join(self.save_path, "mesh.obj")
 
         # Set to false to load precomputed partial results during development
@@ -1520,7 +1520,7 @@ class WalkToSheet():
             start_fresh_build_points = continue_from <= 0
             if start_fresh_build_points:
                 # get points
-                points, normals, colors = self.build_points()
+                points, normals, colors = self.build_points(z_range=z_range)
 
                 # Make directory if it doesn't exist
                 os.makedirs(self.save_path, exist_ok=True)
@@ -1556,7 +1556,7 @@ class WalkToSheet():
 
         pointset_ply_path = os.path.join(self.save_path, "ordered_pointset.ply")
         # get nodes
-        ordered_pointsets = self.rolled_ordered_pointset(points_originals_selected, normals_originals_selected, continue_from=continue_from, debug=debug)
+        ordered_pointsets = self.rolled_ordered_pointset(points_originals_selected, normals_originals_selected, angle_step=angle_step, continue_from=continue_from, debug=debug)
 
         self.pointcloud_from_ordered_pointset(ordered_pointsets, pointset_ply_path)
 
@@ -1585,21 +1585,25 @@ if __name__ == '__main__':
     parser.add_argument('--scale_factor', type=float, default=1.0, help='Scale factor for the mesh')
     parser.add_argument('--split_width', type=int, default=50000, help='Width for the mesh splitting')
     parser.add_argument('--continue_from', type=int, default=0, help='Continue from a specific processing step. 0: beginning, 1: build points, 2: rolled ordered pointset, 3: interpolate ordered pointset, 4: optimize pointset, 5: meshing, 6: splitting mesh, 7: flattening')
+    parser.add_argument('--z_range', type=int, nargs=2, default=[-2147483648, 2147483647], help='Range of z values to mesh in')
+    parser.add_argument('--angle_step', type=float, default=0.5, help='Angle step for the unrolling')
 
     args = parser.parse_args()
 
     graph_path = os.path.join(os.path.dirname(args.path), args.graph)
-    # graph = load_graph(graph_path)
-    # min_z = min([graph.nodes[node]["centroid"][1] for node in graph.nodes])
-    # max_z = max([graph.nodes[node]["centroid"][1] for node in graph.nodes])
-    # print(f"Min z: {min_z}, Max z: {max_z}")
-    graph = None
+    if args.continue_from <= 0:
+        graph = load_graph(graph_path)
+        min_z = min([graph.nodes[node]["centroid"][1] for node in graph.nodes])
+        max_z = max([graph.nodes[node]["centroid"][1] for node in graph.nodes])
+        print(f"Min z: {min_z}, Max z: {max_z}")
+    else:
+        graph = None
     reference_path = graph_path.replace("evolved_graph", "subgraph")
     start_point = args.start_point
     scale_factor = args.scale_factor
     walk = WalkToSheet(graph, args.path, start_point, scale_factor, split_width=args.split_width)
     # walk.save_graph_pointcloud(reference_path)
-    walk.unroll(debug=args.debug, continue_from=args.continue_from)
+    walk.unroll(debug=args.debug, continue_from=args.continue_from, z_range=args.z_range, angle_step=args.angle_step)
 
 # Example command: python3 -m ThaumatoAnakalyptor.graph_to_mesh --path /scroll.volpkg/working/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks --graph /scroll.volpkg/working/scroll3_surface_points/1352_3600_5002/point_cloud_colorized_verso_subvolume_graph_BP_solved.pkl --start_point 1352 3600 5002 --debug
 # python3 -m ThaumatoAnakalyptor.graph_to_mesh --path /scroll2v2_surface_points/point_cloud_colorized_verso_subvolume_blocks --graph /scroll2v2_surface_points/1352_3600_5002/point_cloud_colorized_verso_subvolume_graph_BP_solved.pkl --start_point 1352 3600 5002
