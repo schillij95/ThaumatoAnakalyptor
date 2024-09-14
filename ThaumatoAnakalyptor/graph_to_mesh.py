@@ -1604,9 +1604,18 @@ if __name__ == '__main__':
     reference_path = graph_path.replace("evolved_graph", "subgraph")
     start_point = args.start_point
     scale_factor = args.scale_factor
+    z_range = args.z_range
+    # scale, coordinate transformatioin and clip z range. get it from original volume coordinate to instance patches coordinates
+    z_range[0] = (int(z_range[0] / scale_factor) + 500) // (200.0 / 50.0)
+    z_range[1] = (int(z_range[1] / scale_factor) + 500) // (200.0 / 50.0)
+    if z_range[0] < -2147483648:
+        z_range[0] = -2147483648
+    if z_range[1] > 2147483647:
+        z_range[1] = 2147483647
+    
     walk = WalkToSheet(graph, args.path, start_point, scale_factor, split_width=args.split_width)
     # walk.save_graph_pointcloud(reference_path)
-    walk.unroll(debug=args.debug, continue_from=args.continue_from, z_range=args.z_range, angle_step=args.angle_step)
+    walk.unroll(debug=args.debug, continue_from=args.continue_from, z_range=z_range, angle_step=args.angle_step)
 
 # Example command: python3 -m ThaumatoAnakalyptor.graph_to_mesh --path /scroll.volpkg/working/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks --graph /scroll.volpkg/working/scroll3_surface_points/1352_3600_5002/point_cloud_colorized_verso_subvolume_graph_BP_solved.pkl --start_point 1352 3600 5002 --debug
 # python3 -m ThaumatoAnakalyptor.graph_to_mesh --path /scroll2v2_surface_points/point_cloud_colorized_verso_subvolume_blocks --graph /scroll2v2_surface_points/1352_3600_5002/point_cloud_colorized_verso_subvolume_graph_BP_solved.pkl --start_point 1352 3600 5002
