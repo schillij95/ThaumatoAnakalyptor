@@ -127,6 +127,7 @@ float closest_valid_winding_angle(float f_init, float f_target) {
     }
     if (std::abs(x - (f_target - f_init) / 360.0f) > 1e-5) {
         std::cout << "Difference between x and (f_target - f_init) / 360.0f: " << std::abs(x - (f_target - f_init) / 360.0f) << std::endl;
+        std::cout << "f_init: " << f_init << ", f_target: " << f_target << ", x: " << x << ", result: " << result << std::endl;
     }
     return result;
 }
@@ -214,15 +215,17 @@ void assign_winding_angles_dfs(std::vector<Node>& graph) {
     std::vector<bool> visited(num_nodes, false);
 
     // Find a non-deleted node in the largest connected component to start the DFS
-    size_t start_node = -1;
+    size_t start_node = 0;
+    bool found_start_node = false;
     for (size_t i = 0; i < num_nodes; ++i) {
         if (!graph[i].deleted) {
             start_node = i;
+            found_start_node = true;
             break;
         }
     }
 
-    if (start_node == -1) {
+    if (!found_start_node) {
         std::cerr << "No non-deleted nodes found in the graph." << std::endl;
         return;
     }
@@ -237,7 +240,9 @@ void prim_mst_assign_f_star(size_t start_node, std::vector<Node>& graph, float s
     size_t num_nodes = graph.size();
     std::vector<bool> in_mst(num_nodes, false);
     std::vector<float> min_k_delta(num_nodes, std::numeric_limits<float>::max());
-    std::vector<size_t> parent(num_nodes, -1);
+    std::vector<size_t> parent(num_nodes, 0);
+    std::vector<bool> valid(num_nodes, false);
+    std::vector<float> k_values(num_nodes, 0.0);
 
     // Priority queue to pick the edge with the minimum k delta
     std::priority_queue<EdgeWithCertainty, std::vector<EdgeWithCertainty>, std::greater<EdgeWithCertainty>> pq;
@@ -254,6 +259,9 @@ void prim_mst_assign_f_star(size_t start_node, std::vector<Node>& graph, float s
 
         for (const auto& edge : graph[u].edges) {
             size_t v = edge.target_node;
+            if (graph[v].deleted) {
+                continue;
+            }
             // float k_delta = std::abs((graph[v].f_tilde - graph[u].f_tilde) - edge.k) / std::abs(edge.k); // difference between BP solution and estimated k from the graph
             // float k_delta = std::abs((graph[v].f_tilde - graph[u].f_tilde) - edge.k); // difference between BP solution and estimated k from the graph
             float k_delta = std::abs(scale * (graph[v].f_tilde - graph[u].f_tilde) - edge.k); // difference between BP solution and estimated k from the graph
@@ -263,6 +271,8 @@ void prim_mst_assign_f_star(size_t start_node, std::vector<Node>& graph, float s
                 min_k_delta[v] = k_delta;
                 pq.push({k_delta, v});
                 parent[v] = u;
+                k_values[v] = edge.k;
+                valid[v] = true;
             }
         }
     }
@@ -272,35 +282,30 @@ void prim_mst_assign_f_star(size_t start_node, std::vector<Node>& graph, float s
 
     // Find for each node the children
     std::vector<std::vector<size_t>> children(num_nodes);
+    std::vector<std::vector<float>> children_k_values(num_nodes);
+    
     for (size_t i = 0; i < num_nodes; ++i) {
-        if (parent[i] != -1) {
+        if (valid[i]) {
             children[parent[i]].push_back(i);
+            children_k_values[parent[i]].push_back(k_values[i]);
         }
     }
 
     // Traverse the MST in a DFS manner to assign f_star values
-    std::stack<int> stack;
+    std::stack<size_t> stack;
     stack.push(start_node);
 
     while (!stack.empty()) {
-        int current = stack.top();
+        size_t current = stack.top();
         stack.pop();
 
-        for (unsigned int child : children[current]) {
-            // Find edge from parent to child
-            Edge edge;
-            for (const auto& e : graph[current].edges) {
-                if (e.target_node == child) {
-                    edge = e;
-                    break;
-                }
-                // verbose if edge not found at last child
-                if (e.target_node == graph[current].edges.back().target_node) {
-                    std::cerr << "Edge not found for parent: " << current << " and child: " << child << std::endl;
-                }
+        for (size_t i = 0; i < children[current].size(); ++i) {
+            size_t child = children[current][i];
+            if (graph[child].deleted) {
+                continue;
             }
-            
-            graph[child].f_star = closest_valid_winding_angle(graph[child].f_init, graph[current].f_tilde + edge.k);
+            float k = children_k_values[current][i];
+            graph[child].f_star = closest_valid_winding_angle(graph[child].f_init, graph[current].f_tilde + k);
             graph[child].f_tilde = graph[child].f_star;
             stack.push(child);
         }
@@ -311,15 +316,17 @@ void assign_winding_angles(std::vector<Node>& graph, float scale) {
     size_t num_nodes = graph.size();
     
     // Find a non-deleted node in the largest connected component to start the MST
-    size_t start_node = -1;
+    size_t start_node = 0;
+    bool found_start_node = false;
     for (size_t i = 0; i < num_nodes; ++i) {
         if (!graph[i].deleted) {
             start_node = i;
+            found_start_node = true;
             break;
         }
     }
 
-    if (start_node == -1) {
+    if (!found_start_node) {
         std::cerr << "No non-deleted nodes found in the graph." << std::endl;
         return;
     }
@@ -792,14 +799,14 @@ void solve(std::vector<Node>& graph, int argc, char** argv) {
         
         edges_deletion_round++;
     }
+    // Assign winding angles to the graph
+    float scale = calculate_scale(graph, estimated_windings);
+    assign_winding_angles(graph, scale);
+
     // Calculate final histogram after all iterations
     calculate_histogram(graph, "final_histogram.png");
     // After generating all histograms, create a final video from the images
     create_video_from_histograms(histogram_dir, "winding_angle_histogram.avi", 10);
-
-    // Assign winding angles to the graph
-    float scale = calculate_scale(graph, estimated_windings);
-    assign_winding_angles(graph, scale);
 }
 
 int main(int argc, char** argv) {

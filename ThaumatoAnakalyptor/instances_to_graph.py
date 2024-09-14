@@ -1285,6 +1285,11 @@ def load_graph_winding_angle_from_binary(filename, graph):
     nodes_list = list(nodes_graph.keys())
     # assign winding angles
     for i in range(num_nodes):
+        if nodes[i]['deleted']:
+            # try detelting assigned k
+            if 'assigned_k' in nodes_graph[nodes_list[i]]:
+                del nodes_graph[nodes_list[i]]['assigned_k']
+            continue
         node = nodes_list[i]
         nodes_graph[node]['assigned_k'] = (nodes_graph[node]['winding_angle'] - nodes[i]['f_star']) // 360
         nodes_graph[node]['winding_angle'] = nodes[i]['f_star']
@@ -1294,7 +1299,7 @@ def load_graph_winding_angle_from_binary(filename, graph):
         if nodes[i]['deleted']:
             del nodes_graph[node]
 
-    print(f"Number of nodes remaining: {len(nodes_graph)} from {num_nodes}.")
+    print(f"Number of nodes remaining: {len(nodes_graph)} from {num_nodes}. Number of nodes in graph: {len(graph.nodes)}")
     return graph
 
 def compute(overlapp_threshold, start_point, path, recompute=False, stop_event=None, toy_problem=False, update_graph=False, flip_winding_direction=False):
