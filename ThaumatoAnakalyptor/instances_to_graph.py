@@ -1245,6 +1245,8 @@ def write_graph_to_binary(file_name, graph):
         # Write the number of nodes
         f.write(struct.pack('I', len(nodes)))
         for node in nodes_list:
+            # write the node z positioin as f
+            f.write(struct.pack('f', nodes[node]['centroid'][1]))
             # write the node winding angle as f
             f.write(struct.pack('f', nodes[node]['winding_angle']))
 

@@ -22,6 +22,7 @@ struct Edge {
 };
 
 struct Node {
+    float z;
     float f_init;
     float f_tilde;
     float f_star;
@@ -48,6 +49,7 @@ std::vector<Node> load_graph_from_binary(const std::string &file_name) {
 
     // Read each node's winding angle and store it as int16_t
     for (unsigned int i = 0; i < num_nodes; ++i) {
+        infile.read(reinterpret_cast<char*>(&graph[i].z), sizeof(float));
         infile.read(reinterpret_cast<char*>(&graph[i].f_init), sizeof(float));
         graph[i].f_tilde = graph[i].f_init;
         graph[i].f_star = graph[i].f_init;
@@ -75,7 +77,9 @@ std::vector<Node> load_graph_from_binary(const std::string &file_name) {
             edge.certainty_factored = edge.certainty;
             infile.read(reinterpret_cast<char*>(&edge.k), sizeof(float));
             infile.read(reinterpret_cast<char*>(&edge.same_block), sizeof(bool));
-
+            if (edge.same_block) { // no same subvolume edges
+                continue;
+            }
             graph[node_id].edges.push_back(edge);
         }
     }
@@ -132,13 +136,13 @@ float closest_valid_winding_angle(float f_init, float f_target) {
     return result;
 }
 
-void dfs(int node_index, const std::vector<Node>& graph, std::vector<bool>& visited, std::vector<int>& component) {
-    std::stack<int> stack;
+void dfs(size_t node_index, const std::vector<Node>& graph, std::vector<bool>& visited, std::vector<size_t>& component) {
+    std::stack<size_t> stack;
     stack.push(node_index);
     visited[node_index] = true;
 
     while (!stack.empty()) {
-        int current = stack.top();
+        size_t current = stack.top();
         stack.pop();
         component.push_back(current);
 
@@ -152,13 +156,13 @@ void dfs(int node_index, const std::vector<Node>& graph, std::vector<bool>& visi
 }
 
 void find_largest_connected_component(std::vector<Node>& graph) {
-    int num_nodes = graph.size();
+    size_t num_nodes = graph.size();
     std::vector<bool> visited(num_nodes, false);
-    std::vector<int> largest_component;
+    std::vector<size_t> largest_component;
 
-    for (int i = 0; i < num_nodes; ++i) {
+    for (size_t i = 0; i < num_nodes; ++i) {
         if (!visited[i] && !graph[i].deleted) {
-            std::vector<int> current_component;
+            std::vector<size_t> current_component;
             dfs(i, graph, visited, current_component);
 
             if (current_component.size() > largest_component.size()) {
@@ -169,12 +173,12 @@ void find_largest_connected_component(std::vector<Node>& graph) {
 
     // Flag nodes not in the largest connected component as deleted
     std::vector<bool> in_largest_component(num_nodes, false);
-    for (int node_index : largest_component) {
+    for (size_t node_index : largest_component) {
         in_largest_component[node_index] = true;
     }
 
-    int remaining_nodes = 0;
-    for (int i = 0; i < num_nodes; ++i) {
+    size_t remaining_nodes = 0;
+    for (size_t i = 0; i < num_nodes; ++i) {
         if (!in_largest_component[i]) {
             graph[i].deleted = true;
         }
@@ -302,6 +306,8 @@ void prim_mst_assign_f_star(size_t start_node, std::vector<Node>& graph, float s
         for (size_t i = 0; i < children[current].size(); ++i) {
             size_t child = children[current][i];
             if (graph[child].deleted) {
+                graph[child].f_star = 0;
+                graph[child].f_tilde = 0;
                 continue;
             }
             float k = children_k_values[current][i];
