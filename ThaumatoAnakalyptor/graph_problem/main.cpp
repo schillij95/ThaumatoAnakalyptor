@@ -77,9 +77,9 @@ std::vector<Node> load_graph_from_binary(const std::string &file_name) {
             edge.certainty_factored = edge.certainty;
             infile.read(reinterpret_cast<char*>(&edge.k), sizeof(float));
             infile.read(reinterpret_cast<char*>(&edge.same_block), sizeof(bool));
-            if (edge.same_block) { // no same subvolume edges
-                continue;
-            }
+            // if (edge.same_block) { // no same subvolume edges
+            //     continue;
+            // }
             graph[node_id].edges.push_back(edge);
         }
     }
