@@ -1430,7 +1430,7 @@ def random_walks():
     parser.add_argument('--pyramid_up_nr_average', type=int,help=f'Number of random walks to aggregate per landmark before walking up the graph. Default is {overlapp_threshold["pyramid_up_nr_average"]}.', default=int(overlapp_threshold["pyramid_up_nr_average"]))
     parser.add_argument('--toy_problem', help='Create toy subgraph for development', action='store_true')
     parser.add_argument('--update_graph', help='Update graph', action='store_true')
-    parser.add_argument('--create_graph', help='Create graph', action='store_true')
+    parser.add_argument('--create_graph', help='Create graph', action='store_true', help='Directly creates the binary .bin graph file from a previously constructed graph .pkl')
     parser.add_argument('--flip_winding_direction', help='Flip winding direction', action='store_true')
 
     # Take arguments back over
@@ -1470,20 +1470,21 @@ def random_walks():
     overlapp_threshold["min_end_steps"] = min_end_steps
     overlapp_threshold["pyramid_up_nr_average"] = args.pyramid_up_nr_average
 
-    if args.create_graph:
-        save_path = os.path.dirname(path) + f"/{start_point[0]}_{start_point[1]}_{start_point[2]}/" + path.split("/")[-1]
-        if args.toy_problem:
-            scroll_graph = load_graph(save_path.replace("blocks", "subgraph_angular") + ".pkl")
-        else:
-            scroll_graph = load_graph(path.replace("blocks", "scroll_graph_angular") + ".pkl")
-        
-        scroll_graph_solved = load_graph_winding_angle_from_binary(os.path.join(os.path.dirname(save_path), "output_graph.bin"), scroll_graph)
-
-        # save graph pickle
-        scroll_graph_solved.save_graph(save_path.replace("blocks", "graph_BP_solved") + ".pkl")
-    else:
+    if not args.create_graph: # only recompute graph if not directly creating the bin flag is set
         # Compute
         compute(overlapp_threshold=overlapp_threshold, start_point=start_point, path=path, recompute=recompute, toy_problem=args.toy_problem, update_graph=args.update_graph, flip_winding_direction=args.flip_winding_direction)
+    
+    # create and save graph as .bin
+    save_path = os.path.dirname(path) + f"/{start_point[0]}_{start_point[1]}_{start_point[2]}/" + path.split("/")[-1]
+    if args.toy_problem:
+        scroll_graph = load_graph(save_path.replace("blocks", "subgraph_angular") + ".pkl")
+    else:
+        scroll_graph = load_graph(path.replace("blocks", "scroll_graph_angular") + ".pkl")
+    
+    scroll_graph_solved = load_graph_winding_angle_from_binary(os.path.join(os.path.dirname(save_path), "output_graph.bin"), scroll_graph)
+
+    # save graph pickle
+    scroll_graph_solved.save_graph(save_path.replace("blocks", "graph_BP_solved") + ".pkl")
 
 if __name__ == '__main__':
     random_walks()
