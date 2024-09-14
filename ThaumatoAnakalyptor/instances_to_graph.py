@@ -1430,7 +1430,7 @@ def random_walks():
     parser.add_argument('--pyramid_up_nr_average', type=int,help=f'Number of random walks to aggregate per landmark before walking up the graph. Default is {overlapp_threshold["pyramid_up_nr_average"]}.', default=int(overlapp_threshold["pyramid_up_nr_average"]))
     parser.add_argument('--toy_problem', help='Create toy subgraph for development', action='store_true')
     parser.add_argument('--update_graph', help='Update graph', action='store_true')
-    parser.add_argument('--create_graph', help='Create graph', action='store_true', help='Directly creates the binary .bin graph file from a previously constructed graph .pkl')
+    parser.add_argument('--create_graph', help='Create graph. Directly creates the binary .bin graph file from a previously constructed graph .pkl', action='store_true')
     parser.add_argument('--flip_winding_direction', help='Flip winding direction', action='store_true')
 
     # Take arguments back over
