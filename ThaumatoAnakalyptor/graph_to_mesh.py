@@ -1606,8 +1606,8 @@ if __name__ == '__main__':
     scale_factor = args.scale_factor
     z_range = args.z_range
     # scale, coordinate transformatioin and clip z range. get it from original volume coordinate to instance patches coordinates
-    z_range[0] = (int(z_range[0] / scale_factor) + 500) // (200.0 / 50.0)
-    z_range[1] = (int(z_range[1] / scale_factor) + 500) // (200.0 / 50.0)
+    z_range[0] = int(int(z_range[0] / scale_factor) + 500) // (200.0 / 50.0)
+    z_range[1] = int(int(z_range[1] / scale_factor) + 500) // (200.0 / 50.0)
     if z_range[0] < -2147483648:
         z_range[0] = -2147483648
     if z_range[1] > 2147483647:
