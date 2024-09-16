@@ -54,7 +54,7 @@ std::vector<Node> load_graph_from_binary(const std::string &file_name) {
         graph[i].f_tilde = graph[i].f_init;
         graph[i].f_star = graph[i].f_init;
     }
-
+    std::cout << "Nodes loaded successfully." << std::endl;
     // Read the adjacency list
     for (unsigned int i = 0; i < num_nodes; ++i) {
         unsigned int node_id;
@@ -80,6 +80,14 @@ std::vector<Node> load_graph_from_binary(const std::string &file_name) {
             // if (edge.same_block) { // no same subvolume edges
             //     continue;
             // }
+            if (graph[edge.target_node].z < 1375 || graph[edge.target_node].z > 1875) {
+                graph[edge.target_node].deleted = true;
+                continue;
+            }
+            if (graph[node_id].z < 1375 || graph[node_id].z > 1875) {
+                graph[node_id].deleted = true;
+                continue;
+            }
             graph[node_id].edges.push_back(edge);
         }
     }
@@ -618,6 +626,9 @@ void update_nodes(std::vector<Node>& graph, float o, float spring_constant) {
     // Update f_tilde with the newly computed f_star values
     #pragma omp parallel for
     for (size_t i = 0; i < graph.size(); ++i) {
+        if (graph[i].deleted) {
+            continue;
+        }
         graph[i].f_tilde = graph[i].f_star;
     }
 }

@@ -1594,7 +1594,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     graph_path = os.path.join(os.path.dirname(args.path), args.graph)
-    if args.continue_from <= 0:
+    if args.continue_from <= 2:
         graph = load_graph(graph_path)
         min_z = min([graph.nodes[node]["centroid"][1] for node in graph.nodes])
         max_z = max([graph.nodes[node]["centroid"][1] for node in graph.nodes])
