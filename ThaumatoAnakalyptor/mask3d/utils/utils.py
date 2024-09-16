@@ -114,6 +114,7 @@ def load_checkpoint_with_missing_or_exsessive_keys(cfg, model):
         else:
             logger.warning(f"excessive key: {key}")
     model.load_state_dict(new_state_dict)
+    
     return cfg, model
 
 
