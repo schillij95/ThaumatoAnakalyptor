@@ -1693,6 +1693,21 @@ private:
                         index[o]++;
                     }
                 }
+                
+                // Shrink to fit ordered_points[o][i] and so on to index[o]
+                for (size_t o = 0; o < totalAngles; ++o) {
+                    ordered_pointset[o][i].resize(index[o]);
+                    ordered_distances[o][i].resize(index[o]);
+                    ordered_points[o][i].resize(index[o]);
+                    ordered_normals[o][i].resize(index[o]);
+                }
+
+                // Check that each point has 4 entries
+                for (size_t o = 0; o < totalAngles; ++o) {
+                    if (ordered_pointset[o][i].size() != counts[o][i]) {
+                        std::cout << "Error: ordered pointset size does not match counts" << std::endl;
+                    }
+                }
 
 
                 if (i == z_positions.size() / 2) {
