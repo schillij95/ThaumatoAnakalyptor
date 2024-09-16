@@ -919,7 +919,7 @@ class ScrollGraph(Graph):
         blocks_tar_files = glob.glob(path_instances + '/*.tar')
 
         #from original coordinates to instance coordinates
-        start_block, patch_id = find_starting_patch([start_point], path_instances)
+        start_block, patch_id = (0, 0, 0), 0
         self.start_block, self.patch_id, self.start_point = start_block, patch_id, start_point
 
         print(f"Found {len(blocks_tar_files)} blocks.")
@@ -1307,7 +1307,7 @@ def load_graph_winding_angle_from_binary(filename, graph):
 def compute(overlapp_threshold, start_point, path, recompute=False, stop_event=None, toy_problem=False, update_graph=False, flip_winding_direction=False):
 
     umbilicus_path = os.path.dirname(path) + "/umbilicus.txt"
-    start_block, patch_id = find_starting_patch([start_point], path)
+    start_block, patch_id = (0, 0, 0), 0
 
     save_path = os.path.dirname(path) + f"/{start_point[0]}_{start_point[1]}_{start_point[2]}/" + path.split("/")[-1]
     if not os.path.exists(os.path.dirname(save_path)):

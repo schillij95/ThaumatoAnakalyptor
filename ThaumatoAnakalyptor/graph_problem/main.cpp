@@ -80,14 +80,14 @@ std::vector<Node> load_graph_from_binary(const std::string &file_name) {
             // if (edge.same_block) { // no same subvolume edges
             //     continue;
             // }
-            if (graph[edge.target_node].z < 1375 || graph[edge.target_node].z > 1875) {
-                graph[edge.target_node].deleted = true;
-                continue;
-            }
-            if (graph[node_id].z < 1375 || graph[node_id].z > 1875) {
-                graph[node_id].deleted = true;
-                continue;
-            }
+            // if (graph[edge.target_node].z < 1375 || graph[edge.target_node].z > 1875) {
+            //     graph[edge.target_node].deleted = true;
+            //     continue;
+            // }
+            // if (graph[node_id].z < 1375 || graph[node_id].z > 1875) {
+            //     graph[node_id].deleted = true;
+            //     continue;
+            // }
             graph[node_id].edges.push_back(edge);
         }
     }
