@@ -267,9 +267,10 @@ class MeshSplitter:
             self.vertices_np = npzfile['vertices']
 
 
-    def split_mesh(self, split_width):
+    def split_mesh(self, split_width, stamp=None):
         # window mesh folder name with datetime string
-        stamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        if stamp is None:
+            stamp = datetime.now().strftime("%Y%m%d%H%M%S")
         window_mesh_name = f"windowed_mesh_{stamp}"
         # Function to cut the mesh into pieces along the x-axis
         vertices = np.asarray(self.mesh.vertices)
@@ -310,16 +311,16 @@ class MeshSplitter:
             o3d.io.write_triangle_mesh(path_window, cut_mesh)
             window_start = window_end
         
-        return mesh_paths
+        return mesh_paths, stamp
         
-    def compute(self, split_width=50000, fresh_start=True):
+    def compute(self, split_width=50000, fresh_start=True, stamp=None):
         if fresh_start:
             self.compute_uv_with_bfs(0)
             self.scale_uv_x()
             self.save_vertices()
         else:
             self.load_vertices()
-        return self.split_mesh(split_width)
+        return self.split_mesh(split_width, stamp=stamp)
 
 if __name__ == '__main__':
     import argparse

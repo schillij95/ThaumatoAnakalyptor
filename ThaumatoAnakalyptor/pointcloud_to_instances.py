@@ -672,7 +672,7 @@ def pointcloud_inference(path, folder, dest, main_drive, alternative_drives, fix
     init()
     model = get_model()
     # model = torch.nn.DataParallel(model)
-    # model.to('cuda')  # Move model to GPU
+    model.to('cuda')  # Move model to GPU
 
     dataset = PointCloudDataset(path, folder, dest, main_drive, alternative_drives, fix_umbilicus, umbilicus_points_path, start, stop, size, umbilicus_distance_threshold, score_threshold, batch_size, recompute=recompute)
     dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=custom_collate_fn, shuffle=False, num_workers=12, prefetch_factor=2)  # Adjust num_workers as per your system
