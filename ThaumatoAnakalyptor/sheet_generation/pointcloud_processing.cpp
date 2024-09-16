@@ -1686,6 +1686,11 @@ private:
                 for (size_t j = 0; j < grouped_points[g].size(); ++j) {
                     if (in_range[i][j]) {
                         int o = angle_index_o[i][j];
+                        // Check size of ordered_pointset[o][i] and so on
+                        if (index[o] >= counts[o][i]) {
+                            std::cout << "Error: index is out of bounds" << std::endl;
+                            continue;
+                        }
                         ordered_pointset[o][i][index[o]] = grouped_ts[g][j];
                         ordered_distances[o][i][index[o]] = grouped_distances[g][j];
                         ordered_points[o][i][index[o]] = grouped_points[g][j];
@@ -1693,7 +1698,7 @@ private:
                         index[o]++;
                     }
                 }
-                
+
                 // Shrink to fit ordered_points[o][i] and so on to index[o]
                 for (size_t o = 0; o < totalAngles; ++o) {
                     ordered_pointset[o][i].resize(index[o]);
