@@ -2,12 +2,12 @@ cmake_minimum_required(VERSION 3.5)
 project(sheet_generation)
 
 # Set the build type if it's not already set
-# set(CMAKE_BUILD_TYPE Debug)
-set(CMAKE_BUILD_TYPE Release)
+set(CMAKE_BUILD_TYPE Debug)
+#set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_CXX_STANDARD 17)
 
 # Add custom optimization flags for the release build
-set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+#set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
 # Add pybind11 submodule
 add_subdirectory(pybind11)
