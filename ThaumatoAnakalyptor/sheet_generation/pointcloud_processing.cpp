@@ -1695,6 +1695,10 @@ private:
                         ordered_distances[o][i][index[o]] = grouped_distances[g][j];
                         ordered_points[o][i][index[o]] = grouped_points[g][j];
                         ordered_normals[o][i][index[o]] = grouped_normals[g][j];
+                        // Check that ordered_points[o][i] at index[o] has 4 entries
+                        if (ordered_points[o][i][index[o]].size() != 4) {
+                            std::cout << "Error: ordered points size does not match 4" << std::endl;
+                        }
                         index[o]++;
                     }
                 }
