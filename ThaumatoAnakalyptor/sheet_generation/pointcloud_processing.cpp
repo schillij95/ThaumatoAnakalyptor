@@ -1698,6 +1698,7 @@ private:
                         // Check that ordered_points[o][i] at index[o] has 4 entries
                         if (ordered_points[o][i][index[o]].size() != 4) {
                             std::cout << "Error: ordered points size does not match 4" << std::endl;
+                            continue;
                         }
                         index[o]++;
                     }
@@ -1714,7 +1715,7 @@ private:
                 // Check that each point has 4 entries
                 for (size_t o = 0; o < totalAngles; ++o) {
                     if (ordered_pointset[o][i].size() != counts[o][i]) {
-                        std::cout << "Error: ordered pointset size does not match counts" << std::endl;
+                        std::cout << "Error: ordered pointset size does not match counts " << ordered_pointset[o][i].size() << " != " << counts[o][i] << std::endl;
                     }
                 }
 
