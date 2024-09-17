@@ -6,6 +6,9 @@ project(sheet_generation)
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_CXX_STANDARD 17)
 
+# Add optimization flags for the release build
+set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+
 # Add pybind11 submodule
 add_subdirectory(pybind11)
 
@@ -19,6 +22,7 @@ find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 find_package(Threads REQUIRED)  # Find the threading library
 find_package(LibArchive REQUIRED)
 find_package(TBB REQUIRED)
+find_package(OpenMP REQUIRED)
 
 # Include directories for external libraries and headers
 include_directories(${LibArchive_INCLUDE_DIRS})
@@ -28,4 +32,4 @@ pybind11_add_module(sheet_generation solver.cpp)
 pybind11_add_module(pointcloud_processing pointcloud_processing.cpp)
 # Link YAML-CPP library
 target_link_libraries(sheet_generation PRIVATE yaml-cpp Eigen3::Eigen ${CMAKE_THREAD_LIBS_INIT})
-target_link_libraries(pointcloud_processing PRIVATE ${CMAKE_THREAD_LIBS_INIT} ${LibArchive_LIBRARIES} TBB::tbb hdbscan)
+target_link_libraries(pointcloud_processing PRIVATE ${CMAKE_THREAD_LIBS_INIT} ${LibArchive_LIBRARIES} TBB::tbb hdbscan OpenMP::OpenMP_CXX)
