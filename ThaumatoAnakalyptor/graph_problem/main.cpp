@@ -1,7 +1,3 @@
-/*
-Julian Schilliger 2024 ThaumatoAnakalypptor
-*/
-
 #include <opencv2/opencv.hpp>
 #include <iostream>
 #include <fstream>
@@ -13,17 +9,21 @@ Julian Schilliger 2024 ThaumatoAnakalypptor
 #include <limits>
 #include <iomanip>
 #include <filesystem>
+#include <argparse.hpp>
 
 namespace fs = std::filesystem;
 
 struct Edge {
     unsigned int target_node;
     float certainty;
+    float certainty_factor = 1.0f;
+    float certainty_factored;
     float k;
     bool same_block;
 };
 
 struct Node {
+    float z;
     float f_init;
     float f_tilde;
     float f_star;
@@ -31,7 +31,7 @@ struct Node {
     std::vector<Edge> edges;
 };
 
-std::vector<Node> load_graph_from_binary(const std::string &file_name) {
+std::vector<Node> load_graph_from_binary(const std::string &file_name, bool clip_z = false, float z_min = 0.0f, float z_max = 0.0f) {
     std::vector<Node> graph;
     std::ifstream infile(file_name, std::ios::binary);
 
@@ -50,11 +50,12 @@ std::vector<Node> load_graph_from_binary(const std::string &file_name) {
 
     // Read each node's winding angle and store it as int16_t
     for (unsigned int i = 0; i < num_nodes; ++i) {
+        infile.read(reinterpret_cast<char*>(&graph[i].z), sizeof(float));
         infile.read(reinterpret_cast<char*>(&graph[i].f_init), sizeof(float));
         graph[i].f_tilde = graph[i].f_init;
         graph[i].f_star = graph[i].f_init;
     }
-
+    std::cout << "Nodes loaded successfully." << std::endl;
     // Read the adjacency list
     for (unsigned int i = 0; i < num_nodes; ++i) {
         unsigned int node_id;
@@ -66,11 +67,29 @@ std::vector<Node> load_graph_from_binary(const std::string &file_name) {
         for (unsigned int j = 0; j < num_edges; ++j) {
             Edge edge;
             infile.read(reinterpret_cast<char*>(&edge.target_node), sizeof(unsigned int));
-
             infile.read(reinterpret_cast<char*>(&edge.certainty), sizeof(float));
+            // clip certainty
+            // if (edge.certainty < 0.001f) {
+            //     std::cout << "Certainty below 0.001: " << edge.certainty << std::endl;
+            //     edge.certainty = 0.001f;
+            // }
+            // add certainty factored
+            edge.certainty_factored = edge.certainty;
             infile.read(reinterpret_cast<char*>(&edge.k), sizeof(float));
             infile.read(reinterpret_cast<char*>(&edge.same_block), sizeof(bool));
-
+            if (clip_z) {
+                if (graph[edge.target_node].z < z_min || graph[edge.target_node].z > z_max) {
+                    graph[edge.target_node].deleted = true;
+                    continue;
+                }
+                if (graph[node_id].z < z_min || graph[node_id].z > z_max) {
+                    graph[node_id].deleted = true;
+                    continue;
+                }
+            }
+            // if (edge.same_block) { // no same subvolume edges
+            //     continue;
+            // }
             graph[node_id].edges.push_back(edge);
         }
     }
@@ -116,16 +135,24 @@ void save_graph_to_binary(const std::string& file_name, const std::vector<Node>&
 
 float closest_valid_winding_angle(float f_init, float f_target) {
     int x = static_cast<int>(std::round((f_target - f_init) / 360.0f));
-    return f_init + x * 360.0f;
+    float result = f_init + x * 360.0f;
+    if (std::abs(f_target - result) > 10.0f) {
+        std::cout << "Difference between f_target and result: " << std::abs(f_target - result) << std::endl;
+    }
+    if (std::abs(x - (f_target - f_init) / 360.0f) > 1e-5) {
+        std::cout << "Difference between x and (f_target - f_init) / 360.0f: " << std::abs(x - (f_target - f_init) / 360.0f) << std::endl;
+        std::cout << "f_init: " << f_init << ", f_target: " << f_target << ", x: " << x << ", result: " << result << std::endl;
+    }
+    return result;
 }
 
-void dfs(int node_index, const std::vector<Node>& graph, std::vector<bool>& visited, std::vector<int>& component) {
-    std::stack<int> stack;
+void dfs(size_t node_index, const std::vector<Node>& graph, std::vector<bool>& visited, std::vector<size_t>& component) {
+    std::stack<size_t> stack;
     stack.push(node_index);
     visited[node_index] = true;
 
     while (!stack.empty()) {
-        int current = stack.top();
+        size_t current = stack.top();
         stack.pop();
         component.push_back(current);
 
@@ -139,13 +166,13 @@ void dfs(int node_index, const std::vector<Node>& graph, std::vector<bool>& visi
 }
 
 void find_largest_connected_component(std::vector<Node>& graph) {
-    int num_nodes = graph.size();
+    size_t num_nodes = graph.size();
     std::vector<bool> visited(num_nodes, false);
-    std::vector<int> largest_component;
+    std::vector<size_t> largest_component;
 
-    for (int i = 0; i < num_nodes; ++i) {
+    for (size_t i = 0; i < num_nodes; ++i) {
         if (!visited[i] && !graph[i].deleted) {
-            std::vector<int> current_component;
+            std::vector<size_t> current_component;
             dfs(i, graph, visited, current_component);
 
             if (current_component.size() > largest_component.size()) {
@@ -156,12 +183,12 @@ void find_largest_connected_component(std::vector<Node>& graph) {
 
     // Flag nodes not in the largest connected component as deleted
     std::vector<bool> in_largest_component(num_nodes, false);
-    for (int node_index : largest_component) {
+    for (size_t node_index : largest_component) {
         in_largest_component[node_index] = true;
     }
 
-    int remaining_nodes = 0;
-    for (int i = 0; i < num_nodes; ++i) {
+    size_t remaining_nodes = 0;
+    for (size_t i = 0; i < num_nodes; ++i) {
         if (!in_largest_component[i]) {
             graph[i].deleted = true;
         }
@@ -198,19 +225,21 @@ void dfs_assign_f_star(int node_index, std::vector<Node>& graph, std::vector<boo
 }
 
 void assign_winding_angles_dfs(std::vector<Node>& graph) {
-    int num_nodes = graph.size();
+    size_t num_nodes = graph.size();
     std::vector<bool> visited(num_nodes, false);
 
     // Find a non-deleted node in the largest connected component to start the DFS
-    int start_node = -1;
-    for (int i = 0; i < num_nodes; ++i) {
+    size_t start_node = 0;
+    bool found_start_node = false;
+    for (size_t i = 0; i < num_nodes; ++i) {
         if (!graph[i].deleted) {
             start_node = i;
+            found_start_node = true;
             break;
         }
     }
 
-    if (start_node == -1) {
+    if (!found_start_node) {
         std::cerr << "No non-deleted nodes found in the graph." << std::endl;
         return;
     }
@@ -221,11 +250,13 @@ void assign_winding_angles_dfs(std::vector<Node>& graph) {
 
 using EdgeWithCertainty = std::pair<float, int>;  // {certainty, target_node}
 
-void prim_mst_assign_f_star(int start_node, std::vector<Node>& graph) {
+void prim_mst_assign_f_star(size_t start_node, std::vector<Node>& graph, float scale) {
     size_t num_nodes = graph.size();
     std::vector<bool> in_mst(num_nodes, false);
     std::vector<float> min_k_delta(num_nodes, std::numeric_limits<float>::max());
-    std::vector<int> parent(num_nodes, -1);
+    std::vector<size_t> parent(num_nodes, 0);
+    std::vector<bool> valid(num_nodes, false);
+    std::vector<float> k_values(num_nodes, 0.0);
 
     // Priority queue to pick the edge with the minimum k delta
     std::priority_queue<EdgeWithCertainty, std::vector<EdgeWithCertainty>, std::greater<EdgeWithCertainty>> pq;
@@ -234,82 +265,136 @@ void prim_mst_assign_f_star(int start_node, std::vector<Node>& graph) {
     min_k_delta[start_node] = 0.0f;
 
     while (!pq.empty()) {
-        int u = pq.top().second;
+        size_t u = pq.top().second;
         pq.pop();
 
         if (in_mst[u]) continue;
         in_mst[u] = true;
 
         for (const auto& edge : graph[u].edges) {
-            int v = edge.target_node;
-            float k_delta = std::abs((graph[v].f_tilde - graph[u].f_tilde) - edge.k) / std::abs(edge.k); // difference between BP solution and estimated k from the graph
+            size_t v = edge.target_node;
+            if (graph[v].deleted) {
+                continue;
+            }
+            // float k_delta = std::abs((graph[v].f_tilde - graph[u].f_tilde) - edge.k) / std::abs(edge.k); // difference between BP solution and estimated k from the graph
+            // float k_delta = std::abs((graph[v].f_tilde - graph[u].f_tilde) - edge.k); // difference between BP solution and estimated k from the graph
+            float k_delta = std::abs(scale * (graph[v].f_tilde - graph[u].f_tilde) - edge.k); // difference between BP solution and estimated k from the graph
+            // float k_delta = std::abs(edge.certainty_factored); // adpated certainty of the edge
 
             if (!in_mst[v] && k_delta < min_k_delta[v]) {
                 min_k_delta[v] = k_delta;
                 pq.push({k_delta, v});
                 parent[v] = u;
+                k_values[v] = edge.k;
+                valid[v] = true;
             }
         }
     }
 
     // Set f_star for the root node (start_node)
-    graph[start_node].f_star = graph[start_node].f_init;
+    graph[start_node].f_tilde = graph[start_node].f_init;
 
     // Find for each node the children
-    std::vector<std::vector<unsigned int>> children(num_nodes);
-    for (unsigned int i = 0; i < num_nodes; ++i) {
-        if (parent[i] != -1) {
+    std::vector<std::vector<size_t>> children(num_nodes);
+    std::vector<std::vector<float>> children_k_values(num_nodes);
+    
+    for (size_t i = 0; i < num_nodes; ++i) {
+        if (valid[i]) {
             children[parent[i]].push_back(i);
+            children_k_values[parent[i]].push_back(k_values[i]);
         }
     }
 
     // Traverse the MST in a DFS manner to assign f_star values
-    std::stack<int> stack;
+    std::stack<size_t> stack;
     stack.push(start_node);
 
     while (!stack.empty()) {
-        int current = stack.top();
+        size_t current = stack.top();
         stack.pop();
 
-        for (unsigned int child : children[current]) {
-            // Find edge from parent to child
-            Edge edge;
-            for (const auto& e : graph[current].edges) {
-                if (e.target_node == child) {
-                    edge = e;
-                    break;
-                }
-                // verbose if edge not found at last child
-                if (e.target_node == graph[current].edges.back().target_node) {
-                    std::cerr << "Edge not found for parent: " << current << " and child: " << child << std::endl;
-                }
+        for (size_t i = 0; i < children[current].size(); ++i) {
+            size_t child = children[current][i];
+            if (graph[child].deleted) {
+                graph[child].f_star = 0;
+                graph[child].f_tilde = 0;
+                continue;
             }
-
-            graph[child].f_star = closest_valid_winding_angle(graph[child].f_init, graph[current].f_tilde + edge.k);
+            float k = children_k_values[current][i];
+            graph[child].f_star = closest_valid_winding_angle(graph[child].f_init, graph[current].f_tilde + k);
+            graph[child].f_tilde = graph[child].f_star;
             stack.push(child);
         }
     }
 }
 
-void assign_winding_angles(std::vector<Node>& graph) {
-    int num_nodes = graph.size();
+void assign_winding_angles(std::vector<Node>& graph, float scale) {
+    size_t num_nodes = graph.size();
     
     // Find a non-deleted node in the largest connected component to start the MST
-    int start_node = -1;
-    for (int i = 0; i < num_nodes; ++i) {
+    size_t start_node = 0;
+    bool found_start_node = false;
+    for (size_t i = 0; i < num_nodes; ++i) {
         if (!graph[i].deleted) {
             start_node = i;
+            found_start_node = true;
             break;
         }
     }
 
-    if (start_node == -1) {
+    if (!found_start_node) {
         std::cerr << "No non-deleted nodes found in the graph." << std::endl;
         return;
     }
 
     // Perform MST to assign f_star values
-    prim_mst_assign_f_star(start_node, graph);
+    prim_mst_assign_f_star(start_node, graph, scale);
+}
+
+float certainty_factor(float error) { // certainty factor based on the error. exp (-) as function. 1 for 0 error, 0.1 for 360 error (1 winding off)
+    // x = - log (0.1) / 360
+    float winding_off_factor = 0.4f;
+    float x = - std::log(winding_off_factor) / 360.0f;
+    float factor = std::exp(-x * error);
+    // clip to range winding_off_factor to 1
+    if (factor < winding_off_factor) {
+        factor = winding_off_factor;
+    }
+    return factor;
+}
+
+void update_weights(std::vector<Node>& graph, float scale) {
+    for (auto& node : graph) {
+        std::vector<float> errors(node.edges.size());
+        float weighted_mean_error = 0.0f;
+        float mean_certainty = 0.0f;
+        for (size_t i = 0; i < node.edges.size(); ++i) {
+            // difference between BP solution and estimated k from the graph
+            errors[i] = std::abs(scale * (graph[node.edges[i].target_node].f_tilde - node.f_tilde) - node.edges[i].k);
+            weighted_mean_error += errors[i] * node.edges[i].certainty_factored;
+            mean_certainty += node.edges[i].certainty_factored;
+        }
+        if (mean_certainty == 0.0f) {
+            continue;
+        }
+        weighted_mean_error /= mean_certainty;
+        for (size_t i = 0; i < node.edges.size(); ++i) {
+            // asolute distance from the mean error
+            errors[i] = std::abs(errors[i] - weighted_mean_error);
+        }
+        float factors_mean = 0.0f;
+        for (size_t i = 0; i < node.edges.size(); ++i) {
+            // certainty factor based on the error
+            node.edges[i].certainty_factor = 0.8f * node.edges[i].certainty_factor + 0.2f * certainty_factor(errors[i]);
+            factors_mean += node.edges[i].certainty_factor;
+        }
+        factors_mean /= node.edges.size();
+        // Normalize the factors
+        for (auto& edge : node.edges) {
+            edge.certainty_factor /= factors_mean;
+            edge.certainty_factored = edge.certainty * edge.certainty_factor;
+        }
+    }
 }
 
 float min_f_star(const std::vector<Node>& graph) {
@@ -340,6 +425,15 @@ float max_f_star(const std::vector<Node>& graph) {
     }
 
     return max_f;
+}
+
+float calculate_scale(const std::vector<Node>& graph, int estimated_windings) {
+    if (estimated_windings <= 0) {
+        return 1.0f;
+    }
+    float min_f = min_f_star(graph);
+    float max_f = max_f_star(graph);
+    return (360.0f * estimated_windings) / (max_f - min_f);
 }
 
 float exact_matching_score(const std::vector<Node>& graph) {
@@ -376,7 +470,7 @@ float approximate_matching_loss(const std::vector<Node>& graph, float a = 1.0f) 
     return loss;
 }
 
-void calculate_histogram(const std::vector<Node>& graph, const std::string& filename = std::string(), int num_buckets = 512) {
+void calculate_histogram(const std::vector<Node>& graph, const std::string& filename = std::string(), int num_buckets = 1000) {
     // Find min and max f_star values
     float min_f = min_f_star(graph);
     float max_f = max_f_star(graph);
@@ -400,7 +494,7 @@ void calculate_histogram(const std::vector<Node>& graph, const std::string& file
 
     // Create a blank image for the histogram
     int hist_w = num_buckets;  // width of the histogram image matches the number of buckets
-    int hist_h = 1000;  // height of the histogram image, increased to 1000 pixels
+    int hist_h = 800;  // height of the histogram image, increased to 1000 pixels
     int bin_w = std::max(1, hist_w / num_buckets);  // Ensure bin width is at least 1 pixel
 
     cv::Mat hist_image(hist_h, hist_w + 100, CV_8UC3, cv::Scalar(255, 255, 255));  // Extra space for labels
@@ -509,7 +603,7 @@ bool remove_invalid_edges(std::vector<Node>& graph, float threshold = 0.1) {
 
 void update_nodes(std::vector<Node>& graph, float o, float spring_constant) {
     #pragma omp parallel for
-    for (unsigned int i = 0; i < graph.size(); ++i) {
+    for (size_t i = 0; i < graph.size(); ++i) {
         if (graph[i].deleted) {
             continue;
         }
@@ -520,7 +614,9 @@ void update_nodes(std::vector<Node>& graph, float o, float spring_constant) {
             if (graph[edge.target_node].deleted) {
                 continue;
             }
-            unsigned int neighbor_node = edge.target_node;
+            size_t neighbor_node = edge.target_node;
+            // sum_w_f_tilde_k += edge.certainty_factored * (graph[neighbor_node].f_tilde - spring_constant * edge.k);
+            // sum_w += edge.certainty_factored;
             sum_w_f_tilde_k += edge.certainty * (graph[neighbor_node].f_tilde - spring_constant * edge.k);
             sum_w += edge.certainty;
         }
@@ -531,7 +627,10 @@ void update_nodes(std::vector<Node>& graph, float o, float spring_constant) {
 
     // Update f_tilde with the newly computed f_star values
     #pragma omp parallel for
-    for (unsigned int i = 0; i < graph.size(); ++i) {
+    for (size_t i = 0; i < graph.size(); ++i) {
+        if (graph[i].deleted) {
+            continue;
+        }
         graph[i].f_tilde = graph[i].f_star;
     }
 }
@@ -565,38 +664,42 @@ std::vector<float> generate_spring_constants(float start_value, int steps) {
 }
 
 // This is an example of a solve function that takes the graph and parameters as input
-void solve(std::vector<Node>& graph, int argc, char** argv) {
+void solve(std::vector<Node>& graph, argparse::ArgumentParser* program) {
     // Default values for parameters
+    int estimated_windings = 0;
     int num_iterations = 10000;
     float spring_constant = 2.0f;
     float o = 2.0f;
     float iterations_factor = 2.0f;
     float o_factor = 0.25f;
-    float spring_factor = 3.0f;
+    float spring_factor = 6.0f;
     int steps = 5;
 
-    // Override default values with command-line arguments if provided
-    if (argc > 1) {
-        num_iterations = std::atoi(argv[1]); // Convert the first argument to int
+    // Parse the arguments
+    try {
+        estimated_windings = program->get<int>("--estimated_windings");
+        num_iterations = program->get<int>("--num_iterations");
+        o = program->get<float>("--o");
+        spring_constant = program->get<float>("--spring_constant");
+        steps = program->get<int>("--steps");
+        iterations_factor = program->get<float>("--iterations_factor");
+        o_factor = program->get<float>("--o_factor");
+        spring_factor = program->get<float>("--spring_factor");
+    } catch (const std::runtime_error& err) {
+        std::cerr << err.what() << std::endl;
+        std::cerr << program;
+        return;
     }
-    if (argc > 2) {
-        o = std::atof(argv[2]); // Convert the second argument to float
-    }
-    if (argc > 3) {
-        spring_constant = std::atof(argv[3]); // Convert the third argument to float
-    }
-    if (argc > 4) {
-        steps = std::atoi(argv[4]); // Convert the fourth argument to int
-    }
-    if (argc > 5) {
-        iterations_factor = std::atof(argv[5]); // Convert the fifth argument to float
-    }
-    if (argc > 6) {
-        o_factor = std::atof(argv[6]); // Convert the sixth argument to float
-    }
-    if (argc > 7) {
-        spring_factor = std::atof(argv[7]); // Convert the seventh argument to float
-    }
+
+    // Print the parameters
+    std::cout << "Estimated Windings: " << estimated_windings << std::endl;
+    std::cout << "Number of Iterations: " << num_iterations << std::endl;
+    std::cout << "O: " << o << std::endl;
+    std::cout << "Spring Constant: " << spring_constant << std::endl;
+    std::cout << "Steps: " << steps << std::endl;
+    std::cout << "Iterations Factor: " << iterations_factor << std::endl;
+    std::cout << "O Factor: " << o_factor << std::endl;
+    std::cout << "Spring Factor: " << spring_factor << std::endl;
 
     // Path to the histogram directory
     std::string histogram_dir = "histogram";
@@ -637,7 +740,7 @@ void solve(std::vector<Node>& graph, int argc, char** argv) {
                 // Use a warmup iteration with 10x the spring constant
                 num_iterations_iteration *= iterations_factor;
                 o_iteration = o * o_factor;
-                spring_constant_iteration *= spring_factor;
+                spring_constant_iteration = spring_factor;
             }
             else if (i == -1) {
                 // Skip the warmup iteration for subsequent rounds
@@ -649,7 +752,8 @@ void solve(std::vector<Node>& graph, int argc, char** argv) {
                 spring_constant_iteration = 1.0f;
             }
             std::cout << "Spring Constant " << i << ": " << std::setprecision(10) << spring_constant_iteration << std::endl;
-            for (int iter = 0; iter < num_iterations_iteration; ++iter) {
+            bool first_estimated_iteration = i == -1 && edges_deletion_round == 0 && estimated_windings > 0;
+            for (int iter = 0; first_estimated_iteration ? true : iter < num_iterations_iteration; ++iter) {
                 update_nodes(graph, o_iteration, spring_constant_iteration);
 
                 if (iter % 100 == 0) {
@@ -663,6 +767,19 @@ void solve(std::vector<Node>& graph, int argc, char** argv) {
                             << std::setw(max_iter_digits) << std::setfill('0') << iter << ".png";
                     // Calculate and display the histogram of f_star values
                     calculate_histogram(graph, filename.str());
+
+                    // Calculate new weights factors
+                    float scale = calculate_scale(graph, estimated_windings);
+                    update_weights(graph, scale);
+
+                    // escape if estimated windings reached
+                    if (first_estimated_iteration) {
+                        float min_f = min_f_star(graph);
+                        float max_f = max_f_star(graph);
+                        if (max_f - min_f > 1.1f * 360.0f * estimated_windings) {
+                            break;
+                        }
+                    }
                 }
             }
             // After generating histograms, create a video from the images
@@ -683,13 +800,18 @@ void solve(std::vector<Node>& graph, int argc, char** argv) {
         std::cout << "Reducing invalid edges threshold to: " << invalid_edge_threshold << std::endl;
 
         // Assign winding angles again after removing invalid edges
-        assign_winding_angles(graph);
+        float scale = calculate_scale(graph, estimated_windings);
+        assign_winding_angles(graph, scale);
 
         // Save the graph back to a binary file
         save_graph_to_binary("temp_output_graph.bin", graph);
         
         edges_deletion_round++;
     }
+    // Assign winding angles to the graph
+    float scale = calculate_scale(graph, estimated_windings);
+    assign_winding_angles(graph, scale);
+
     // Calculate final histogram after all iterations
     calculate_histogram(graph, "final_histogram.png");
     // After generating all histograms, create a final video from the images
@@ -697,8 +819,80 @@ void solve(std::vector<Node>& graph, int argc, char** argv) {
 }
 
 int main(int argc, char** argv) {
-    std::string file_name = "graph.bin";
-    std::vector<Node> graph = load_graph_from_binary(file_name);
+    // Parse the input graph file from arguments using argparse
+    argparse::ArgumentParser program("Graph Solver");
+
+    // Default values for parameters
+    int estimated_windings = 0;
+    int num_iterations = 10000;
+    float spring_constant = 2.0f;
+    float o = 2.0f;
+    float iterations_factor = 2.0f;
+    float o_factor = 0.25f;
+    float spring_factor = 6.0f;
+    int steps = 5;
+
+    // Add command-line arguments for graph input and output
+    program.add_argument("--input_graph")
+        .help("Input graph binary file")
+        .default_value(std::string("graph.bin"));
+
+    program.add_argument("--output_graph")
+        .help("Output graph binary file")
+        .default_value(std::string("output_graph.bin"));
+
+    // Add command-line arguments
+    program.add_argument("--estimated_windings")
+        .help("Estimated windings (int)")
+        .default_value(estimated_windings)
+        .scan<'i', int>();
+
+    program.add_argument("--num_iterations")
+        .help("Number of iterations (int)")
+        .default_value(num_iterations)
+        .scan<'i', int>();
+
+    program.add_argument("--o")
+        .help("O parameter (float)")
+        .default_value(o)
+        .scan<'g', float>();
+
+    program.add_argument("--spring_constant")
+        .help("Spring constant (float)")
+        .default_value(spring_constant)
+        .scan<'g', float>();
+
+    program.add_argument("--steps")
+        .help("Steps (int)")
+        .default_value(steps)
+        .scan<'i', int>();
+
+    program.add_argument("--iterations_factor")
+        .help("Iterations factor (float)")
+        .default_value(iterations_factor)
+        .scan<'g', float>();
+
+    program.add_argument("--o_factor")
+        .help("O factor (float)")
+        .default_value(o_factor)
+        .scan<'g', float>();
+
+    program.add_argument("--spring_factor")
+        .help("Spring factor (float)")
+        .default_value(spring_factor)
+        .scan<'g', float>();
+
+    try {
+        program.parse_args(argc, argv);
+    } catch (const std::runtime_error& err) {
+        std::cerr << err.what() << std::endl;
+        std::cerr << program;
+        return 1;
+    }
+
+    // Load the graph from the input binary file
+    std::string input_graph_file = program.get<std::string>("--input_graph");
+    std::vector<Node> graph = load_graph_from_binary(input_graph_file);
 
     // Calculate the exact matching loss
     float exact_score = exact_matching_score(graph);
@@ -712,17 +906,15 @@ int main(int argc, char** argv) {
     calculate_histogram(graph);
 
     // Solve the problem using a solve function
-    solve(graph, argc, argv);
+    solve(graph, &program);
 
     // print the min and max f_star values
     std::cout << "Min f_star: " << min_f_star(graph) << std::endl;
     std::cout << "Max f_star: " << max_f_star(graph) << std::endl;
 
-    // Assign winding angles to the graph
-    assign_winding_angles(graph);
-
     // Save the graph back to a binary file
-    save_graph_to_binary("output_graph.bin", graph);
+    std::string output_graph_file = program.get<std::string>("--output_graph");
+    save_graph_to_binary(output_graph_file, graph);
 
     return 0;
 }

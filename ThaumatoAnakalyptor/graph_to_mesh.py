@@ -166,7 +166,7 @@ def compute_means_adjacent(adjacent_ts, adjacent_normals, winding_direction):
 
     # Function to refine means based on adjacent means
     def refine_means(t_means, fixed, fixed_adjacent_ts):
-        for u in range(len(original_ts)) if random.random() < 0.5 else range(len(original_ts)-1, -1, -1): # randomly choose direction in which to iterate and refine # Giorgio says: why random?
+        for u in range(len(original_ts)) if random.random() < 0.5 else range(len(original_ts)-1, -1, -1): # randomly choose direction in which to iterate and refine
             for i in range(len(original_ts[u])):
                 # Determine the valid next mean
                 next_mean = next((t_means[j][i] for j in range(u-1, -1, -1) if t_means[j][i] is not None), None)
@@ -175,7 +175,7 @@ def compute_means_adjacent(adjacent_ts, adjacent_normals, winding_direction):
                 # Filter t values based on previous and next means
                 if not winding_direction:
                     prev_mean, next_mean = next_mean, prev_mean
-                adjacent_ts[u][i] = [t for t in original_ts[u][i] if (prev_mean is None or t > prev_mean) and (next_mean is None or t < next_mean)] if ((prev_mean is not None) or (random.random() < 0.75)) and ((next_mean is not None) or (random.random() < 0.75)) else [] # Giorgio says: why random?
+                adjacent_ts[u][i] = [t for t in original_ts[u][i] if (prev_mean is None or t > prev_mean) and (next_mean is None or t < next_mean)] if ((prev_mean is not None) or (random.random() < 0.75)) and ((next_mean is not None) or (random.random() < 0.75)) else []
                 if len(adjacent_ts[u][i]) == 0: # ensure that the t value is fixed if no valid t values are found
                     if fixed[u] == 1:
                         adjacent_ts[u][i] = fixed_adjacent_ts[u][i]
@@ -189,7 +189,7 @@ def compute_means_adjacent(adjacent_ts, adjacent_normals, winding_direction):
         for _ in range(max_iterations):
             previous_means = t_means[:]
             t_means = refine_means(t_means, fixed, fixed_adjacent_ts)
-            # Randomly set some t values to None # Giorgio says: why?
+            # Randomly set some t values to None #
             for u in range(len(t_means)):
                 for i in range(len(t_means[u])):
                     if random.random() < 0.1:
@@ -1730,3 +1730,4 @@ if __name__ == '__main__':
     walk.unroll(fragment=args.fragment, debug=args.debug, continue_from=args.continue_from, z_range=z_range, angle_step=args.angle_step, z_spacing=args.z_spacing)
 
 # Example command: python3 -m ThaumatoAnakalyptor.graph_to_mesh --path /scroll.volpkg/working/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks --graph /scroll.volpkg/working/scroll3_surface_points/1352_3600_5002/point_cloud_colorized_verso_subvolume_graph_BP_solved.pkl --start_point 1352 3600 5002 --debug
+# python3 -m ThaumatoAnakalyptor.graph_to_mesh --path /scroll2v2_surface_points/point_cloud_colorized_verso_subvolume_blocks --graph /scroll2v2_surface_points/1352_3600_5002/point_cloud_colorized_verso_subvolume_graph_BP_solved.pkl --start_point 1352 3600 5002

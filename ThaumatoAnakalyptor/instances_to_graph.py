@@ -919,7 +919,7 @@ class ScrollGraph(Graph):
         blocks_tar_files = glob.glob(path_instances + '/*.tar')
 
         #from original coordinates to instance coordinates
-        start_block, patch_id = find_starting_patch([start_point], path_instances)
+        start_block, patch_id = (0, 0, 0), 0
         self.start_block, self.patch_id, self.start_point = start_block, patch_id, start_point
 
         print(f"Found {len(blocks_tar_files)} blocks.")
@@ -1245,6 +1245,8 @@ def write_graph_to_binary(file_name, graph):
         # Write the number of nodes
         f.write(struct.pack('I', len(nodes)))
         for node in nodes_list:
+            # write the node z positioin as f
+            f.write(struct.pack('f', nodes[node]['centroid'][1]))
             # write the node winding angle as f
             f.write(struct.pack('f', nodes[node]['winding_angle']))
 
@@ -1285,6 +1287,11 @@ def load_graph_winding_angle_from_binary(filename, graph):
     nodes_list = list(nodes_graph.keys())
     # assign winding angles
     for i in range(num_nodes):
+        if nodes[i]['deleted']:
+            # try detelting assigned k
+            if 'assigned_k' in nodes_graph[nodes_list[i]]:
+                del nodes_graph[nodes_list[i]]['assigned_k']
+            continue
         node = nodes_list[i]
         nodes_graph[node]['assigned_k'] = (nodes_graph[node]['winding_angle'] - nodes[i]['f_star']) // 360
         nodes_graph[node]['winding_angle'] = nodes[i]['f_star']
@@ -1294,13 +1301,13 @@ def load_graph_winding_angle_from_binary(filename, graph):
         if nodes[i]['deleted']:
             del nodes_graph[node]
 
-    print(f"Number of nodes remaining: {len(nodes_graph)} from {num_nodes}.")
+    print(f"Number of nodes remaining: {len(nodes_graph)} from {num_nodes}. Number of nodes in graph: {len(graph.nodes)}")
     return graph
 
 def compute(overlapp_threshold, start_point, path, recompute=False, stop_event=None, toy_problem=False, update_graph=False, flip_winding_direction=False):
 
     umbilicus_path = os.path.dirname(path) + "/umbilicus.txt"
-    start_block, patch_id = find_starting_patch([start_point], path)
+    start_block, patch_id = (0, 0, 0), 0
 
     save_path = os.path.dirname(path) + f"/{start_point[0]}_{start_point[1]}_{start_point[2]}/" + path.split("/")[-1]
     if not os.path.exists(os.path.dirname(save_path)):
@@ -1358,7 +1365,7 @@ def compute(overlapp_threshold, start_point, path, recompute=False, stop_event=N
     print(f"Number of nodes in the graph: {len(scroll_graph.nodes)}")
 
     # create binary graph file
-    write_graph_to_binary(save_path.replace("blocks", "scroll_graph_angular") + ".bin", scroll_graph)
+    write_graph_to_binary(os.path.join(os.path.dirname(save_path), "graph.bin"), scroll_graph)
 
 def random_walks():
     path = "/media/julian/SSD4TB/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks"
@@ -1382,6 +1389,7 @@ def random_walks():
                           "bad_edge_threshold": 3
                           }
     # Scroll 1: "winding_direction": -1.0
+    # Scroll 2: "winding_direction": 1.0
     # Scroll 3: "winding_direction": 1.0
 
     max_nr_walks = 10000
@@ -1422,7 +1430,7 @@ def random_walks():
     parser.add_argument('--pyramid_up_nr_average', type=int,help=f'Number of random walks to aggregate per landmark before walking up the graph. Default is {overlapp_threshold["pyramid_up_nr_average"]}.', default=int(overlapp_threshold["pyramid_up_nr_average"]))
     parser.add_argument('--toy_problem', help='Create toy subgraph for development', action='store_true')
     parser.add_argument('--update_graph', help='Update graph', action='store_true')
-    parser.add_argument('--create_graph', help='Create graph', action='store_true')
+    parser.add_argument('--create_graph', help='Create graph. Directly creates the binary .bin graph file from a previously constructed graph .pkl', action='store_true')
     parser.add_argument('--flip_winding_direction', help='Flip winding direction', action='store_true')
 
     # Take arguments back over
@@ -1469,7 +1477,7 @@ def random_walks():
         else:
             scroll_graph = load_graph(path.replace("blocks", "scroll_graph_angular") + ".pkl")
         
-        scroll_graph_solved = load_graph_winding_angle_from_binary(os.path.join(os.path.dirname(save_path), "out_graph.bin"), scroll_graph)
+        scroll_graph_solved = load_graph_winding_angle_from_binary(os.path.join(os.path.dirname(save_path), "output_graph.bin"), scroll_graph)
 
         # save graph pickle
         scroll_graph_solved.save_graph(save_path.replace("blocks", "graph_BP_solved") + ".pkl")
