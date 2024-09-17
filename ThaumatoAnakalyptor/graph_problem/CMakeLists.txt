@@ -23,11 +23,12 @@ find_package(OpenCV REQUIRED)
 
 # Add the executable
 add_executable(graph_problem main.cpp)
-add_executable(example example.cpp)
+
+# Include the directory where argparse.hpp is located
+target_include_directories(graph_problem PRIVATE ${CMAKE_SOURCE_DIR})
 
 # Link OpenMP and OpenCV libraries
 target_link_libraries(graph_problem PRIVATE OpenMP::OpenMP_CXX ${OpenCV_LIBS})
-target_link_libraries(example ${OpenCV_LIBS})
 
 # Add compile options
 # Set the optimization level to -O3 for release builds

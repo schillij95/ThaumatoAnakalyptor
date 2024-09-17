@@ -6,7 +6,7 @@ project(sheet_generation)
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_CXX_STANDARD 17)
 
-# Add custom optimization flags for the release build
+# Add optimization flags for the release build
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
 # Add pybind11 submodule

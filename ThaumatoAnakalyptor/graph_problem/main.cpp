@@ -1,3 +1,7 @@
+/*
+Julian Schilliger 2024 ThaumatoAnakalyptor
+*/
+
 #include <opencv2/opencv.hpp>
 #include <iostream>
 #include <fstream>
@@ -9,6 +13,7 @@
 #include <limits>
 #include <iomanip>
 #include <filesystem>
+#include <argparse.hpp>
 
 namespace fs = std::filesystem;
 
@@ -30,7 +35,7 @@ struct Node {
     std::vector<Edge> edges;
 };
 
-std::vector<Node> load_graph_from_binary(const std::string &file_name) {
+std::vector<Node> load_graph_from_binary(const std::string &file_name, bool clip_z = false, float z_min = 0.0f, float z_max = 0.0f) {
     std::vector<Node> graph;
     std::ifstream infile(file_name, std::ios::binary);
 
@@ -66,7 +71,6 @@ std::vector<Node> load_graph_from_binary(const std::string &file_name) {
         for (unsigned int j = 0; j < num_edges; ++j) {
             Edge edge;
             infile.read(reinterpret_cast<char*>(&edge.target_node), sizeof(unsigned int));
-
             infile.read(reinterpret_cast<char*>(&edge.certainty), sizeof(float));
             // clip certainty
             // if (edge.certainty < 0.001f) {
@@ -77,15 +81,17 @@ std::vector<Node> load_graph_from_binary(const std::string &file_name) {
             edge.certainty_factored = edge.certainty;
             infile.read(reinterpret_cast<char*>(&edge.k), sizeof(float));
             infile.read(reinterpret_cast<char*>(&edge.same_block), sizeof(bool));
+            if (clip_z) {
+                if (graph[edge.target_node].z < z_min || graph[edge.target_node].z > z_max) {
+                    graph[edge.target_node].deleted = true;
+                    continue;
+                }
+                if (graph[node_id].z < z_min || graph[node_id].z > z_max) {
+                    graph[node_id].deleted = true;
+                    continue;
+                }
+            }
             // if (edge.same_block) { // no same subvolume edges
-            //     continue;
-            // }
-            // if (graph[edge.target_node].z < 1375 || graph[edge.target_node].z > 1875) {
-            //     graph[edge.target_node].deleted = true;
-            //     continue;
-            // }
-            // if (graph[node_id].z < 1375 || graph[node_id].z > 1875) {
-            //     graph[node_id].deleted = true;
             //     continue;
             // }
             graph[node_id].edges.push_back(edge);
@@ -662,7 +668,7 @@ std::vector<float> generate_spring_constants(float start_value, int steps) {
 }
 
 // This is an example of a solve function that takes the graph and parameters as input
-void solve(std::vector<Node>& graph, int argc, char** argv) {
+void solve(std::vector<Node>& graph, argparse::ArgumentParser* program) {
     // Default values for parameters
     int estimated_windings = 0;
     int num_iterations = 10000;
@@ -673,30 +679,20 @@ void solve(std::vector<Node>& graph, int argc, char** argv) {
     float spring_factor = 6.0f;
     int steps = 5;
 
-    // Override default values with command-line arguments if provided
-    if (argc > 1) {
-        estimated_windings = std::atoi(argv[1]); // Convert the first argument to int
-    }
-    if (argc > 2) {
-        num_iterations = std::atoi(argv[2]); // Convert the first argument to int
-    }
-    if (argc > 3) {
-        o = std::atof(argv[3]); // Convert the second argument to float
-    }
-    if (argc > 4) {
-        spring_constant = std::atof(argv[4]); // Convert the third argument to float
-    }
-    if (argc > 5) {
-        steps = std::atoi(argv[5]); // Convert the fourth argument to int
-    }
-    if (argc > 6) {
-        iterations_factor = std::atof(argv[6]); // Convert the fifth argument to float
-    }
-    if (argc > 7) {
-        o_factor = std::atof(argv[7]); // Convert the sixth argument to float
-    }
-    if (argc > 8) {
-        spring_factor = std::atof(argv[8]); // Convert the seventh argument to float
+    // Parse the arguments
+    try {
+        estimated_windings = program->get<int>("--estimated_windings");
+        num_iterations = program->get<int>("--num_iterations");
+        o = program->get<float>("--o");
+        spring_constant = program->get<float>("--spring_constant");
+        steps = program->get<int>("--steps");
+        iterations_factor = program->get<float>("--iterations_factor");
+        o_factor = program->get<float>("--o_factor");
+        spring_factor = program->get<float>("--spring_factor");
+    } catch (const std::runtime_error& err) {
+        std::cerr << err.what() << std::endl;
+        std::cerr << program;
+        return;
     }
 
     // Print the parameters
@@ -827,8 +823,80 @@ void solve(std::vector<Node>& graph, int argc, char** argv) {
 }
 
 int main(int argc, char** argv) {
-    std::string file_name = "graph.bin";
-    std::vector<Node> graph = load_graph_from_binary(file_name);
+    // Parse the input graph file from arguments using argparse
+    argparse::ArgumentParser program("Graph Solver");
+
+    // Default values for parameters
+    int estimated_windings = 0;
+    int num_iterations = 10000;
+    float spring_constant = 2.0f;
+    float o = 2.0f;
+    float iterations_factor = 2.0f;
+    float o_factor = 0.25f;
+    float spring_factor = 6.0f;
+    int steps = 5;
+
+    // Add command-line arguments for graph input and output
+    program.add_argument("--input_graph")
+        .help("Input graph binary file")
+        .default_value(std::string("graph.bin"));
+
+    program.add_argument("--output_graph")
+        .help("Output graph binary file")
+        .default_value(std::string("output_graph.bin"));
+
+    // Add command-line arguments
+    program.add_argument("--estimated_windings")
+        .help("Estimated windings (int)")
+        .default_value(estimated_windings)
+        .scan<'i', int>();
+
+    program.add_argument("--num_iterations")
+        .help("Number of iterations (int)")
+        .default_value(num_iterations)
+        .scan<'i', int>();
+
+    program.add_argument("--o")
+        .help("O parameter (float)")
+        .default_value(o)
+        .scan<'g', float>();
+
+    program.add_argument("--spring_constant")
+        .help("Spring constant (float)")
+        .default_value(spring_constant)
+        .scan<'g', float>();
+
+    program.add_argument("--steps")
+        .help("Steps (int)")
+        .default_value(steps)
+        .scan<'i', int>();
+
+    program.add_argument("--iterations_factor")
+        .help("Iterations factor (float)")
+        .default_value(iterations_factor)
+        .scan<'g', float>();
+
+    program.add_argument("--o_factor")
+        .help("O factor (float)")
+        .default_value(o_factor)
+        .scan<'g', float>();
+
+    program.add_argument("--spring_factor")
+        .help("Spring factor (float)")
+        .default_value(spring_factor)
+        .scan<'g', float>();
+
+    try {
+        program.parse_args(argc, argv);
+    } catch (const std::runtime_error& err) {
+        std::cerr << err.what() << std::endl;
+        std::cerr << program;
+        return 1;
+    }
+
+    // Load the graph from the input binary file
+    std::string input_graph_file = program.get<std::string>("--input_graph");
+    std::vector<Node> graph = load_graph_from_binary(input_graph_file);
 
     // Calculate the exact matching loss
     float exact_score = exact_matching_score(graph);
@@ -842,14 +910,15 @@ int main(int argc, char** argv) {
     calculate_histogram(graph);
 
     // Solve the problem using a solve function
-    solve(graph, argc, argv);
+    solve(graph, &program);
 
     // print the min and max f_star values
     std::cout << "Min f_star: " << min_f_star(graph) << std::endl;
     std::cout << "Max f_star: " << max_f_star(graph) << std::endl;
 
     // Save the graph back to a binary file
-    save_graph_to_binary("output_graph.bin", graph);
+    std::string output_graph_file = program.get<std::string>("--output_graph");
+    save_graph_to_binary(output_graph_file, graph);
 
     return 0;
 }
