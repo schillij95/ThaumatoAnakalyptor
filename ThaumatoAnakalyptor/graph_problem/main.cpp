@@ -1,5 +1,5 @@
 /*
-Julian Schilliger 2024 ThaumatoAnakalypptor
+Julian Schilliger 2024 ThaumatoAnakalyptor
 */
 
 #include <opencv2/opencv.hpp>
