@@ -97,6 +97,8 @@ def compute(transform_path, original_volume_id, target_volume_id, mesh_path, sca
     segment_name = str(os.path.basename(mesh_path)[:-4])
     base_path = str(os.path.dirname(mesh_path))
     mtl_path = f"{base_path}/{segment_name}.mtl"
+    if not os.path.exists(mtl_path):
+        mtl_path.replace('.mtl', '_0.mtl')
 
     texture_filenames = parse_mtl_for_texture_filenames(mtl_path)
     if len(texture_filenames) > 0:
@@ -135,4 +137,14 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     print(f"Processing from {args.original_volume_id} to {args.target_volume_id}")
-    compute(args.transform_path, args.original_volume_id, args.target_volume_id, args.obj_path, args.scale_factor)
+
+    # if the obj path does not end in .obj, find all "*_flatboi.obj" files in the directory
+    if not args.obj_path.endswith('.obj'):
+        obj_paths = glob.glob(os.path.join(args.obj_path, '*_flatboi.obj'))
+        for obj_path in obj_paths:
+            print(f"Transforming {obj_path}")
+            compute(args.transform_path, args.original_volume_id, args.target_volume_id, obj_path, args.scale_factor)
+    else:
+        compute(args.transform_path, args.original_volume_id, args.target_volume_id, args.obj_path, args.scale_factor)
+
+# Example command: python3 -m ThaumatoAnakalyptor.mesh_transform --transform_path /scroll.volpkg/transforms --original_volume_id 20231027191953 --target_volume_id 20231117143551 --obj_path /scroll.volpkg/working/scroll3_surface_points/1352_3600_5002/point_cloud_colorized_verso_subvolume_blocks/windowed_mesh_20240830103110 --scale_factor 2.0
