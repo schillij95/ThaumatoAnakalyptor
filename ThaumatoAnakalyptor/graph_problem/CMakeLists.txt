@@ -37,8 +37,3 @@ target_compile_options(graph_problem PRIVATE
     $<$<CONFIG:Debug>:-O0>         # No optimization for Debug builds
     -Wall -Wextra -pedantic        # Warnings for both builds
 )
-target_compile_options(example PRIVATE
-    $<$<CONFIG:Release>:-O3>       # Use -O3 for Release builds
-    $<$<CONFIG:Debug>:-O0>         # No optimization for Debug builds
-    -Wall -Wextra -pedantic        # Warnings for both builds
-)
