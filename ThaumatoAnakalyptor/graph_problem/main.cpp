@@ -835,6 +835,8 @@ int main(int argc, char** argv) {
     float o_factor = 0.25f;
     float spring_factor = 6.0f;
     int steps = 5;
+    int z_min = -2147483648;
+    int z_max = 2147483647;
 
     // Add command-line arguments for graph input and output
     program.add_argument("--input_graph")
@@ -886,6 +888,16 @@ int main(int argc, char** argv) {
         .default_value(spring_factor)
         .scan<'g', float>();
 
+    program.add_argument("--z_min")
+        .help("Z range (int)")
+        .default_value(z_min)
+        .scan<'i', int>();
+
+    program.add_argument("--z_max")
+        .help("Z range (int)")
+        .default_value(z_max)
+        .scan<'i', int>();
+
     try {
         program.parse_args(argc, argv);
     } catch (const std::runtime_error& err) {
@@ -896,7 +908,7 @@ int main(int argc, char** argv) {
 
     // Load the graph from the input binary file
     std::string input_graph_file = program.get<std::string>("--input_graph");
-    std::vector<Node> graph = load_graph_from_binary(input_graph_file);
+    std::vector<Node> graph = load_graph_from_binary(input_graph_file, true, static_cast<float>(program.get<int>("--z_min")), static_cast<float>(program.get<int>("--z_max")));
 
     // Calculate the exact matching loss
     float exact_score = exact_matching_score(graph);
