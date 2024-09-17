@@ -1,3 +1,7 @@
+/*
+Julian Schilliger 2024 ThaumatoAnakalypptor
+*/
+
 #include <opencv2/opencv.hpp>
 #include <iostream>
 #include <fstream>
