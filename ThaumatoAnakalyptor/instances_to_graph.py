@@ -720,7 +720,7 @@ class ScrollGraph(Graph):
             if angle_diff < -180.0:
                 angle_diff += 360.0
             angle_diff -= k * 360.0 # Next/Previous winding
-            self.add_edge(id1, id2, score, sheet_offset_k=angle_diff, same_block=False)
+            self.add_edge(id1, id2, score, sheet_offset_k=angle_diff, same_block=True)
 
     def build_bad_edges(self, score_bad_edges):
         for score_ in score_bad_edges:

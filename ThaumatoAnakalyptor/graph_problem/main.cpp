@@ -35,7 +35,7 @@ struct Node {
     std::vector<Edge> edges;
 };
 
-std::vector<Node> load_graph_from_binary(const std::string &file_name, bool clip_z = false, float z_min = 0.0f, float z_max = 0.0f) {
+std::vector<Node> load_graph_from_binary(const std::string &file_name, bool clip_z = false, float z_min = 0.0f, float z_max = 0.0f, float same_winding_factor = 1.0f) {
     std::vector<Node> graph;
     std::ifstream infile(file_name, std::ios::binary);
 
@@ -61,6 +61,7 @@ std::vector<Node> load_graph_from_binary(const std::string &file_name, bool clip
     }
     std::cout << "Nodes loaded successfully." << std::endl;
     // Read the adjacency list
+    int count_same_block_edges = 0;
     for (unsigned int i = 0; i < num_nodes; ++i) {
         unsigned int node_id;
         infile.read(reinterpret_cast<char*>(&node_id), sizeof(unsigned int));
@@ -91,12 +92,23 @@ std::vector<Node> load_graph_from_binary(const std::string &file_name, bool clip
                     continue;
                 }
             }
-            // if (edge.same_block) { // no same subvolume edges
-            //     continue;
-            // }
+            if (edge.same_block) { // no same subvolume edges
+                edge.certainty *= same_winding_factor;
+                edge.certainty_factored *= same_winding_factor;
+                count_same_block_edges++;
+                // continue;
+                if (std::abs(edge.k) > 450) {
+                    std::cout << "Edge with k > 450: " << edge.k << std::endl;
+                }
+                if (std::abs(edge.k) < 180) {
+                    std::cout << "Edge with k < 180: " << edge.k << std::endl;
+                }
+            }
             graph[node_id].edges.push_back(edge);
         }
     }
+
+    std::cout << "Same block edges: " << count_same_block_edges << std::endl;
 
     std::cout << "Graph loaded successfully." << std::endl;
 
@@ -137,6 +149,14 @@ void save_graph_to_binary(const std::string& file_name, const std::vector<Node>&
     outfile.close();
 }
 
+void set_z_range_graph(std::vector<Node>& graph, float z_min, float z_max) {
+    for (auto& node : graph) {
+        if (node.z < z_min || node.z > z_max) {
+            node.deleted = true;
+        }
+    }
+}
+
 float closest_valid_winding_angle(float f_init, float f_target) {
     int x = static_cast<int>(std::round((f_target - f_init) / 360.0f));
     float result = f_init + x * 360.0f;
@@ -161,6 +181,9 @@ void dfs(size_t node_index, const std::vector<Node>& graph, std::vector<bool>& v
         component.push_back(current);
 
         for (const auto& edge : graph[current].edges) {
+            if (graph[edge.target_node].deleted) {
+                continue;
+            }
             if (!visited[edge.target_node]) {
                 visited[edge.target_node] = true;
                 stack.push(edge.target_node);
@@ -174,7 +197,11 @@ void find_largest_connected_component(std::vector<Node>& graph) {
     std::vector<bool> visited(num_nodes, false);
     std::vector<size_t> largest_component;
 
+    size_t initial_non_deleted = 0;
     for (size_t i = 0; i < num_nodes; ++i) {
+        if (!graph[i].deleted) {
+            initial_non_deleted++;
+        }
         if (!visited[i] && !graph[i].deleted) {
             std::vector<size_t> current_component;
             dfs(i, graph, visited, current_component);
@@ -200,7 +227,7 @@ void find_largest_connected_component(std::vector<Node>& graph) {
             remaining_nodes++;
         }
     }
-    std::cout << "Remaining nodes: " << remaining_nodes << " out of " << num_nodes << std::endl;
+    std::cout << "Remaining nodes: " << remaining_nodes << " out of " << initial_non_deleted << " initial non deleted edges, of total edge: " << num_nodes << std::endl;
 }
 
 void dfs_assign_f_star(int node_index, std::vector<Node>& graph, std::vector<bool>& visited) {
@@ -276,6 +303,9 @@ void prim_mst_assign_f_star(size_t start_node, std::vector<Node>& graph, float s
         in_mst[u] = true;
 
         for (const auto& edge : graph[u].edges) {
+            if (graph[u].deleted) {
+                continue;
+            }
             size_t v = edge.target_node;
             if (graph[v].deleted) {
                 continue;
@@ -297,6 +327,7 @@ void prim_mst_assign_f_star(size_t start_node, std::vector<Node>& graph, float s
 
     // Set f_star for the root node (start_node)
     graph[start_node].f_tilde = graph[start_node].f_init;
+    graph[start_node].f_star = graph[start_node].f_init;
 
     // Find for each node the children
     std::vector<std::vector<size_t>> children(num_nodes);
@@ -313,19 +344,28 @@ void prim_mst_assign_f_star(size_t start_node, std::vector<Node>& graph, float s
     std::stack<size_t> stack;
     stack.push(start_node);
 
+    // Sanity Check
     while (!stack.empty()) {
         size_t current = stack.top();
         stack.pop();
 
+        if (graph[current].deleted) {
+            // graph[current].f_star = 0;
+            // graph[current].f_tilde = 0;
+            continue;
+        }
+
         for (size_t i = 0; i < children[current].size(); ++i) {
             size_t child = children[current][i];
             if (graph[child].deleted) {
-                graph[child].f_star = 0;
-                graph[child].f_tilde = 0;
+                // graph[child].f_star = 0;
+                // graph[child].f_tilde = 0;
                 continue;
             }
             float k = children_k_values[current][i];
             graph[child].f_star = closest_valid_winding_angle(graph[child].f_init, graph[current].f_tilde + k);
+            graph[child].f_star = closest_valid_winding_angle(graph[child].f_init, graph[child].f_star);
+            
             graph[child].f_tilde = graph[child].f_star;
             stack.push(child);
         }
@@ -353,6 +393,14 @@ void assign_winding_angles(std::vector<Node>& graph, float scale) {
 
     // Perform MST to assign f_star values
     prim_mst_assign_f_star(start_node, graph, scale);
+
+    // check the winding angles on f_star
+    for (size_t i = 0; i < num_nodes; ++i) {
+        if (graph[i].deleted) {
+            continue;
+        }
+        closest_valid_winding_angle(graph[i].f_init, graph[i].f_star);
+    }
 }
 
 float certainty_factor(float error) { // certainty factor based on the error. exp (-) as function. 1 for 0 error, 0.1 for 360 error (1 winding off)
@@ -437,20 +485,29 @@ float calculate_scale(const std::vector<Node>& graph, int estimated_windings) {
     }
     float min_f = min_f_star(graph);
     float max_f = max_f_star(graph);
-    return (360.0f * estimated_windings) / (max_f - min_f);
+    return std::abs((360.0f * estimated_windings) / (max_f - min_f));
 }
 
-float exact_matching_score(const std::vector<Node>& graph) {
+float exact_matching_score(std::vector<Node>& graph) {
     // Assing closest valid winding angle to f_star based on f_init
     std::vector<Node> graph_copy = graph;
-    for (auto& node : graph_copy) {
-        node.f_star = closest_valid_winding_angle(node.f_init, node.f_star);
+    for (size_t i = 0; i < graph.size(); ++i) {
+        if (graph[i].deleted) {
+            continue;
+        }
+        graph_copy[i].f_star = closest_valid_winding_angle(graph[i].f_init, graph[i].f_star);
     }
 
     float score = 0.0;
-    for (const auto& node : graph_copy) {
-        for (const auto& edge : node.edges) {
-            float diff = graph_copy[edge.target_node].f_star - node.f_star;
+    for (size_t i = 0; i < graph.size(); ++i) {
+        if (graph[i].deleted) {
+            continue;
+        }
+        for (const auto& edge : graph_copy[i].edges) {
+            if (graph[edge.target_node].deleted) {
+                continue;
+            }
+            float diff = graph_copy[edge.target_node].f_star - graph_copy[i].f_star;
             if (std::abs(diff - edge.k) < 1e-5) {
                 score += edge.certainty;
             }
@@ -678,6 +735,8 @@ void solve(std::vector<Node>& graph, argparse::ArgumentParser* program) {
     float o_factor = 0.25f;
     float spring_factor = 6.0f;
     int steps = 5;
+    bool auto_mode = false;
+    bool video_mode = false;
 
     // Parse the arguments
     try {
@@ -689,6 +748,8 @@ void solve(std::vector<Node>& graph, argparse::ArgumentParser* program) {
         iterations_factor = program->get<float>("--iterations_factor");
         o_factor = program->get<float>("--o_factor");
         spring_factor = program->get<float>("--spring_factor");
+        auto_mode = program->get<bool>("--auto");
+        video_mode = program->get<bool>("--video");
     } catch (const std::runtime_error& err) {
         std::cerr << err.what() << std::endl;
         std::cerr << program;
@@ -704,6 +765,7 @@ void solve(std::vector<Node>& graph, argparse::ArgumentParser* program) {
     std::cout << "Iterations Factor: " << iterations_factor << std::endl;
     std::cout << "O Factor: " << o_factor << std::endl;
     std::cout << "Spring Factor: " << spring_factor << std::endl;
+    std::cout << "Auto Mode: " << (auto_mode ? "Enabled" : "Disabled") << std::endl;
 
     // Path to the histogram directory
     std::string histogram_dir = "histogram";
@@ -761,7 +823,7 @@ void solve(std::vector<Node>& graph, argparse::ArgumentParser* program) {
                 update_nodes(graph, o_iteration, spring_constant_iteration);
 
                 if (iter % 100 == 0) {
-                    std::cout << "Iteration: " << iter << std::endl;
+                    std::cout << "\rIteration: " << iter << std::flush;  // Updates the same line
 
                     // Generate filename with zero padding
                     std::ostringstream filename;
@@ -770,7 +832,9 @@ void solve(std::vector<Node>& graph, argparse::ArgumentParser* program) {
                             << std::setw(max_index_digits) << std::setfill('0') << i+1 << "_"
                             << std::setw(max_iter_digits) << std::setfill('0') << iter << ".png";
                     // Calculate and display the histogram of f_star values
-                    calculate_histogram(graph, filename.str());
+                    if (video_mode) {
+                        calculate_histogram(graph, filename.str());
+                    }
 
                     // Calculate new weights factors
                     float scale = calculate_scale(graph, estimated_windings);
@@ -786,8 +850,13 @@ void solve(std::vector<Node>& graph, argparse::ArgumentParser* program) {
                     }
                 }
             }
+            // endline
+            std::cout << std::endl;
+
             // After generating histograms, create a video from the images
-            create_video_from_histograms(histogram_dir, "winding_angle_histogram.avi", 10);
+            if (video_mode) {
+                create_video_from_histograms(histogram_dir, "winding_angle_histogram.avi", 10);
+            }
         }
         // After first edge deletion round remove the invalid edges
         if (edges_deletion_round == 0) {
@@ -807,6 +876,9 @@ void solve(std::vector<Node>& graph, argparse::ArgumentParser* program) {
         float scale = calculate_scale(graph, estimated_windings);
         assign_winding_angles(graph, scale);
 
+        float exact_score = exact_matching_score(graph);
+        std::cout << "Exact Matching Score: " << exact_score << std::endl;
+
         // Save the graph back to a binary file
         save_graph_to_binary("temp_output_graph.bin", graph);
         
@@ -816,10 +888,91 @@ void solve(std::vector<Node>& graph, argparse::ArgumentParser* program) {
     float scale = calculate_scale(graph, estimated_windings);
     assign_winding_angles(graph, scale);
 
-    // Calculate final histogram after all iterations
-    calculate_histogram(graph, "final_histogram.png");
-    // After generating all histograms, create a final video from the images
-    create_video_from_histograms(histogram_dir, "winding_angle_histogram.avi", 10);
+    if (video_mode) {
+        // Calculate final histogram after all iterations
+        calculate_histogram(graph, "final_histogram.png");
+        // After generating all histograms, create a final video from the images
+        create_video_from_histograms(histogram_dir, "winding_angle_histogram.avi", 10);
+    }
+
+    // Exact matching score
+    float exact_score = exact_matching_score(graph);
+    std::cout << "Exact Matching Score: " << exact_score << std::endl;
+}
+
+void invert_winding_direction_graph(std::vector<Node>& graph) {
+    for (size_t i = 0; i < graph.size(); ++i) {
+        for (auto& edge : graph[i].edges) {
+            if (edge.same_block) {
+                float turns = edge.k / 360;
+                turns = std::round(turns);
+                if (std::abs(turns) > 1 || std::abs(turns) == 0) {
+                    std::cout << "Inverting winding direction failed " << turns << std::endl;
+                }
+                edge.k = edge.k - (2.0f * 360.0f * turns);
+            }
+        }
+    }
+}
+
+void auto_winding_direction(std::vector<Node>& graph, argparse::ArgumentParser* program) {
+    std::cout << "Auto Winding Direction" << std::endl;
+    
+    // Make a copy of the graph
+    std::vector<Node> auto_graph = graph;
+    // min max z values of graph
+    float z_min = std::numeric_limits<float>::max();
+    float z_max = std::numeric_limits<float>::min();
+    for (const auto& node : auto_graph) {
+        if (node.deleted) {
+            continue;
+        }
+        if (node.z < z_min) {
+            z_min = node.z;
+        }
+        if (node.z > z_max) {
+            z_max = node.z;
+        }
+    }
+    float middle_z = (z_min + z_max) / 2.0f;
+    // set z range: middle +- 250
+    set_z_range_graph(auto_graph, middle_z - 250.0f, middle_z + 250.0f); // speedup the winding direction computation
+    
+    std::vector<Node> auto_graph_other_block = auto_graph;
+    invert_winding_direction_graph(auto_graph_other_block);
+
+    // solve
+    solve(auto_graph_other_block, program);
+    solve(auto_graph, program);
+    // Exact matching score
+    float exact_score_other_block = exact_matching_score(auto_graph_other_block);
+    std::cout << "Exact Matching Score Other Block: " << exact_score_other_block << std::endl;
+    float exact_score = exact_matching_score(auto_graph);
+    std::cout << "Exact Matching Score: " << exact_score << std::endl;
+
+    // delete all same_block edges
+    for (auto& node : auto_graph_other_block) {
+        node.edges.erase(std::remove_if(node.edges.begin(), node.edges.end(), [](const Edge& edge) {
+            return edge.same_block;
+        }), node.edges.end());
+    }
+    for (auto& node : auto_graph) {
+        node.edges.erase(std::remove_if(node.edges.begin(), node.edges.end(), [](const Edge& edge) {
+            return edge.same_block;
+        }), node.edges.end());
+    }
+
+    // Calculate exact matching score for both graphs
+    float exact_score_other_block2 = exact_matching_score(auto_graph_other_block);
+    float exact_score2 = exact_matching_score(auto_graph);
+
+    std::cout << "Exact Matching Score (no same block edges): " << exact_score2 << std::endl;
+    std::cout << "Exact Matching Score Other Block (no same block edges): " << exact_score_other_block2 << std::endl;
+
+    if (exact_score_other_block2 > exact_score2) {
+        std::cout << "Inverting the winding direction" << std::endl;
+        invert_winding_direction_graph(graph);
+    }
 }
 
 int main(int argc, char** argv) {
@@ -837,6 +990,7 @@ int main(int argc, char** argv) {
     int steps = 5;
     int z_min = -2147483648;
     int z_max = 2147483647;
+    float same_winding_factor = 1.0f;
 
     // Add command-line arguments for graph input and output
     program.add_argument("--input_graph")
@@ -888,6 +1042,11 @@ int main(int argc, char** argv) {
         .default_value(spring_factor)
         .scan<'g', float>();
 
+    program.add_argument("--same_winding_factor")
+        .help("Same winding factor (float)")
+        .default_value(same_winding_factor)
+        .scan<'g', float>();
+
     program.add_argument("--z_min")
         .help("Z range (int)")
         .default_value(z_min)
@@ -898,8 +1057,21 @@ int main(int argc, char** argv) {
         .default_value(z_max)
         .scan<'i', int>();
 
+    // Add the boolean flag --auto
+    program.add_argument("--auto")
+        .help("Enable automatic mode")
+        .default_value(false)   // Set default to false
+        .implicit_value(true);  // If present, set to true
+
+    // Add the boolean flag --video
+    program.add_argument("--video")
+        .help("Enable video creation")
+        .default_value(false)   // Set default to false
+        .implicit_value(true);  // If present, set to true
+
     try {
         program.parse_args(argc, argv);
+        same_winding_factor = program.get<float>("--same_winding_factor");
     } catch (const std::runtime_error& err) {
         std::cerr << err.what() << std::endl;
         std::cerr << program;
@@ -908,7 +1080,7 @@ int main(int argc, char** argv) {
 
     // Load the graph from the input binary file
     std::string input_graph_file = program.get<std::string>("--input_graph");
-    std::vector<Node> graph = load_graph_from_binary(input_graph_file, true, static_cast<float>(program.get<int>("--z_min")), static_cast<float>(program.get<int>("--z_max")));
+    std::vector<Node> graph = load_graph_from_binary(input_graph_file, true, static_cast<float>(program.get<int>("--z_min")), static_cast<float>(program.get<int>("--z_max")), same_winding_factor);
 
     // Calculate the exact matching loss
     float exact_score = exact_matching_score(graph);
@@ -919,7 +1091,12 @@ int main(int argc, char** argv) {
     std::cout << "Approximate Matching Loss: " << approx_loss << std::endl;
 
     // Calculate and display the histogram of f_star values
-    calculate_histogram(graph);
+    // calculate_histogram(graph);
+
+    // Automatically determing winding direction
+    if (program.get<bool>("--auto")) {
+        auto_winding_direction(graph, &program);
+    }
 
     // Solve the problem using a solve function
     solve(graph, &program);
