@@ -9,6 +9,11 @@ import os
 from .split_mesh import MeshSplitter
 import tempfile
 from tqdm import tqdm
+import pickle
+import multiprocessing
+import sys
+sys.path.append('ThaumatoAnakalyptor/sheet_generation/build')
+import meshing_utils
 
 def load_point_cloud(ply_file):
     # Load the point cloud from a PLY file
@@ -138,14 +143,131 @@ def generate_sample(index, winding_angles, scene, triangles, ply_path, output_di
         # Save cluster to a PLY file
         save_point_cloud(cluster_file, cluster_points)
 
+def check_triangle_intersection(tri1, tri2):
+    """
+    Check if two triangles intersect using the Separating Axis Theorem (SAT).
+    tri1 and tri2 are lists of three points each, defining the triangles.
+    Each point is an (x, y, z) coordinate tuple or a numpy array.
+    """
+    def edge_directions(triangle):
+        return [triangle[1] - triangle[0], triangle[2] - triangle[1], triangle[0] - triangle[2]]
+    
+    def normal(triangle):
+        # Compute the normal vector of the triangle
+        return np.cross(triangle[1] - triangle[0], triangle[2] - triangle[0])
+
+    def project(triangle, axis):
+        # Project triangle vertices onto the axis and return the min and max
+        projections = np.dot(triangle, axis)
+        return np.min(projections), np.max(projections)
+
+    def overlaps(min1, max1, min2, max2):
+        return max1 >= min2 and max2 >= min1
+
+    def separating_axis_test(tri1, tri2, axis):
+        min1, max1 = project(tri1, axis)
+        min2, max2 = project(tri2, axis)
+        return overlaps(min1, max1, min2, max2)
+
+    tri1 = np.array(tri1)
+    tri2 = np.array(tri2)
+
+    # Triangle normals
+    axis_tests = [normal(tri1), normal(tri2)]
+
+    # Edge cross products
+    edges1 = edge_directions(tri1)
+    edges2 = edge_directions(tri2)
+
+    for edge1 in edges1:
+        for edge2 in edges2:
+            axis_tests.append(np.cross(edge1, edge2))
+
+    # Perform the separating axis test for all potential separating axes
+    for axis in axis_tests:
+        if np.linalg.norm(axis) == 0:  # Parallel or degenerate triangles
+            continue
+        if not separating_axis_test(tri1, tri2, axis):
+            return False
+
+    # No separating axis found, triangles must intersect
+    return True
+
+# Helper function to check triangle intersections and winding angles in parallel
+def check_intersection_and_winding(args):
+    pair, tri1, tri2, w1, w2, angle_range = args
+    i, j = pair
+    def check_winding_angle():
+        return abs(w1 - w2) < angle_range
+    
+    if check_triangle_intersection(tri1, tri2):
+        if not check_winding_angle():
+            return i, j, w1, w2
+    return None
+
+def compute_intersections_and_winding_angles(mesh, winding_angles, angle_range, path):
+    """
+    For a given Open3D mesh, this function finds intersecting triangles
+    and checks if their winding angles fall outside a specified range.
+
+    Uses multiprocessing to parallelize the intersection and winding angle check.
+
+    Returns a boolean list where each element corresponds to a triangle
+    and is True if it intersects with another triangle, with winding angles
+    outside the given range.
+    """
+    triangles = np.asarray(mesh.triangles)
+    vertices = np.asarray(mesh.vertices)
+    triangle_vertices = [[[float(x) for x in t] for t in triangle] for triangle in vertices[triangles]]
+    triangle_winding_angles = [float(w) for w in winding_angles[triangles[:, 0]]]
+
+    print(f"Type of triangle_vertices at 0: {type(triangle_vertices[0])}")
+
+    result = meshing_utils.compute_intersections_and_winding_angles(triangle_vertices, triangle_winding_angles, float(angle_range), 70.0)
+    return np.array(result, dtype=bool)
+
 def compute(mesh_file, pointcloud_dir, max_distance, max_distance_valid):
     output_dir = pointcloud_dir + "_mask3d_labels"
     
-    # Load the mesh vertices
-    triangles, scene = load_mesh_vertices(mesh_file)
+    fresh_start = False
+    if fresh_start:
+        # Load the mesh vertices
+        triangles, scene = load_mesh_vertices(mesh_file)
 
-    # Calculate winding angles for each vertex
-    winding_angles = calculate_winding_angle(mesh_file, pointcloud_dir)
+        # Calculate winding angles for each vertex
+        winding_angles = calculate_winding_angle(mesh_file, pointcloud_dir)
+
+        # pickle winding angles
+        os.makedirs(output_dir, exist_ok=True)
+        with open(os.path.join(output_dir, "winding_angles_triangles.pkl"), "wb") as f:
+            pickle.dump((winding_angles, triangles), f)
+    else:
+        # Load winding angles
+        with open(os.path.join(output_dir, "winding_angles_triangles.pkl"), "rb") as f:
+            winding_angles, triangles = pickle.load(f)
+
+    print(f"Loaded winding angles for {len(winding_angles)} vertices")
+    
+    # Calculate the intersecting out of range triangles mask
+    angle_range = 180 # the intersection at the steep bends go and cross more than 2 windings, filtering out to and disregarding the first winding intersection is okay since in close proximity there will also be the second intersection. large speedup
+    mesh = o3d.io.read_triangle_mesh(mesh_file)
+    intersecting_triangles = compute_intersections_and_winding_angles(mesh, winding_angles, angle_range, output_dir)
+
+    print(f"Found {np.sum(intersecting_triangles)} intersecting triangles")
+
+    # Create mesh with only the intersecting triangles
+    intersecting_mesh = o3d.geometry.TriangleMesh()
+    intersecting_mesh.vertices = mesh.vertices
+    intersecting_mesh.triangles = o3d.utility.Vector3iVector(triangles[intersecting_triangles])
+    # Remove unused vertices
+    intersecting_mesh = intersecting_mesh.remove_unreferenced_vertices()
+    intersecting_mesh = intersecting_mesh.compute_vertex_normals()
+    intersecting_mesh = intersecting_mesh.compute_triangle_normals()
+    # save the intersecting mesh
+    intersecting_mesh_path = os.path.join(output_dir, "intersecting_mesh.obj")
+    o3d.io.write_triangle_mesh(intersecting_mesh_path, intersecting_mesh)
+    
+    triangles, scene = load_mesh_vertices(mesh_file)
 
     ply_files = [f for f in os.listdir(pointcloud_dir) if f.endswith('.ply')]
     for i, ply_file in enumerate(tqdm(ply_files, desc="Processing point clouds")):
@@ -169,4 +291,4 @@ def main():
 if __name__ == "__main__":
     main()
 
-# Example command: python3 -m ThaumatoAnakalyptor.mesh_to_mask3d_labels --mesh_file /scroll.volpkg/merging_test_merged/20230929220926-20231005123336-20231007101619-20231210121321-20231012184424-20231022170901-20231221180251-20231106155351-20231031143852-20230702185753-20231016151002.obj --pointcloud_dir /scroll1_surface_points/point_cloud_colorized_verso/point_cloud_colorized_verso
+# Example command: python3 -m ThaumatoAnakalyptor.mesh_to_mask3d_labels --mesh_file /scroll.volpkg/merging_test_merged/20230929220926-20231005123336-20231007101619-20231210121321-20231012184424-20231022170901-20231221180251-20231106155351-20231031143852-20230702185753-20231016151002.obj --pointcloud_dir /scroll1_surface_points/point_cloud_colorized_verso

@@ -147,4 +147,4 @@ if __name__ == "__main__":
     else:
         compute(args.transform_path, args.original_volume_id, args.target_volume_id, args.obj_path, args.scale_factor)
 
-# Example command: python3 -m ThaumatoAnakalyptor.mesh_transform --transform_path /scroll.volpkg/transforms --original_volume_id 20231027191953 --target_volume_id 20231117143551 --obj_path /scroll.volpkg/working/scroll3_surface_points/1352_3600_5002/point_cloud_colorized_verso_subvolume_blocks/windowed_mesh_20240830103110 --scale_factor 2.0
+# Example command: python3 -m ThaumatoAnakalyptor.mesh_transform --transform_path /scroll.volpkg/transforms --original_volume_id 20231130111236 --target_volume_id 20231121133215 --obj_path /scroll.volpkg/working/scroll3_surface_points/1352_3600_5002/point_cloud_colorized_verso_subvolume_blocks/windowed_mesh_20240830103110 --scale_factor 2.0

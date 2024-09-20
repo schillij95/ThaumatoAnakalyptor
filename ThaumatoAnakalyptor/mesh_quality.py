@@ -329,7 +329,7 @@ def mesh_quality(mesh_path1, mesh_path2, umbilicus_path, max_distance, output_di
 def compute(input_mesh, input_raw_pointcloud, input_instance_pointcloud, mesh_path2, umbilicus_path, max_distance, distance_threshold):
     output_dir = os.path.dirname(mesh_path2) + "_quality"
 
-    fresh_start = False
+    fresh_start = True
     gt_splitter = MeshSplitter(mesh_path2, umbilicus_path)
     if fresh_start:
         gt_splitter.compute_uv_with_bfs(0) # precomputation of the winding angles of the gt mesh

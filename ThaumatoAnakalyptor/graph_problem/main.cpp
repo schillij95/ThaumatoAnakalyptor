@@ -876,9 +876,6 @@ void solve(std::vector<Node>& graph, argparse::ArgumentParser* program) {
         float scale = calculate_scale(graph, estimated_windings);
         assign_winding_angles(graph, scale);
 
-        float exact_score = exact_matching_score(graph);
-        std::cout << "Exact Matching Score: " << exact_score << std::endl;
-
         // Save the graph back to a binary file
         save_graph_to_binary("temp_output_graph.bin", graph);
         
@@ -894,10 +891,6 @@ void solve(std::vector<Node>& graph, argparse::ArgumentParser* program) {
         // After generating all histograms, create a final video from the images
         create_video_from_histograms(histogram_dir, "winding_angle_histogram.avi", 10);
     }
-
-    // Exact matching score
-    float exact_score = exact_matching_score(graph);
-    std::cout << "Exact Matching Score: " << exact_score << std::endl;
 }
 
 void invert_winding_direction_graph(std::vector<Node>& graph) {
@@ -939,16 +932,17 @@ void auto_winding_direction(std::vector<Node>& graph, argparse::ArgumentParser* 
     set_z_range_graph(auto_graph, middle_z - 250.0f, middle_z + 250.0f); // speedup the winding direction computation
     
     std::vector<Node> auto_graph_other_block = auto_graph;
-    invert_winding_direction_graph(auto_graph_other_block);
+    invert_winding_direction_graph(auto_graph_other_block); // build inverted other block graph
 
     // solve
     solve(auto_graph_other_block, program);
     solve(auto_graph, program);
+
     // Exact matching score
-    float exact_score_other_block = exact_matching_score(auto_graph_other_block);
-    std::cout << "Exact Matching Score Other Block: " << exact_score_other_block << std::endl;
     float exact_score = exact_matching_score(auto_graph);
     std::cout << "Exact Matching Score: " << exact_score << std::endl;
+    float exact_score_other_block = exact_matching_score(auto_graph_other_block);
+    std::cout << "Exact Matching Score Other Block: " << exact_score_other_block << std::endl;
 
     // delete all same_block edges
     for (auto& node : auto_graph_other_block) {
@@ -963,10 +957,9 @@ void auto_winding_direction(std::vector<Node>& graph, argparse::ArgumentParser* 
     }
 
     // Calculate exact matching score for both graphs
-    float exact_score_other_block2 = exact_matching_score(auto_graph_other_block);
     float exact_score2 = exact_matching_score(auto_graph);
-
     std::cout << "Exact Matching Score (no same block edges): " << exact_score2 << std::endl;
+    float exact_score_other_block2 = exact_matching_score(auto_graph_other_block);
     std::cout << "Exact Matching Score Other Block (no same block edges): " << exact_score_other_block2 << std::endl;
 
     if (exact_score_other_block2 > exact_score2) {
