@@ -48,7 +48,20 @@ def load_mesh_vertices(obj_file):
     print(f"Number triangles in mesh: {len(triangles)}")
 
     scene = setup_closest_triangles(mesh)
+    print(f"Set up scene with {len(triangles)} triangles")
     return triangles, scene
+
+def save_mesh(mesh, triangles, filename):
+    selected_mesh = o3d.geometry.TriangleMesh()
+    selected_mesh = o3d.geometry.TriangleMesh()
+    selected_mesh.vertices = mesh.vertices
+    selected_mesh.triangles = o3d.utility.Vector3iVector(triangles)
+    # Remove unused vertices
+    selected_mesh = selected_mesh.remove_unreferenced_vertices()
+    selected_mesh = selected_mesh.compute_vertex_normals()
+    selected_mesh = selected_mesh.compute_triangle_normals()
+    # save the non-selected mesh
+    o3d.io.write_triangle_mesh(filename, selected_mesh)
 
 def calculate_winding_angle(mesh_path, pointcloud_dir):
     umbilicus_path = os.path.join(os.path.dirname(pointcloud_dir), "umbilicus.txt")
@@ -107,7 +120,7 @@ def generate_sample(index, valid_triangles, winding_angles, scene, triangles, pl
     # Check that at least 50% of the points are masked true
     valid_mask = np.sum(mask) > 0.5 * len(mask)
     valid = valid_distance and valid_mask
-    print("Valid point cloud:", valid, "Valid distance:", valid_distance, "Valid mask:", valid_mask)
+    # print("Valid point cloud:", valid, "Valid distance:", valid_distance, "Valid mask:", valid_mask)
     if not valid:
         return
 
@@ -232,10 +245,29 @@ def compute_intersections_and_winding_angles(mesh, winding_angles, angle_range, 
     result = meshing_utils.compute_intersections_and_winding_angles(triangle_vertices, triangle_winding_angles, float(angle_range), 70.0)
     return np.array(result, dtype=bool)
 
-def compute(mesh_file, pointcloud_dir, max_distance, max_distance_valid):
+# Global variables to be initialized in each worker
+def init_worker(mesh_file, valid_triangles_data, winding_angles_data):
+    global triangles, scene, valid_triangles, winding_angles
+    # Load the mesh data
+    triangles, scene = load_mesh_vertices(mesh_file)
+    # Copy the large constant data to each worker
+    valid_triangles = valid_triangles_data
+    winding_angles = winding_angles_data
+    print("Worker initialized")
+
+# Worker function that will perform the task for each point cloud file
+def process_point_cloud(args):
+    i, ply_path, output_dir, max_distance, max_distance_valid = args
+    try:
+        # Use global `triangles`, `scene`, `valid_triangles`, and `winding_angles` in each worker
+        generate_sample(i, valid_triangles, winding_angles, scene, triangles, ply_path, output_dir, max_distance, max_distance_valid)
+    except Exception as e:
+        print(f"Error processing {ply_path}: {e}")
+
+def set_up_mesh(mesh_file, pointcloud_dir, continue_from=0, save_meshes=False):
     output_dir = pointcloud_dir + "_mask3d_labels"
     
-    fresh_start = False
+    fresh_start = continue_from <= 0
     if fresh_start:
         # Load the mesh vertices
         triangles, scene = load_mesh_vertices(mesh_file)
@@ -258,7 +290,7 @@ def compute(mesh_file, pointcloud_dir, max_distance, max_distance_valid):
     angle_range = 180 # the intersection at the steep bends go and cross more than 2 windings, filtering out to and disregarding the first winding intersection is okay since in close proximity there will also be the second intersection. large speedup
     mesh = o3d.io.read_triangle_mesh(mesh_file)
 
-    fresh_start2 = False
+    fresh_start2 = continue_from <= 1
     if fresh_start2:
         intersecting_triangles = compute_intersections_and_winding_angles(mesh, winding_angles, angle_range, output_dir)
         # Save the intersecting triangles mask
@@ -272,55 +304,63 @@ def compute(mesh_file, pointcloud_dir, max_distance, max_distance_valid):
     print(f"Found {np.sum(intersecting_triangles)} intersecting triangles")
 
     # Create mesh with only the intersecting triangles
-    intersecting_mesh = o3d.geometry.TriangleMesh()
-    intersecting_mesh.vertices = mesh.vertices
-    intersecting_mesh.triangles = o3d.utility.Vector3iVector(triangles[intersecting_triangles])
-    # Remove unused vertices
-    intersecting_mesh = intersecting_mesh.remove_unreferenced_vertices()
-    intersecting_mesh = intersecting_mesh.compute_vertex_normals()
-    intersecting_mesh = intersecting_mesh.compute_triangle_normals()
-    # save the intersecting mesh
-    intersecting_mesh_path = os.path.join(output_dir, "intersecting_mesh.obj")
-    o3d.io.write_triangle_mesh(intersecting_mesh_path, intersecting_mesh)
+    if save_meshes:
+        save_mesh(mesh, triangles[intersecting_triangles], os.path.join(output_dir, "intersecting_mesh.obj"))
 
     # Valid triangles
-    valid_triangles = meshing_utils.cluster_triangles(triangles, intersecting_triangles)
+    fresh_start3 = continue_from <= 2
+    if fresh_start3:
+        valid_triangles = meshing_utils.cluster_triangles(triangles, intersecting_triangles)
+        # Save the valid triangles mask
+        with open(os.path.join(output_dir, "valid_triangles.pkl"), "wb") as f:
+            pickle.dump(valid_triangles, f)
+    else:
+        # Load valid triangles
+        with open(os.path.join(output_dir, "valid_triangles.pkl"), "rb") as f:
+            valid_triangles = pickle.load(f)
     non_selected_triangles = np.logical_not(valid_triangles)
 
     # Save the non-selected triangles mesh
-    non_selected_mesh = o3d.geometry.TriangleMesh()
-    non_selected_mesh.vertices = mesh.vertices
-    non_selected_mesh.triangles = o3d.utility.Vector3iVector(triangles[non_selected_triangles])
-    # Remove unused vertices
-    non_selected_mesh = non_selected_mesh.remove_unreferenced_vertices()
-    non_selected_mesh = non_selected_mesh.compute_vertex_normals()
-    non_selected_mesh = non_selected_mesh.compute_triangle_normals()
-    # save the non-selected mesh
-    non_selected_mesh_path = os.path.join(output_dir, "non_selected_mesh.obj")
-    o3d.io.write_triangle_mesh(non_selected_mesh_path, non_selected_mesh)
+    if save_meshes:
+        save_mesh(mesh, triangles[non_selected_triangles], os.path.join(output_dir, "non_selected_mesh.obj"))
 
-    # # Save selected triangles mesh
-    # selected_mesh = o3d.geometry.TriangleMesh()
-    # selected_mesh.vertices = mesh.vertices
-    # selected_mesh.triangles = o3d.utility.Vector3iVector(triangles[valid_triangles])
-    # # Remove unused vertices
-    # selected_mesh = selected_mesh.remove_unreferenced_vertices()
-    # selected_mesh = selected_mesh.compute_vertex_normals()
-    # selected_mesh = selected_mesh.compute_triangle_normals()
-    # # save the selected mesh
-    # selected_mesh_path = os.path.join(output_dir, "selected_mesh.obj")
-    # o3d.io.write_triangle_mesh(selected_mesh_path, selected_mesh)
-    
-    triangles, scene = load_mesh_vertices(mesh_file)
+    # Save selected triangles mesh
+    if save_meshes:
+        save_mesh(mesh, triangles[valid_triangles], os.path.join(output_dir, "selected_mesh.obj"))
 
+    return valid_triangles, winding_angles, output_dir
+
+def compute(mesh_file, pointcloud_dir, max_distance, max_distance_valid, continue_from=0):
+    valid_triangles, winding_angles, output_dir = set_up_mesh(mesh_file, pointcloud_dir, continue_from=continue_from)
     ply_files = [f for f in os.listdir(pointcloud_dir) if f.endswith('.ply')]
-    for i, ply_file in enumerate(tqdm(ply_files, desc="Processing point clouds")):
-        ply_path = os.path.join(pointcloud_dir, ply_file)
-        try:
-            generate_sample(i, valid_triangles, winding_angles, scene, triangles, ply_path, output_dir, max_distance, max_distance_valid)
-        except Exception as e:
-            print(f"Error processing {ply_path}: {e}")
-            continue
+    # shuffle
+    np.random.shuffle(ply_files)
+
+    ### Single Threaded ###
+    # triangles, scene = load_mesh_vertices(mesh_file)
+    # ply_files = [f for f in os.listdir(pointcloud_dir) if f.endswith('.ply')]
+    # for i, ply_file in enumerate(tqdm(ply_files, desc="Processing point clouds")):
+    #     ply_path = os.path.join(pointcloud_dir, ply_file)
+    #     try:
+    #         generate_sample(i, valid_triangles, winding_angles, scene, triangles, ply_path, output_dir, max_distance, max_distance_valid)
+    #     except Exception as e:
+    #         print(f"Error processing {ply_path}: {e}")
+    #         continue
+
+    ### Multi Threaded ###
+    # Initialize the pool and pass the large constant data once to each worker
+    with multiprocessing.Pool(processes=multiprocessing.cpu_count()//2, initializer=init_worker, initargs=(mesh_file, valid_triangles, winding_angles)) as pool:
+        # Find all .ply files in the pointcloud directory
+        tasks = []
+
+        for i, ply_file in enumerate(ply_files):
+            ply_path = os.path.join(pointcloud_dir, ply_file)
+            # Append tasks without passing the large constant data
+            tasks.append((i, ply_path, output_dir, max_distance, max_distance_valid))
+
+        print(f"Processing {len(tasks)} point clouds")
+        # Use pool.imap to execute the worker function
+        list(tqdm(pool.imap(process_point_cloud, tasks), desc="Processing point clouds", total=len(tasks)))
 
 def main():
     # Parse arguments
@@ -329,14 +369,16 @@ def main():
     parser.add_argument("--pointcloud_dir", type=str, help="Path to the 3D point cloud directory (containing .ply)")
     parser.add_argument("--max_distance", type=float, help="Maximum distance for a point to be considered part of the mesh", default=15)
     parser.add_argument("--max_distance_valid", type=int, help="Maximum distance all points must be to be considered valid a valid pointcloud", default=100)
+    parser.add_argument("--continue_from", type=int, help="Continue from a specific step", default=0)
 
     args = parser.parse_args()
 
     # Compute the 3D mask with labels
-    compute(args.mesh_file, args.pointcloud_dir, args.max_distance, args.max_distance_valid)
+    compute(args.mesh_file, args.pointcloud_dir, args.max_distance, args.max_distance_valid, continue_from=args.continue_from)
 
 
 if __name__ == "__main__":
+    multiprocessing.set_start_method('spawn') # need sppawn because of open3d initialization deadlock in the init worker function
     main()
 
 # Example command: python3 -m ThaumatoAnakalyptor.mesh_to_mask3d_labels --mesh_file /scroll.volpkg/merging_test_merged/20230929220926-20231005123336-20231007101619-20231210121321-20231012184424-20231022170901-20231221180251-20231106155351-20231031143852-20230702185753-20231016151002.obj --pointcloud_dir /scroll1_surface_points/point_cloud_colorized_verso
