@@ -8,6 +8,8 @@ Author: Julian Schilliger - ThaumatoAnakalyptor - 2024
 
 #include <iostream>
 #include <vector>
+#include <unordered_map>
+#include <unordered_set>
 #include <array>
 #include <cmath>
 #include <tuple>
@@ -249,8 +251,212 @@ std::vector<bool> compute_intersections_and_winding_angles(
     return intersecting_triangles;
 }
 
+std::vector<std::vector<int>> build_triangle_adjacency_list_triangles(const std::vector<std::vector<int>>& triangles) {
+    size_t num_triangles = triangles.size();
+    std::vector<std::unordered_set<size_t>> adjacency_set(num_triangles);
+
+    // Map to store vertices and their corresponding triangle indices
+    std::unordered_map<int, std::unordered_set<size_t>> vertex_to_triangle_map;
+
+    std::cout << "Building vertex to triangle map..." << std::endl;
+
+    for (size_t i = 0; i < num_triangles; ++i) {
+        const auto& triangle = triangles[i];
+
+        // Create edges for the triangle and map them to triangles
+        for (size_t j = 0; j < 3; ++j) {
+            int v1 = triangle[j];
+            // Map vertices to triangles
+            vertex_to_triangle_map[v1].insert(i);
+        }
+    }
+
+    std::cout << "Building vertex to triangle map..." << std::endl;
+
+    // Add triangles that share at least one vertex
+    for (const auto& entry : vertex_to_triangle_map) {
+        const auto& triangle_indices = entry.second;
+        for (size_t t1 : triangle_indices) {
+            for (size_t t2 : triangle_indices) {
+                if (t1 != t2) {
+                    adjacency_set[t1].insert(t2);
+                }
+            }
+        }
+    }
+
+    std::cout << "Building adjacency list..." << std::endl;
+
+    // Adjacency list
+    std::vector<std::vector<int>> adjacency_list(num_triangles);
+    for (size_t i = 0; i < num_triangles; ++i) {
+        adjacency_list[i].reserve(adjacency_set[i].size());
+        for (size_t j : adjacency_set[i]) {
+            adjacency_list[i].push_back(j);
+        }
+    }
+
+    std::cout << "Done!" << std::endl;
+
+    return adjacency_list;
+}
+
+std::vector<std::vector<int>> build_triangle_adjacency_list_vertices(const std::vector<std::vector<int>>& triangles) {
+    int num_triangles = triangles.size();
+
+    // Map to store vertices and their corresponding triangle indices
+    std::unordered_map<int, std::unordered_set<int>> vertex_to_triangle_map;
+
+    std::cout << "Building vertex to triangle map..." << std::endl;
+
+    for (int i = 0; i < num_triangles; ++i) {
+        const auto& triangle = triangles[i];
+
+        // Create edges for the triangle and map them to triangles
+        for (int j = 0; j < 3; ++j) {
+            int v1 = triangle[j];
+            // Map vertices to triangles
+            vertex_to_triangle_map[v1].insert(i);
+        }
+    }
+
+    std::cout << "Building vertex to triangle map..." << std::endl;
+
+    int num_vertices = vertex_to_triangle_map.size();
+    std::vector<std::unordered_set<int>> adjacency_set(num_vertices);
+    // Add vertices to adjacency set
+    for (const auto& entry : vertex_to_triangle_map) {
+        int v1 = entry.first;
+        const auto& triangle_indices = entry.second;
+        for (int t1 : triangle_indices) {
+            for (int j = 0; j < 3; ++j) {
+                int v2 = triangles[t1][j];
+                if (v1 != v2) {
+                    adjacency_set[v1].insert(v2);
+                }
+            }
+        }
+    }
+
+    std::cout << "Building adjacency list..." << std::endl;
+    std::vector<std::vector<int>> adjacency_list(num_vertices);
+    for (int i = 0; i < num_vertices; ++i) {
+        adjacency_list[i].reserve(adjacency_set[i].size());
+        for (int j : adjacency_set[i]) {
+            adjacency_list[i].push_back(j);
+        }
+    }
+
+    std::cout << "Done!" << std::endl;
+
+    return adjacency_list;   
+}
+
+
+std::vector<size_t> largerst_cluster(const std::vector<std::vector<int>>& triangles, const std::vector<bool>& valid_triangles) {
+    // Run DFS on valid triangles to cluster connected components
+    size_t num_triangles = triangles.size();
+    std::vector<bool> visited(num_triangles, false);
+
+    std::vector<std::vector<int>> adjacency_list = build_triangle_adjacency_list_triangles(triangles);
+
+    // Clusters
+    std::vector<std::vector<size_t>> clusters;
+
+    while(true) {
+        std::cout << "Finding next cluster... Nr of clusters: " << clusters.size() << std::endl;
+
+        size_t start_index = 0;
+        bool found = false;
+        for (size_t i = 0; i < num_triangles; ++i) {
+            if (!visited[i] && valid_triangles[i]) {
+                start_index = i;
+                found = true;
+                break;
+            }
+        }
+
+        // No more valid triangles to cluster
+        if (!found) {
+            break;
+        }
+
+        std::vector<size_t> stack;
+        stack.push_back(start_index);
+
+        std::vector<size_t> cluster;
+        while (!stack.empty()) {
+            size_t current_index = stack.back();
+            stack.pop_back();
+
+            if (visited[current_index]) {
+                continue;
+            }
+
+            visited[current_index] = true;
+            cluster.push_back(current_index);
+
+            for (size_t neighbor : adjacency_list[current_index]) {
+                if (!visited[neighbor] && valid_triangles[neighbor]) {
+                    stack.push_back(neighbor);
+                }
+            }
+        }
+
+        clusters.push_back(cluster);
+    }
+
+    // Find the largest cluster
+    size_t max_size = 0;
+    size_t max_index = 0;
+
+    std::cout << "Nr of clusters: " << clusters.size() << std::endl;
+
+    for (size_t i = 0; i < clusters.size(); ++i) {
+        if (clusters[i].size() > max_size) {
+            max_size = clusters[i].size();
+            max_index = i;
+        }
+    }
+
+    return clusters[max_index];
+}
+
+std::vector<bool> cluster_triangles(
+    const std::vector<std::vector<int>>& triangles,
+    const std::vector<bool>& intersecting_triangles) {
+    // Mark intersecting triangles as invalid
+    std::vector<bool> valid_triangles(triangles.size(), true);
+    for (size_t i = 0; i < triangles.size(); ++i) {
+        if (intersecting_triangles[i]) {
+            valid_triangles[i] = false;
+        }
+    }
+
+    std::cout << "Clustering connected valid triangles..." << std::endl;
+
+    // Find the largest cluster of connected valid triangles
+    std::vector<size_t> largest_cluster = largerst_cluster(triangles, valid_triangles);
+
+    std::cout << "Largest cluster size: " << largest_cluster.size() << std::endl;
+
+    std::vector<bool> valid_triangles_result(triangles.size(), false);
+    // Mark the largest cluster as valid
+    for (size_t i : largest_cluster) {
+        valid_triangles_result[i] = true;
+    }
+
+    return valid_triangles_result;
+}
+
 PYBIND11_MODULE(meshing_utils, m) {
     m.doc() = "pybind11 module for mesh processing";
 
     m.def("compute_intersections_and_winding_angles", &compute_intersections_and_winding_angles, "Function to compute intersecting triangles based on a specified radius and winding angle difference.");
+
+    m.def("cluster_triangles", &cluster_triangles, "Function to cluster connected valid triangles.");
+
+    m.def("build_triangle_adjacency_list_triangles", &build_triangle_adjacency_list_triangles, "Function to build a triangle adjacency list.");
+
+    m.def("build_triangle_adjacency_list_vertices", &build_triangle_adjacency_list_vertices, "Function to build a vertices adjacency list.");
 }

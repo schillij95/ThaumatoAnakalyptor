@@ -89,25 +89,31 @@ def cluster_points_by_winding_angle(winding_angles_points, threshold_angle=45):
     clusters = fcluster(Z, t=threshold_angle, criterion='distance')
     return clusters
 
-def generate_sample(index, winding_angles, scene, triangles, ply_path, output_dir, max_distance, max_distance_valid):
+def generate_sample(index, valid_triangles, winding_angles, scene, triangles, ply_path, output_dir, max_distance, max_distance_valid):
     # Load data
     points = load_point_cloud(ply_path)
 
     # Find closest vertices
     closest_triangle, closest_distances = find_closest_triangles(points, scene)
     # Get the index of the first vertex in the closest triangle
-    closest_indices = triangles[closest_triangle][:, 0]
-
-    # Check that every point is close enough to the mesh
-    valid = np.all(closest_distances < max_distance_valid)
-    print("Valid point cloud:", valid)
-    if not valid:
-        return
+    valid_triangles_points = np.array(valid_triangles)[closest_triangle]
     
     # Only keep points that are close enough to the mesh
     mask_distance = closest_distances < max_distance
-    closest_indices = closest_indices[mask_distance]
-    clostest_points = points[mask_distance]
+    mask = np.logical_and(mask_distance, valid_triangles_points)
+
+    # Check that every point is close enough to the mesh
+    valid_distance = np.all(closest_distances < max_distance_valid)
+    # Check that at least 50% of the points are masked true
+    valid_mask = np.sum(mask) > 0.5 * len(mask)
+    valid = valid_distance and valid_mask
+    print("Valid point cloud:", valid, "Valid distance:", valid_distance, "Valid mask:", valid_mask)
+    if not valid:
+        return
+
+    closest_indices = triangles[closest_triangle][:, 0]
+    closest_indices = closest_indices[mask]
+    clostest_points = points[mask]
 
     # Find the winding angle for each point
     winding_angles_points = winding_angles[closest_indices]
@@ -251,7 +257,17 @@ def compute(mesh_file, pointcloud_dir, max_distance, max_distance_valid):
     # Calculate the intersecting out of range triangles mask
     angle_range = 180 # the intersection at the steep bends go and cross more than 2 windings, filtering out to and disregarding the first winding intersection is okay since in close proximity there will also be the second intersection. large speedup
     mesh = o3d.io.read_triangle_mesh(mesh_file)
-    intersecting_triangles = compute_intersections_and_winding_angles(mesh, winding_angles, angle_range, output_dir)
+
+    fresh_start2 = False
+    if fresh_start2:
+        intersecting_triangles = compute_intersections_and_winding_angles(mesh, winding_angles, angle_range, output_dir)
+        # Save the intersecting triangles mask
+        with open(os.path.join(output_dir, "intersecting_triangles.pkl"), "wb") as f:
+            pickle.dump(intersecting_triangles, f)
+    else:
+        # Load intersecting triangles
+        with open(os.path.join(output_dir, "intersecting_triangles.pkl"), "rb") as f:
+            intersecting_triangles = pickle.load(f)
 
     print(f"Found {np.sum(intersecting_triangles)} intersecting triangles")
 
@@ -266,20 +282,52 @@ def compute(mesh_file, pointcloud_dir, max_distance, max_distance_valid):
     # save the intersecting mesh
     intersecting_mesh_path = os.path.join(output_dir, "intersecting_mesh.obj")
     o3d.io.write_triangle_mesh(intersecting_mesh_path, intersecting_mesh)
+
+    # Valid triangles
+    valid_triangles = meshing_utils.cluster_triangles(triangles, intersecting_triangles)
+    non_selected_triangles = np.logical_not(valid_triangles)
+
+    # Save the non-selected triangles mesh
+    non_selected_mesh = o3d.geometry.TriangleMesh()
+    non_selected_mesh.vertices = mesh.vertices
+    non_selected_mesh.triangles = o3d.utility.Vector3iVector(triangles[non_selected_triangles])
+    # Remove unused vertices
+    non_selected_mesh = non_selected_mesh.remove_unreferenced_vertices()
+    non_selected_mesh = non_selected_mesh.compute_vertex_normals()
+    non_selected_mesh = non_selected_mesh.compute_triangle_normals()
+    # save the non-selected mesh
+    non_selected_mesh_path = os.path.join(output_dir, "non_selected_mesh.obj")
+    o3d.io.write_triangle_mesh(non_selected_mesh_path, non_selected_mesh)
+
+    # # Save selected triangles mesh
+    # selected_mesh = o3d.geometry.TriangleMesh()
+    # selected_mesh.vertices = mesh.vertices
+    # selected_mesh.triangles = o3d.utility.Vector3iVector(triangles[valid_triangles])
+    # # Remove unused vertices
+    # selected_mesh = selected_mesh.remove_unreferenced_vertices()
+    # selected_mesh = selected_mesh.compute_vertex_normals()
+    # selected_mesh = selected_mesh.compute_triangle_normals()
+    # # save the selected mesh
+    # selected_mesh_path = os.path.join(output_dir, "selected_mesh.obj")
+    # o3d.io.write_triangle_mesh(selected_mesh_path, selected_mesh)
     
     triangles, scene = load_mesh_vertices(mesh_file)
 
     ply_files = [f for f in os.listdir(pointcloud_dir) if f.endswith('.ply')]
     for i, ply_file in enumerate(tqdm(ply_files, desc="Processing point clouds")):
         ply_path = os.path.join(pointcloud_dir, ply_file)
-        generate_sample(i, winding_angles, scene, triangles, ply_path, output_dir, max_distance, max_distance_valid)
+        try:
+            generate_sample(i, valid_triangles, winding_angles, scene, triangles, ply_path, output_dir, max_distance, max_distance_valid)
+        except Exception as e:
+            print(f"Error processing {ply_path}: {e}")
+            continue
 
 def main():
     # Parse arguments
     parser = argparse.ArgumentParser(description="Convert a 3D mesh and a PointCloud to 3D PointCloud instance labels.")
     parser.add_argument("--mesh_file", type=str, help="Path to the 3D mesh file (e.g., .obj)")
     parser.add_argument("--pointcloud_dir", type=str, help="Path to the 3D point cloud directory (containing .ply)")
-    parser.add_argument("--max_distance", type=float, help="Maximum distance for a point to be considered part of the mesh", default=25)
+    parser.add_argument("--max_distance", type=float, help="Maximum distance for a point to be considered part of the mesh", default=15)
     parser.add_argument("--max_distance_valid", type=int, help="Maximum distance all points must be to be considered valid a valid pointcloud", default=100)
 
     args = parser.parse_args()

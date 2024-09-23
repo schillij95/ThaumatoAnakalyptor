@@ -11,6 +11,10 @@ from tqdm import tqdm
 import os
 from datetime import datetime
 
+import sys
+sys.path.append('ThaumatoAnakalyptor/sheet_generation/build')
+import meshing_utils
+
 class MeshSplitter:
     def __init__(self, mesh_path, umbilicus_path, scale_factor=1.0):
         # Load mesh
@@ -75,33 +79,42 @@ class MeshSplitter:
         """
         Compute the adjacency list for the mesh.
         """
-        adjacent_dict = {}
-        for triangle in tqdm(np.array(self.mesh.triangles)):
-            for i in range(3):
-                vertex = int(triangle[i])
-                adjacent = int(triangle[(i + 1) % 3])
-                if vertex not in adjacent_dict:
-                    adjacent_dict[vertex] = set()
-                adjacent_dict[vertex].add(adjacent)
-                if adjacent not in adjacent_dict:
-                    adjacent_dict[adjacent] = set()
-                adjacent_dict[adjacent].add(vertex)
+        # adjacent_dict = {}
+        # for triangle in tqdm(np.array(self.mesh.triangles)):
+        #     for i in range(3):
+        #         vertex = int(triangle[i])
+        #         adjacent = int(triangle[(i + 1) % 3])
+        #         if vertex not in adjacent_dict:
+        #             adjacent_dict[vertex] = set()
+        #         adjacent_dict[vertex].add(adjacent)
+        #         if adjacent not in adjacent_dict:
+        #             adjacent_dict[adjacent] = set()
+        #         adjacent_dict[adjacent].add(vertex)
 
-        vertices = np.array(self.mesh.vertices)
-        for vertex in range(vertices.shape[0]):
-            vertex = int(vertex)
-            if vertex not in adjacent_dict:
-                adjacent_dict[vertex] = []
-            else:
-                adjacent_dict[vertex] = list(adjacent_dict[vertex])
+        # vertices = np.array(self.mesh.vertices)
+        # for vertex in range(vertices.shape[0]):
+        #     vertex = int(vertex)
+        #     if vertex not in adjacent_dict:
+        #         adjacent_dict[vertex] = []
+        #     else:
+        #         adjacent_dict[vertex] = list(adjacent_dict[vertex])
+        # self.adjacency_list = adjacent_dict
 
-        self.adjacency_list = adjacent_dict
+        triangles = np.array(self.mesh.triangles)
+        triangles = [[int(triangle[0]), int(triangle[1]), int(triangle[2])] for triangle in triangles]
+        adjacency_list = meshing_utils.build_triangle_adjacency_list_vertices(triangles)
+
+        adjacency_dict = {}
+        for triangle_idx, adjacent_vertices in enumerate(adjacency_list):
+            adjacency_dict[triangle_idx] = adjacent_vertices
+        self.adjacency_list = adjacency_dict
 
     def get_adjacent_vertices(self, vertex_idx):
         # Check if the adjacency list exists for the mesh
         if not hasattr(self, 'adjacency_list'):
             print("Generating adjacency list...")
             self.compute_adjacency_list()  # Compute the adjacency list if it doesn't exist
+            print("Adjacency list generated.")
         # Get and return adjacent vertex indices directly
         adjacent = self.adjacency_list[int(vertex_idx)]
         return adjacent
