@@ -210,17 +210,18 @@ def find_valid_relations(points2, scene1, triangles1, winding_angles2, max_dista
 
     # Only keep points that are close enough to the mesh
     mask_distance = closest_distances < max_distance
+    percentage_valid = 1.0 * np.sum(mask_distance) / len(mask_distance)
     points_indices2 = np.arange(len(points2))[mask_distance]
     closest_indices1 = closest_indices1[mask_distance]
     clostest_points2 = points2[mask_distance]
     # Find the winding angle for each point
     winding_angles_points2 = winding_angles2[mask_distance]
 
-    return closest_indices1, winding_angles_points2, clostest_points2, points_indices2
+    return closest_indices1, winding_angles_points2, clostest_points2, points_indices2, percentage_valid
 
-def align_winding_angles(vertices1, winding_angles1, mesh2_path, umbilicus_path, max_distance, gt_splitter):
+def align_winding_angles(vertices1, winding_angles1, mesh2_stuff, umbilicus_path, max_distance, gt_splitter):
     # load the meshes
-    mesh2, vertices2, triangles2, scene2 = load_mesh_vertices(mesh2_path)
+    mesh2, vertices2, triangles2, scene2 = mesh2_stuff
 
     # calculate the gt winding angles
     winding_angles2 = calculate_winding_angle(gt_splitter)
@@ -228,7 +229,7 @@ def align_winding_angles(vertices1, winding_angles1, mesh2_path, umbilicus_path,
     assert len(winding_angles2) == len(vertices2)
 
     # find the closest vertices
-    closest_indices2, winding_angles_vertices1, clostest_vertices1, points_indices1 = find_valid_relations(vertices1, scene2, triangles2, winding_angles1, max_distance) # find the clostest triangle of the gt mesh (mesh 2) for each vertex of the input mesh (mesh 1) -> then find the winding angle of one of the vertices of the closest triangle each in the gt mesh (mesh 2)
+    closest_indices2, winding_angles_vertices1, clostest_vertices1, points_indices1, percentage_valid = find_valid_relations(vertices1, scene2, triangles2, winding_angles1, max_distance) # find the clostest triangle of the gt mesh (mesh 2) for each vertex of the input mesh (mesh 1) -> then find the winding angle of one of the vertices of the closest triangle each in the gt mesh (mesh 2)
 
     # Make statistic about the winding differences in the closest vertices
     winding_angle_difference = {}
@@ -243,7 +244,7 @@ def align_winding_angles(vertices1, winding_angles1, mesh2_path, umbilicus_path,
         winding_angle_difference[int(w_a_diff)] += 1
 
     print(winding_angle_difference)
-    return winding_angle_difference, winding_angles2, scene2, mesh2
+    return winding_angle_difference, winding_angles2, scene2, mesh2, percentage_valid
 
 def find_best_alignment(winding_angle_difference):
     # find the max used k value
@@ -299,7 +300,8 @@ def mesh_quality(mesh_path1, mesh_path2, umbilicus_path, max_distance, output_di
     if fresh_start:
         mesh1, vertices1, _, _ = load_mesh_vertices(mesh_path1)
         winding_angles1 = calculate_winding_angle(mesh_path1, mesh1_splitter)
-        winding_angle_difference, winding_angles2, scene2, mesh2 = align_winding_angles(vertices1, winding_angles1, mesh_path2, umbilicus_path, max_distance, gt_splitter)
+        mesh2_stuff = load_mesh_vertices(mesh_path2)
+        winding_angle_difference, winding_angles2, scene2, mesh2, percentage_valid = align_winding_angles(vertices1, winding_angles1, mesh2_stuff, umbilicus_path, max_distance, gt_splitter)
         best_alignment = find_best_alignment(winding_angle_difference)
         print(f"Best alignment: {best_alignment}")
 
@@ -376,7 +378,8 @@ def compute(input_mesh, input_raw_pointcloud, input_instance_pointcloud, mesh_pa
         winding_angles1 = calculate_winding_angle(mesh1_splitter)
 
     # align winding angles
-    winding_angle_difference, winding_angles2, scene2, mesh2 = align_winding_angles(vertices1, winding_angles1, mesh_path2, umbilicus_path, max_distance, gt_splitter)
+    mesh2_stuff = load_mesh_vertices(mesh_path2)
+    winding_angle_difference, winding_angles2, scene2, mesh2, percentage_valid = align_winding_angles(vertices1, winding_angles1, mesh2_stuff, umbilicus_path, max_distance, gt_splitter)
     best_alignment = find_best_alignment(winding_angle_difference)
     print(f"Best alignment: {best_alignment}")
 

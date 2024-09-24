@@ -20,7 +20,11 @@ from copy import deepcopy
 import struct
 
 from .instances_to_sheets import select_points, get_vector_mean, alpha_angles, adjust_angles_zero, adjust_angles_offset, add_overlapp_entries_to_patches_list, assign_points_to_tiles, compute_overlap_for_pair, overlapp_score, fit_sheet, winding_switch_sheet_score_raw_precomputed_surface, find_starting_patch, save_main_sheet, update_main_sheet
-from .sheet_to_mesh import load_xyz_from_file, scale_points, umbilicus_xz_at_y
+from .sheet_to_mesh import load_xyz_from_file, scale_points, umbilicus_xz_at_y, shuffling_points_axis
+from .mesh_to_mask3d_labels import set_up_mesh
+from .split_mesh import MeshSplitter
+from .mesh_quality import calculate_winding_angle_pointcloud_instance, align_winding_angles, find_best_alignment
+from .mesh_quality import load_mesh_vertices as load_mesh_vertices_quality
 import sys
 ### C++ speed up Random Walks
 sys.path.append('ThaumatoAnakalyptor/sheet_generation/build')
@@ -914,63 +918,99 @@ class ScrollGraph(Graph):
 
         self.compute_node_edges()
         return (factor_0, factor_not_0, factor_bad)
+    
+    def add_ground_truth_from_mesh(self, mesh_file, pointcloud_dir, continue_from=0):
+        axis_indices = [2, 0, 1]
+        umbilicus_path = os.path.join(os.path.dirname(pointcloud_dir), "umbilicus.txt")
+        # Load GT data
+        valid_triangles, winding_angles, output_dir, gt_splitter = set_up_mesh(mesh_file, pointcloud_dir, continue_from=continue_from) # each worker needs its own copy
+        mesh_gt_stuff = load_mesh_vertices_quality(mesh_file) # each worker needs its own copy
 
-    def build_graph(self, path_instances, start_point, num_processes=4, prune_unconnected=False):
-        blocks_tar_files = glob.glob(path_instances + '/*.tar')
+        # Load the node instance, compare to scroll GT mesh, add winding angle information if instance within the GT mesh.
+        # use multiprocessing pool with initializer for scene
+        pass
+        # PC instance path from node name
+        input_instance_pointcloud = None # TODO
+        # 3D instance pointcloud
+        vertices1 = o3d.io.read_point_cloud(input_instance_pointcloud)
+        # to numpy
+        vertices1 = np.asarray(vertices1.points)
+        # adjust coordinate frame
+        vertices1 = scale_points(vertices1, 4.0, axis_offset=-500)
+        vertices1, _ = shuffling_points_axis(vertices1, vertices1, axis_indices)
+        winding_angles1 = calculate_winding_angle_pointcloud_instance(vertices1, gt_splitter) # instance winding angles
 
-        #from original coordinates to instance coordinates
-        start_block, patch_id = (0, 0, 0), 0
-        self.start_block, self.patch_id, self.start_point = start_block, patch_id, start_point
+        # align winding angles
+        winding_angle_difference, winding_angles2, scene2, mesh2, percentage_valid = align_winding_angles(vertices1, winding_angles1, mesh_gt_stuff, umbilicus_path, 15, gt_splitter) # aling to GT mesh per point
+        best_alignment = find_best_alignment(winding_angle_difference) # best alignment to a wrap
+        print(f"Best alignment: {best_alignment}")
 
-        print(f"Found {len(blocks_tar_files)} blocks.")
-        print("Building graph...")
+        # Adjust the winding angles of the instances to have the same winding angle base as the GT mesh
+        winding_angles1 -= best_alignment
+        
+        # for all edges between two nodes with GT data, decide if edge is in-/valid
+        pass
 
-        # Create a pool of worker processes
-        with Pool(num_processes) as pool:
-            # Map the process_block function to each file
-            zipped_args = list(zip(blocks_tar_files, [path_instances] * len(blocks_tar_files), [self.overlapp_threshold] * len(blocks_tar_files), [self.umbilicus_data] * len(blocks_tar_files)))
-            results = list(tqdm(pool.imap(process_block, zipped_args), total=len(zipped_args)))
+    def build_graph(self, path_instances, start_point, num_processes=4, prune_unconnected=False, start_fresh=True):
+        if start_fresh:
+            blocks_tar_files = glob.glob(path_instances + '/*.tar')
 
-        print(f"Number of results: {len(results)}")
+            #from original coordinates to instance coordinates
+            start_block, patch_id = (0, 0, 0), 0
+            self.start_block, self.patch_id, self.start_point = start_block, patch_id, start_point
 
-        count_res = 0
-        patches_centroids = {}
-        # Process results from each worker
-        for score_sheets, score_switching_sheets, score_bad_edges, volume_centroids in tqdm(results, desc="Processing results"):
-            count_res += len(score_sheets)
-            # Calculate scores, add patches edges to graph, etc.
-            self.build_other_block_edges(score_sheets)
-            self.build_same_block_edges(score_switching_sheets)
-            # self.build_bad_edges(score_bad_edges)
-            patches_centroids.update(volume_centroids)
-        print(f"Number of results: {count_res}")
+            print(f"Found {len(blocks_tar_files)} blocks.")
+            print("Building graph...")
 
-        # Define a wrapper function for umbilicus_xz_at_y
-        umbilicus_func = lambda z: umbilicus_xz_at_y(self.umbilicus_data, z)
+            # Create a pool of worker processes
+            with Pool(num_processes) as pool:
+                # Map the process_block function to each file
+                zipped_args = list(zip(blocks_tar_files, [path_instances] * len(blocks_tar_files), [self.overlapp_threshold] * len(blocks_tar_files), [self.umbilicus_data] * len(blocks_tar_files)))
+                results = list(tqdm(pool.imap(process_block, zipped_args), total=len(zipped_args)))
 
-        # Add patches as nodes to graph
-        edges_keys = list(self.edges.keys())
-        nodes_from_edges = set()
-        for edge in tqdm(edges_keys, desc="Initializing nodes"):
-            nodes_from_edges.add(edge[0])
-            nodes_from_edges.add(edge[1])
-        for node in nodes_from_edges:
-            try:
-                umbilicus_point = umbilicus_func(patches_centroids[node][1])[[0, 2]]
-                umbilicus_vector = umbilicus_point - patches_centroids[node][[0, 2]]
-                angle = angle_between(umbilicus_vector) * 180.0 / np.pi
-                self.add_node(node, patches_centroids[node], winding_angle=angle)
-            except:
-                del self.edges[edge]
+            print(f"Number of results: {len(results)}")
 
-        node_id = tuple((*start_block, patch_id))
-        print(f"Start node: {node_id}, nr nodes: {len(self.nodes)}, nr edges: {len(self.edges)}")
-        self.compute_node_edges()
-        if prune_unconnected:
-            print("Prunning unconnected nodes...")
-            self.largest_connected_component()
+            count_res = 0
+            patches_centroids = {}
+            # Process results from each worker
+            for score_sheets, score_switching_sheets, score_bad_edges, volume_centroids in tqdm(results, desc="Processing results"):
+                count_res += len(score_sheets)
+                # Calculate scores, add patches edges to graph, etc.
+                self.build_other_block_edges(score_sheets)
+                self.build_same_block_edges(score_switching_sheets)
+                # self.build_bad_edges(score_bad_edges)
+                patches_centroids.update(volume_centroids)
+            print(f"Number of results: {count_res}")
 
-        print(f"Nr nodes: {len(self.nodes)}, nr edges: {len(self.edges)}")
+            # Define a wrapper function for umbilicus_xz_at_y
+            umbilicus_func = lambda z: umbilicus_xz_at_y(self.umbilicus_data, z)
+
+            # Add patches as nodes to graph
+            edges_keys = list(self.edges.keys())
+            nodes_from_edges = set()
+            for edge in tqdm(edges_keys, desc="Initializing nodes"):
+                nodes_from_edges.add(edge[0])
+                nodes_from_edges.add(edge[1])
+            for node in nodes_from_edges:
+                try:
+                    umbilicus_point = umbilicus_func(patches_centroids[node][1])[[0, 2]]
+                    umbilicus_vector = umbilicus_point - patches_centroids[node][[0, 2]]
+                    angle = angle_between(umbilicus_vector) * 180.0 / np.pi
+                    self.add_node(node, patches_centroids[node], winding_angle=angle)
+                except:
+                    del self.edges[edge]
+
+            node_id = tuple((*start_block, patch_id))
+            print(f"Start node: {node_id}, nr nodes: {len(self.nodes)}, nr edges: {len(self.edges)}")
+            self.compute_node_edges()
+            if prune_unconnected:
+                print("Prunning unconnected nodes...")
+                self.largest_connected_component()
+
+            print(f"Nr nodes: {len(self.nodes)}, nr edges: {len(self.edges)}")
+
+        # Add GT data to nodes
+        self.add_ground_truth_from_mesh() # TODO
 
         return start_block, patch_id
     
@@ -1320,9 +1360,13 @@ def compute(overlapp_threshold, start_point, path, recompute=False, stop_event=N
     
     # Build graph
     if recompute:
-        scroll_graph = ScrollGraph(overlapp_threshold, umbilicus_path)
+        start_fresh = False
+        if start_fresh:
+            scroll_graph = ScrollGraph(overlapp_threshold, umbilicus_path)
+        else:
+            scroll_graph = load_graph(recompute_path)
         num_processes = max(1, cpu_count() - 2)
-        start_block, patch_id = scroll_graph.build_graph(path, num_processes=num_processes, start_point=start_point, prune_unconnected=False)
+        start_block, patch_id = scroll_graph.build_graph(path, num_processes=num_processes, start_point=start_point, prune_unconnected=False, start_fresh=start_fresh)
         print("Saving built graph...")
         scroll_graph.save_graph(recompute_path)
     

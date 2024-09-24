@@ -417,10 +417,16 @@ float certainty_factor(float error) { // certainty factor based on the error. ex
 
 void update_weights(std::vector<Node>& graph, float scale) {
     for (auto& node : graph) {
+        if (node.deleted) {
+            continue;
+        }
         std::vector<float> errors(node.edges.size());
         float weighted_mean_error = 0.0f;
         float mean_certainty = 0.0f;
         for (size_t i = 0; i < node.edges.size(); ++i) {
+            if (graph[node.edges[i].target_node].deleted) {
+                continue;
+            }
             // difference between BP solution and estimated k from the graph
             errors[i] = std::abs(scale * (graph[node.edges[i].target_node].f_tilde - node.f_tilde) - node.edges[i].k);
             weighted_mean_error += errors[i] * node.edges[i].certainty_factored;
@@ -435,15 +441,20 @@ void update_weights(std::vector<Node>& graph, float scale) {
             errors[i] = std::abs(errors[i] - weighted_mean_error);
         }
         float factors_mean = 0.0f;
+        size_t factors_count = 0;
         for (size_t i = 0; i < node.edges.size(); ++i) {
+            if (graph[node.edges[i].target_node].deleted) {
+                continue;
+            }
             // certainty factor based on the error
             node.edges[i].certainty_factor = 0.8f * node.edges[i].certainty_factor + 0.2f * certainty_factor(errors[i]);
             factors_mean += node.edges[i].certainty_factor;
+            factors_count++;
         }
-        factors_mean /= node.edges.size();
+        factors_mean /= factors_count;
         // Normalize the factors
         for (auto& edge : node.edges) {
-            edge.certainty_factor /= factors_mean;
+            edge.certainty_factor = edge.certainty_factor / factors_mean;
             edge.certainty_factored = edge.certainty * edge.certainty_factor;
         }
     }
@@ -662,9 +673,10 @@ bool remove_invalid_edges(std::vector<Node>& graph, float threshold = 0.1) {
     return erased_edges > 0;
 }
 
-void update_nodes(std::vector<Node>& graph, float o, float spring_constant) {
+void update_nodes(std::vector<Node>& graph, float o, float spring_constant, std::vector<size_t> valid_indices) {
     #pragma omp parallel for
-    for (size_t i = 0; i < graph.size(); ++i) {
+    for (size_t j = 0; j < valid_indices.size(); ++j) {
+        size_t i = valid_indices[j];
         if (graph[i].deleted) {
             continue;
         }
@@ -688,7 +700,8 @@ void update_nodes(std::vector<Node>& graph, float o, float spring_constant) {
 
     // Update f_tilde with the newly computed f_star values
     #pragma omp parallel for
-    for (size_t i = 0; i < graph.size(); ++i) {
+    for (size_t j = 0; j < valid_indices.size(); ++j) {
+        size_t i = valid_indices[j];
         if (graph[i].deleted) {
             continue;
         }
@@ -724,11 +737,23 @@ std::vector<float> generate_spring_constants(float start_value, int steps) {
     return spring_constants;
 }
 
+std::vector<size_t> get_valid_indices(const std::vector<Node>& graph) {
+    std::vector<size_t> valid_indices;
+    size_t num_valid_nodes = 0;
+    for (size_t i = 0; i < graph.size(); ++i) {
+        if (!graph[i].deleted) {
+            valid_indices.push_back(i);
+            num_valid_nodes++;
+        }
+    }
+    std::cout << "Number of valid nodes: " << num_valid_nodes << std::endl;
+    return valid_indices;
+}
+
 // This is an example of a solve function that takes the graph and parameters as input
-void solve(std::vector<Node>& graph, argparse::ArgumentParser* program) {
+void solve(std::vector<Node>& graph, argparse::ArgumentParser* program, int num_iterations = 10000) {
     // Default values for parameters
     int estimated_windings = 0;
-    int num_iterations = 10000;
     float spring_constant = 2.0f;
     float o = 2.0f;
     float iterations_factor = 2.0f;
@@ -741,7 +766,6 @@ void solve(std::vector<Node>& graph, argparse::ArgumentParser* program) {
     // Parse the arguments
     try {
         estimated_windings = program->get<int>("--estimated_windings");
-        num_iterations = program->get<int>("--num_iterations");
         o = program->get<float>("--o");
         spring_constant = program->get<float>("--spring_constant");
         steps = program->get<int>("--steps");
@@ -785,10 +809,16 @@ void solve(std::vector<Node>& graph, argparse::ArgumentParser* program) {
     int max_index_digits = static_cast<int>(std::log10(spring_constants.size())) + 1;
     int max_iter_digits = static_cast<int>(std::log10(num_iterations - 1)) + 1;
 
+    // store only the valid indices to speed up the loop
+    std::vector<size_t> valid_indices;
+    
+
     float invalid_edge_threshold = 1.1f;
 
     int edges_deletion_round = 0;
     while (true) {
+        // store only the valid indices to speed up the loop
+        valid_indices = get_valid_indices(graph);
         // Do 2 rounds of edge deletion
         if (edges_deletion_round > 1) {
             // Do last of updates with 3x times iterations and spring constant 1.0
@@ -812,15 +842,19 @@ void solve(std::vector<Node>& graph, argparse::ArgumentParser* program) {
                 // Skip the warmup iteration for subsequent rounds
                 continue;
             }
-            else if (i == steps && edges_deletion_round == 1) {
+            else if (i == steps && edges_deletion_round >= 1) {
                 // Do last of updates with 3x times iterations and spring constant 1.0
                 num_iterations_iteration *= 3.0f;
                 spring_constant_iteration = 1.0f;
             }
+            else if (i == steps) {
+                // Do last of updates with 3x times iterations and spring constant 1.0
+                num_iterations_iteration *= 1.5f;
+            }
             std::cout << "Spring Constant " << i << ": " << std::setprecision(10) << spring_constant_iteration << std::endl;
             bool first_estimated_iteration = i == -1 && edges_deletion_round == 0 && estimated_windings > 0;
             for (int iter = 0; first_estimated_iteration ? true : iter < num_iterations_iteration; ++iter) {
-                update_nodes(graph, o_iteration, spring_constant_iteration);
+                update_nodes(graph, o_iteration, spring_constant_iteration, valid_indices);
 
                 if (iter % 100 == 0) {
                     std::cout << "\rIteration: " << iter << std::flush;  // Updates the same line
@@ -935,8 +969,12 @@ void auto_winding_direction(std::vector<Node>& graph, argparse::ArgumentParser* 
     invert_winding_direction_graph(auto_graph_other_block); // build inverted other block graph
 
     // solve
-    solve(auto_graph_other_block, program);
-    solve(auto_graph, program);
+    int auto_num_iterations = program->get<int>("--auto_num_iterations");
+    if (auto_num_iterations == -1) {
+        auto_num_iterations = program->get<int>("--num_iterations");
+    }
+    solve(auto_graph_other_block, program, auto_num_iterations);
+    solve(auto_graph, program, auto_num_iterations);
 
     // Exact matching score
     float exact_score = exact_matching_score(auto_graph);
@@ -966,6 +1004,9 @@ void auto_winding_direction(std::vector<Node>& graph, argparse::ArgumentParser* 
         std::cout << "Inverting the winding direction" << std::endl;
         invert_winding_direction_graph(graph);
     }
+    else {
+        std::cout << "Standard winding direction has highest score. Not inverting the winding direction." << std::endl;
+    }
 }
 
 int main(int argc, char** argv) {
@@ -975,6 +1016,7 @@ int main(int argc, char** argv) {
     // Default values for parameters
     int estimated_windings = 0;
     int num_iterations = 10000;
+    int auto_num_iterations = -1;
     float spring_constant = 2.0f;
     float o = 2.0f;
     float iterations_factor = 2.0f;
@@ -1056,6 +1098,12 @@ int main(int argc, char** argv) {
         .default_value(false)   // Set default to false
         .implicit_value(true);  // If present, set to true
 
+    // Add the auto number of iterations
+    program.add_argument("--auto_num_iterations")
+        .help("Number of iterations for auto mode (int)")
+        .default_value(auto_num_iterations)
+        .scan<'i', int>();
+
     // Add the boolean flag --video
     program.add_argument("--video")
         .help("Enable video creation")
@@ -1073,7 +1121,7 @@ int main(int argc, char** argv) {
 
     // Load the graph from the input binary file
     std::string input_graph_file = program.get<std::string>("--input_graph");
-    std::vector<Node> graph = load_graph_from_binary(input_graph_file, true, static_cast<float>(program.get<int>("--z_min")), static_cast<float>(program.get<int>("--z_max")), same_winding_factor);
+    std::vector<Node> graph = load_graph_from_binary(input_graph_file, true, (static_cast<float>(program.get<int>("--z_min")) + 500) / 4, (static_cast<float>(program.get<int>("--z_max")) + 500) / 4, same_winding_factor);
 
     // Calculate the exact matching loss
     float exact_score = exact_matching_score(graph);
@@ -1092,7 +1140,8 @@ int main(int argc, char** argv) {
     }
 
     // Solve the problem using a solve function
-    solve(graph, &program);
+    num_iterations = program.get<int>("--num_iterations");
+    solve(graph, &program, num_iterations);
 
     // print the min and max f_star values
     std::cout << "Min f_star: " << min_f_star(graph) << std::endl;
@@ -1104,3 +1153,5 @@ int main(int argc, char** argv) {
 
     return 0;
 }
+
+// Example command to run the program: ./build/graph_problem --input_graph graph.bin --output_graph output_graph.bin --auto --auto_num_iterations 2000 --video --z_min 5000 --z_max 7000 --num_iterations 5000 --estimated_windings 160 --steps 3 --spring_constant 1.2

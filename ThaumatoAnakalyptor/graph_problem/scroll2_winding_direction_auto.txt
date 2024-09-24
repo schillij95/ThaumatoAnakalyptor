@@ -1,0 +1,114 @@
+(base) julian@julian-MS-7D70:~/gitThaumato/ThaumatoAnakalyptor/ThaumatoAnakalyptor/graph_problem$ ./build/graph_problem --input_graph graph.bin --output_graph output_graph.bin --auto --auto_num_iterations 2000 --video --z_min 5000 --z_max 7000 --num_iterations 5000 --estimated_windings 160 --steps 3 --spring_constant 1.2
+Number of nodes in graph: 13472965
+Nodes loaded successfully.
+Edge with k > 450: -460.626
+Edge with k > 450: 460.626
+Edge with k > 450: -528.902
+Edge with k > 450: 528.902
+Edge with k > 450: -467.888
+Edge with k > 450: 467.888
+Same block edges: 934102
+Graph loaded successfully.
+Max Certainty: 2.38523
+Exact Matching Score: 5.15078e+06
+Approximate Matching Loss: 5.42357e+06
+Auto Winding Direction
+Estimated Windings: 160
+Number of Iterations: 2000
+O: 2
+Spring Constant: 1.2
+Steps: 3
+Iterations Factor: 2
+O Factor: 0.25
+Spring Factor: 6
+Auto Mode: Enabled
+Multiplier: 0.7937
+Number of valid nodes: 1760475
+Spring Constant -1: 6
+Iteration: 4900
+Video created successfully: winding_angle_histogram.avi
+Spring Constant 0: 1.200000048
+Iteration: 1900
+Video created successfully: winding_angle_histogram.avi
+Spring Constant 1: 0.8630062342
+Iteration: 1900
+Video created successfully: winding_angle_histogram.avi
+Spring Constant 2: 1.125992179
+Iteration: 1900
+Video created successfully: winding_angle_histogram.avi
+Spring Constant 3: 1
+Iteration: 1900
+Video created successfully: winding_angle_histogram.avi
+Erased edges: 51514
+Remaining edges: 7276696
+Remaining nodes: 1407165 out of 1760475 initial non deleted edges, of total edge: 13472965
+Reducing invalid edges threshold to: 0.780000031
+Number of valid nodes: 1407165
+Spring Constant 0: 1.200000048
+Iteration: 1900
+Video created successfully: winding_angle_histogram.avi
+Spring Constant 1: 0.8630062342
+Iteration: 1900
+Video created successfully: winding_angle_histogram.avi
+Spring Constant 2: 1.125992179
+Iteration: 1900
+Video created successfully: winding_angle_histogram.avi
+Spring Constant 3: 1
+Iteration: 5900
+Video created successfully: winding_angle_histogram.avi
+Remaining nodes: 1407165 out of 1407165 initial non deleted edges, of total edge: 13472965
+Reducing invalid edges threshold to: 0.523999989
+Number of valid nodes: 1407165
+Video created successfully: winding_angle_histogram.avi
+Estimated Windings: 160
+Number of Iterations: 2000
+O: 2
+Spring Constant: 1.200000048
+Steps: 3
+Iterations Factor: 2
+O Factor: 0.25
+Spring Factor: 6
+Auto Mode: Enabled
+Multiplier: 0.7937004566
+Number of valid nodes: 1760475
+Spring Constant -1: 6
+Iteration: 4700
+Video created successfully: winding_angle_histogram.avi
+Spring Constant 0: 1.200000048
+Iteration: 1900
+Video created successfully: winding_angle_histogram.avi
+Spring Constant 1: 0.8630062342
+Iteration: 1900
+Video created successfully: winding_angle_histogram.avi
+Spring Constant 2: 1.125992179
+Iteration: 1900
+Video created successfully: winding_angle_histogram.avi
+Spring Constant 3: 1
+Iteration: 1900
+Video created successfully: winding_angle_histogram.avi
+Erased edges: 50014
+Remaining edges: 7278196
+Remaining nodes: 1407832 out of 1760475 initial non deleted edges, of total edge: 13472965
+Reducing invalid edges threshold to: 0.780000031
+Number of valid nodes: 1407832
+Spring Constant 0: 1.200000048
+Iteration: 1900
+Video created successfully: winding_angle_histogram.avi
+Spring Constant 1: 0.8630062342
+Iteration: 1900
+Video created successfully: winding_angle_histogram.avi
+Spring Constant 2: 1.125992179
+Iteration: 1900
+Video created successfully: winding_angle_histogram.avi
+Spring Constant 3: 1
+Iteration: 5900
+Video created successfully: winding_angle_histogram.avi
+Remaining nodes: 1407832 out of 1407832 initial non deleted edges, of total edge: 13472965
+Reducing invalid edges threshold to: 0.523999989
+Number of valid nodes: 1407832
+Video created successfully: winding_angle_histogram.avi
+Exact Matching Score: 378063.8125
+Exact Matching Score Other Block: 253699.6875
+Exact Matching Score (no same block edges): 326064.8125
+Exact Matching Score Other Block (no same block edges): 218627.6719
+Standard winding direction has highest score. Not inverting the winding direction.

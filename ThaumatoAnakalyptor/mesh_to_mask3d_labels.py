@@ -68,7 +68,7 @@ def calculate_winding_angle(mesh_path, pointcloud_dir):
     splitter =  MeshSplitter(mesh_path, umbilicus_path)
     splitter.compute_uv_with_bfs(0)
     winding_angles = splitter.vertices_np[:, 0]
-    return winding_angles
+    return winding_angles, splitter
 
 def find_closest_vertices(points, tree):    
     # Find the closest vertex for each point
@@ -273,7 +273,7 @@ def set_up_mesh(mesh_file, pointcloud_dir, continue_from=0, save_meshes=False):
         triangles, scene = load_mesh_vertices(mesh_file)
 
         # Calculate winding angles for each vertex
-        winding_angles = calculate_winding_angle(mesh_file, pointcloud_dir)
+        winding_angles, splitter = calculate_winding_angle(mesh_file, pointcloud_dir)
 
         # pickle winding angles
         os.makedirs(output_dir, exist_ok=True)
@@ -328,10 +328,10 @@ def set_up_mesh(mesh_file, pointcloud_dir, continue_from=0, save_meshes=False):
     if save_meshes:
         save_mesh(mesh, triangles[valid_triangles], os.path.join(output_dir, "selected_mesh.obj"))
 
-    return valid_triangles, winding_angles, output_dir
+    return valid_triangles, winding_angles, output_dir, splitter
 
 def compute(mesh_file, pointcloud_dir, max_distance, max_distance_valid, continue_from=0):
-    valid_triangles, winding_angles, output_dir = set_up_mesh(mesh_file, pointcloud_dir, continue_from=continue_from)
+    valid_triangles, winding_angles, output_dir, splitter = set_up_mesh(mesh_file, pointcloud_dir, continue_from=continue_from)
     ply_files = [f for f in os.listdir(pointcloud_dir) if f.endswith('.ply')]
     # shuffle
     np.random.shuffle(ply_files)
