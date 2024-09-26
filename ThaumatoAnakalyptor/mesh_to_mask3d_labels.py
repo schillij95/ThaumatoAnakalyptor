@@ -27,15 +27,18 @@ def save_point_cloud(filename, points):
     pcd.points = o3d.utility.Vector3dVector(points)
     o3d.io.write_point_cloud(filename, pcd)
 
-def load_mesh_vertices(obj_file):
+def load_mesh_vertices(obj_file, use_tempfile=True):
     # copy mesh to tempfile
-    with tempfile.NamedTemporaryFile(suffix=".obj") as temp_file:
-        # copy mesh to tempfile
-        temp_path = temp_file.name
-        # os copy
-        os.system(f"cp {obj_file} {temp_path}")
-        # load mesh
-        mesh = o3d.io.read_triangle_mesh(temp_path, print_progress=True)
+    if use_tempfile:
+        with tempfile.NamedTemporaryFile(suffix=".obj") as temp_file:
+            # copy mesh to tempfile
+            temp_path = temp_file.name
+            # os copy
+            os.system(f"cp {obj_file} {temp_path}")
+            # load mesh
+            mesh = o3d.io.read_triangle_mesh(temp_path, print_progress=True)
+    else:
+        mesh = o3d.io.read_triangle_mesh(obj_file, print_progress=True)
 
     # Coordinate transform to pointcloud coordinate system
     vertices = np.asarray(mesh.vertices)
@@ -264,13 +267,13 @@ def process_point_cloud(args):
     except Exception as e:
         print(f"Error processing {ply_path}: {e}")
 
-def set_up_mesh(mesh_file, pointcloud_dir, continue_from=0, save_meshes=False):
+def set_up_mesh(mesh_file, pointcloud_dir, continue_from=0, save_meshes=False, use_tempfile=True):
     output_dir = pointcloud_dir + "_mask3d_labels"
     
     fresh_start = continue_from <= 0
     if fresh_start:
         # Load the mesh vertices
-        triangles, scene = load_mesh_vertices(mesh_file)
+        triangles, scene = load_mesh_vertices(mesh_file, use_tempfile=use_tempfile)
 
         # Calculate winding angles for each vertex
         winding_angles, splitter = calculate_winding_angle(mesh_file, pointcloud_dir)

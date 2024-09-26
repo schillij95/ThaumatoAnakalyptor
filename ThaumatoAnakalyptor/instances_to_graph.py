@@ -663,8 +663,8 @@ def init_worker_build_GT(mesh_file, pointcloud_dir):
     Initialize worker for building the ground truth.
     """
     global valid_triangles, winding_angles, output_dir, gt_splitter, mesh_gt_stuff
-    valid_triangles, winding_angles, output_dir, gt_splitter = set_up_mesh(mesh_file, pointcloud_dir, continue_from=3) # already initialized, only load data
-    mesh_gt_stuff = load_mesh_vertices_quality(mesh_file) # each worker needs its own copy. # spelufo coordinate system
+    valid_triangles, winding_angles, output_dir, gt_splitter = set_up_mesh(mesh_file, pointcloud_dir, continue_from=3, use_tempfile=False) # already initialized, only load data
+    mesh_gt_stuff = load_mesh_vertices_quality(mesh_file, use_tempfile=False) # each worker needs its own copy. # spelufo coordinate system
     print("Worker initialized for building the ground truth.")
 
 def worker_build_GT(args):
@@ -987,23 +987,29 @@ class ScrollGraph(Graph):
             set_up_mesh(mesh_file, path_instances, continue_from=continue_from) # each worker needs its own copy, initialize single threaded, then load the result into the threads
         # Load the node instance, compare to scroll GT mesh, add winding angle information if instance within the GT mesh.
         # use multiprocessing pool with initializer for scene
-        # with multiprocessing.Pool(processes=multiprocessing.cpu_count()//2, initializer=init_worker_build_GT, initargs=(mesh_file, path_instances)) as pool:
-        with multiprocessing.Pool(processes=min(48, multiprocessing.cpu_count()//2), initializer=init_worker_build_GT, initargs=(mesh_file, path_instances)) as pool:
-            # PC instance path from node name
-            blocks_tar_files = glob.glob(path_instances + '/*.tar')
-            ## multithread
-            tasks = []
-            for i, blocks_tar_file in enumerate(blocks_tar_files):
-                # Append tasks without passing the large constant data
-                tasks.append((blocks_tar_file, umbilicus_path))
-
-            print(f"Processing {len(tasks)} blocks")
+        with tempfile.NamedTemporaryFile(suffix=".obj") as temp_file:
+            # copy mesh to tempfile
+            temp_path = temp_file.name
+            # os copy
+            os.system(f"cp {mesh_file} {temp_path}")
             
-            # tasks = tasks[:min(len(tasks), 10)] # DEBUG ONLY, TODO: remove
-            # print(f"Processing {len(tasks)} blocks")
+            # with multiprocessing.Pool(processes=multiprocessing.cpu_count()//2, initializer=init_worker_build_GT, initargs=(mesh_file, path_instances)) as pool:
+            with multiprocessing.Pool(processes=min(48, multiprocessing.cpu_count()//2), initializer=init_worker_build_GT, initargs=(temp_path, path_instances)) as pool:
+                # PC instance path from node name
+                blocks_tar_files = glob.glob(path_instances + '/*.tar')
+                ## multithread
+                tasks = []
+                for i, blocks_tar_file in enumerate(blocks_tar_files):
+                    # Append tasks without passing the large constant data
+                    tasks.append((blocks_tar_file, umbilicus_path))
 
-            # Use pool.imap to execute the worker function
-            results = list(tqdm(pool.imap(worker_build_GT, tasks), desc="Processing GT point clouds", total=len(tasks)))
+                print(f"Processing {len(tasks)} blocks")
+                
+                # tasks = tasks[:min(len(tasks), 10)] # DEBUG ONLY, TODO: remove
+                # print(f"Processing {len(tasks)} blocks")
+
+                # Use pool.imap to execute the worker function
+                results = list(tqdm(pool.imap(worker_build_GT, tasks), desc="Processing GT point clouds", total=len(tasks)))
 
         # # single threaded
         # init_worker_build_GT(mesh_file, path_instances)

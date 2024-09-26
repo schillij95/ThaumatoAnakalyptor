@@ -21,15 +21,18 @@ def setup_closest_triangles(mesh):
     _ = scene.add_triangles(mesh)  # we do not need the geometry ID for mesh
     return scene
 
-def load_mesh_vertices(obj_file):
+def load_mesh_vertices(obj_file, use_tempfile=True):
     # copy mesh to tempfile
-    with tempfile.NamedTemporaryFile(suffix=".obj") as temp_file:
-        # copy mesh to tempfile
-        temp_path = temp_file.name
-        # os copy
-        os.system(f"cp {obj_file} {temp_path}")
-        # load mesh
-        mesh = o3d.io.read_triangle_mesh(temp_path, print_progress=True)
+    if use_tempfile:
+        with tempfile.NamedTemporaryFile(suffix=".obj") as temp_file:
+            # copy mesh to tempfile
+            temp_path = temp_file.name
+            # os copy
+            os.system(f"cp {obj_file} {temp_path}")
+            # load mesh
+            mesh = o3d.io.read_triangle_mesh(temp_path, print_progress=True)
+    else:
+        mesh = o3d.io.read_triangle_mesh(obj_file, print_progress=True)
 
     # Coordinate transform to pointcloud coordinate system
     vertices = np.asarray(mesh.vertices)
