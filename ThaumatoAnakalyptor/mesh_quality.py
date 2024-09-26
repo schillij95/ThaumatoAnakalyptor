@@ -243,7 +243,7 @@ def align_winding_angles(vertices1, winding_angles1, mesh2_stuff, umbilicus_path
             winding_angle_difference[int(w_a_diff)] = 0
         winding_angle_difference[int(w_a_diff)] += 1
 
-    if debug:
+    if debug and len(winding_angle_difference) > 0:
         print(winding_angle_difference)
     return winding_angle_difference, winding_angles2, scene2, mesh2, percentage_valid
 
