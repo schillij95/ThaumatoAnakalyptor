@@ -987,8 +987,8 @@ class ScrollGraph(Graph):
             set_up_mesh(mesh_file, path_instances, continue_from=continue_from) # each worker needs its own copy, initialize single threaded, then load the result into the threads
         # Load the node instance, compare to scroll GT mesh, add winding angle information if instance within the GT mesh.
         # use multiprocessing pool with initializer for scene
-        with multiprocessing.Pool(processes=multiprocessing.cpu_count()//2, initializer=init_worker_build_GT, initargs=(mesh_file, path_instances)) as pool:
-        # with multiprocessing.Pool(processes=min(8, multiprocessing.cpu_count()//2), initializer=init_worker_build_GT, initargs=(mesh_file, path_instances)) as pool:
+        # with multiprocessing.Pool(processes=multiprocessing.cpu_count()//2, initializer=init_worker_build_GT, initargs=(mesh_file, path_instances)) as pool:
+        with multiprocessing.Pool(processes=min(48, multiprocessing.cpu_count()//2), initializer=init_worker_build_GT, initargs=(mesh_file, path_instances)) as pool:
             # PC instance path from node name
             blocks_tar_files = glob.glob(path_instances + '/*.tar')
             ## multithread
