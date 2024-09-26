@@ -1036,8 +1036,7 @@ class ScrollGraph(Graph):
         for result in tqdm(results, desc="Adding GT data to nodes"):
             for node_id, best_alignment in result:
                 if node_id in self.nodes:
-                    self.nodes[node_id]['winding_angle'] = self.nodes[node_id]['winding_angle'] - best_alignment
-                    self.nodes[node_id]['winding_angle_gt'] = True
+                    self.nodes[node_id]['winding_angle_gt'] = self.nodes[node_id]['winding_angle'] - best_alignment
                     count_adjusted_nodes_windings += 1
                 else:
                     print(f"Node {node_id} not found in graph.")
