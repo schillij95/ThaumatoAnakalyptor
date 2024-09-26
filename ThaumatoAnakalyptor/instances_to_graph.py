@@ -708,7 +708,7 @@ def worker_build_GT(args):
                     winding_angle_difference, winding_angles2, scene2, mesh2, percentage_valid = align_winding_angles(vertices1, winding_angles1, mesh_gt_stuff, umbilicus_path, 210, gt_splitter) # aling to GT mesh per point
                     # Still 0 percent -> no patch in this subvolume is valid
                     if percentage_valid == 0.0:
-                        print("No valid patches in this subvolume.")
+                        # print("No valid patches in this subvolume.")
                         break
                     
                     # print(f"Invalid alignment: {percentage_valid} percentage valid")
