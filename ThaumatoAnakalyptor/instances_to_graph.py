@@ -703,7 +703,7 @@ def worker_build_GT(args):
                     best_alignment = find_best_alignment(winding_angle_difference) # best alignment to a wrap
                     # Adjust winding angle of graph nodes
                     nodes_winding_alignment.append((ids, best_alignment))
-                    print(f"Best alignment: {best_alignment}")
+                    # print(f"Best alignment: {best_alignment}")
                 elif i == 0:
                     # Check if too far away from GT Mesh
                     winding_angle_difference, winding_angles2, scene2, mesh2, percentage_valid = align_winding_angles(vertices1_spelufo, winding_angles1, mesh_gt_stuff, umbilicus_path, 210, gt_splitter) # aling to GT mesh per point. # takes spelufo coordinate system
