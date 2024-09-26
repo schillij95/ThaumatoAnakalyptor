@@ -665,13 +665,12 @@ def init_worker_build_GT(mesh_file, pointcloud_dir):
     global valid_triangles, winding_angles, output_dir, gt_splitter, mesh_gt_stuff
     valid_triangles, winding_angles, output_dir, gt_splitter = set_up_mesh(mesh_file, pointcloud_dir, continue_from=3) # already initialized, only load data
     mesh_gt_stuff = load_mesh_vertices_quality(mesh_file) # each worker needs its own copy
+    print("Worker initialized for building the ground truth.")
 
 def worker_build_GT(args):
+    print(f"Processing: {args}")
     tar_filename, umbilicus_path = args
-    # Standardize subvolume_size to a NumPy array
-    subvolume_size = np.atleast_1d(subvolume_size).astype(int)
-    if subvolume_size.shape[0] == 1:
-        subvolume_size = np.repeat(subvolume_size, 3)
+    nodes_winding_alignment = []
 
     if os.path.isfile(tar_filename):
         with tarfile.open(tar_filename, 'r') as archive, tempfile.TemporaryDirectory() as temp_dir:
@@ -680,7 +679,7 @@ def worker_build_GT(args):
             archive.extractall(path=temp_dir, members=archive.getmembers())
 
             # Process each .ply file
-            for ply_member in ply_files:
+            for i, ply_member in enumerate(ply_files):
                 ply_file_path = os.path.join(temp_dir, ply_member.name)
                 ply_file = ply_member.name
                 # print(ply_file_path)
@@ -699,14 +698,23 @@ def worker_build_GT(args):
 
                 # align winding angles
                 winding_angle_difference, winding_angles2, scene2, mesh2, percentage_valid = align_winding_angles(vertices1, winding_angles1, mesh_gt_stuff, umbilicus_path, 15, gt_splitter) # aling to GT mesh per point
-                best_alignment = find_best_alignment(winding_angle_difference) # best alignment to a wrap
                 if percentage_valid > 0.5:
+                    best_alignment = find_best_alignment(winding_angle_difference) # best alignment to a wrap
+                    # Adjust winding angle of graph nodes
+                    nodes_winding_alignment.append((ids, best_alignment))
                     print(f"Best alignment: {best_alignment}")
-                else:
-                    print(f"Invlaide alignment: {best_alignment}")
+                elif i == 0:
+                    # Check if too far away from GT Mesh
+                    winding_angle_difference, winding_angles2, scene2, mesh2, percentage_valid = align_winding_angles(vertices1, winding_angles1, mesh_gt_stuff, umbilicus_path, 210, gt_splitter) # aling to GT mesh per point
+                    # Still 0 percent -> no patch in this subvolume is valid
+                    if percentage_valid == 0.0:
+                        print("No valid patches in this subvolume.")
+                        break
+                    
+                    # print(f"Invalid alignment: {percentage_valid} percentage valid")
 
-                # Adjust the winding angles of the instances to have the same winding angle base as the GT mesh
-                winding_angles1 -= best_alignment
+    return nodes_winding_alignment
+    
 
 class ScrollGraph(Graph):
     def __init__(self, overlapp_threshold, umbilicus_path):
@@ -973,11 +981,13 @@ class ScrollGraph(Graph):
     def add_ground_truth_from_mesh(self, path_instances, mesh_file, continue_from=0):
         umbilicus_path = os.path.join(os.path.dirname(path_instances), "umbilicus.txt")
         # Load GT data
-        valid_triangles, winding_angles, output_dir, gt_splitter = set_up_mesh(mesh_file, path_instances, continue_from=continue_from) # each worker needs its own copy, initialize single threaded, then load the result into the threads
 
+        if continue_from <= 2:
+            set_up_mesh(mesh_file, path_instances, continue_from=continue_from) # each worker needs its own copy, initialize single threaded, then load the result into the threads
         # Load the node instance, compare to scroll GT mesh, add winding angle information if instance within the GT mesh.
         # use multiprocessing pool with initializer for scene
-        with multiprocessing.Pool(processes=multiprocessing.cpu_count()//2, initializer=init_worker_build_GT, initargs=(mesh_file, path_instances)) as pool:
+        # with multiprocessing.Pool(processes=multiprocessing.cpu_count()//2, initializer=init_worker_build_GT, initargs=(mesh_file, path_instances)) as pool:
+        with multiprocessing.Pool(processes=min(8, multiprocessing.cpu_count()//2), initializer=init_worker_build_GT, initargs=(mesh_file, path_instances)) as pool:
             # PC instance path from node name
             blocks_tar_files = glob.glob(path_instances + '/*.tar')
             ## multithread
@@ -987,19 +997,52 @@ class ScrollGraph(Graph):
                 tasks.append((blocks_tar_file, umbilicus_path))
 
             print(f"Processing {len(tasks)} blocks")
-            # Use pool.imap to execute the worker function
-            list(tqdm(pool.imap(worker_build_GT, tasks), desc="Processing GT point clouds", total=len(tasks)))
-        
-        # for all edges between two nodes with GT data, decide if edge is in-/valid
-        pass
+            
+            # tasks = tasks[:min(len(tasks), 10)] # DEBUG ONLY, TODO: remove
+            # print(f"Processing {len(tasks)} blocks")
 
-    def build_graph(self, path_instances, start_point, num_processes=4, prune_unconnected=False, start_fresh=True, gt_mesh_file=None):
+            # Use pool.imap to execute the worker function
+            results = list(tqdm(pool.imap(worker_build_GT, tasks), desc="Processing GT point clouds", total=len(tasks)))
+
+        # # single threaded
+        # init_worker_build_GT(mesh_file, path_instances)
+        # # PC instance path from node name
+        # blocks_tar_files = glob.glob(path_instances + '/*.tar')
+        # ## multithread
+        # tasks = []
+        # for i, blocks_tar_file in enumerate(blocks_tar_files):
+        #     # Append tasks without passing the large constant data
+        #     tasks.append((blocks_tar_file, umbilicus_path))
+
+        # print(f"Processing {len(tasks)} blocks")
+        
+        # # tasks = tasks[:min(len(tasks), 10)] # DEBUG ONLY, TODO: remove
+        # # print(f"Processing {len(tasks)} blocks")
+
+        # # Use pool.imap to execute the worker function
+        # results = []
+        # for task in tqdm(tasks, desc="Processing GT point clouds"):
+        #     results.append(worker_build_GT(task))
+
+        # for all edges between two nodes with GT data, decide if edge is in-/valid
+        count_adjusted_nodes_windings = 0
+        for result in tqdm(results, desc="Adding GT data to nodes"):
+            for node_id, best_alignment in result:
+                if node_id in self.nodes:
+                    self.nodes[node_id]['winding_angle'] = self.nodes[node_id]['winding_angle'] - best_alignment
+                    self.nodes[node_id]['winding_angle_gt'] = True
+                    count_adjusted_nodes_windings += 1
+                else:
+                    print(f"Node {node_id} not found in graph.")
+        print(f"Adjusted winding angles for {count_adjusted_nodes_windings} nodes.")
+
+    def build_graph(self, path_instances, start_point, num_processes=4, prune_unconnected=False, start_fresh=True, gt_mesh_file=None, continue_from=0):
+        #from original coordinates to instance coordinates
+        start_block, patch_id = (0, 0, 0), 0
+        self.start_block, self.patch_id, self.start_point = start_block, patch_id, start_point
+
         if start_fresh:
             blocks_tar_files = glob.glob(path_instances + '/*.tar')
-
-            #from original coordinates to instance coordinates
-            start_block, patch_id = (0, 0, 0), 0
-            self.start_block, self.patch_id, self.start_point = start_block, patch_id, start_point
 
             print(f"Found {len(blocks_tar_files)} blocks.")
             print("Building graph...")
@@ -1053,7 +1096,7 @@ class ScrollGraph(Graph):
 
         # Add GT data to nodes
         if gt_mesh_file is not None:
-            self.add_ground_truth_from_mesh(path_instances, gt_mesh_file) # TODO
+            self.add_ground_truth_from_mesh(path_instances, gt_mesh_file, continue_from=continue_from) # TODO
 
         return start_block, patch_id
     
@@ -1387,7 +1430,7 @@ def load_graph_winding_angle_from_binary(filename, graph):
     print(f"Number of nodes remaining: {len(nodes_graph)} from {num_nodes}. Number of nodes in graph: {len(graph.nodes)}")
     return graph
 
-def compute(overlapp_threshold, start_point, path, recompute=False, stop_event=None, toy_problem=False, update_graph=False, flip_winding_direction=False, gt_mesh_file=None):
+def compute(overlapp_threshold, start_point, path, recompute=False, stop_event=None, toy_problem=False, update_graph=False, flip_winding_direction=False, gt_mesh_file=None, continue_from=0):
 
     umbilicus_path = os.path.dirname(path) + "/umbilicus.txt"
     start_block, patch_id = (0, 0, 0), 0
@@ -1409,7 +1452,7 @@ def compute(overlapp_threshold, start_point, path, recompute=False, stop_event=N
         else:
             scroll_graph = load_graph(recompute_path)
         num_processes = max(1, cpu_count() - 2)
-        start_block, patch_id = scroll_graph.build_graph(path, num_processes=num_processes, start_point=start_point, prune_unconnected=False, start_fresh=start_fresh, gt_mesh_file=gt_mesh_file)
+        start_block, patch_id = scroll_graph.build_graph(path, num_processes=num_processes, start_point=start_point, prune_unconnected=False, start_fresh=start_fresh, gt_mesh_file=gt_mesh_file, continue_from=continue_from)
         print("Saving built graph...")
         scroll_graph.save_graph(recompute_path)
     
@@ -1520,6 +1563,7 @@ def random_walks():
     parser.add_argument('--create_graph', help='Create graph. Directly creates the binary .bin graph file from a previously constructed graph .pkl', action='store_true')
     parser.add_argument('--flip_winding_direction', help='Flip winding direction', action='store_true')
     parser.add_argument('--gt_mesh_file', type=str, help='Ground truth mesh file', default=None)
+    parser.add_argument('--continue_from', type=int, help='Continue from a certain point in the graph', default=0)
 
     # Take arguments back over
     args = parser.parse_args()
@@ -1571,9 +1615,10 @@ def random_walks():
         scroll_graph_solved.save_graph(save_path.replace("blocks", "graph_BP_solved") + ".pkl")
     else:
         # Compute
-        compute(overlapp_threshold=overlapp_threshold, start_point=start_point, path=path, recompute=recompute, toy_problem=args.toy_problem, update_graph=args.update_graph, flip_winding_direction=args.flip_winding_direction, gt_mesh_file=args.gt_mesh_file)
+        compute(overlapp_threshold=overlapp_threshold, start_point=start_point, path=path, recompute=recompute, toy_problem=args.toy_problem, update_graph=args.update_graph, flip_winding_direction=args.flip_winding_direction, gt_mesh_file=args.gt_mesh_file, continue_from=args.continue_from)
 
 if __name__ == '__main__':
+    multiprocessing.set_start_method('spawn') # need sppawn because of open3d initialization deadlock in the init worker function
     random_walks()
 
 # Example command: python3 -m ThaumatoAnakalyptor.instances_to_graph --path /scroll.volpkg/working/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks --recompute 1
