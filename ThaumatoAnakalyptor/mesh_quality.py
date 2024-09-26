@@ -219,7 +219,7 @@ def find_valid_relations(points2, scene1, triangles1, winding_angles2, max_dista
 
     return closest_indices1, winding_angles_points2, clostest_points2, points_indices2, percentage_valid
 
-def align_winding_angles(vertices1, winding_angles1, mesh2_stuff, umbilicus_path, max_distance, gt_splitter):
+def align_winding_angles(vertices1, winding_angles1, mesh2_stuff, umbilicus_path, max_distance, gt_splitter, debug=False):
     # load the meshes
     mesh2, vertices2, triangles2, scene2 = mesh2_stuff
 
@@ -243,7 +243,8 @@ def align_winding_angles(vertices1, winding_angles1, mesh2_stuff, umbilicus_path
             winding_angle_difference[int(w_a_diff)] = 0
         winding_angle_difference[int(w_a_diff)] += 1
 
-    print(winding_angle_difference)
+    if debug:
+        print(winding_angle_difference)
     return winding_angle_difference, winding_angles2, scene2, mesh2, percentage_valid
 
 def find_best_alignment(winding_angle_difference):

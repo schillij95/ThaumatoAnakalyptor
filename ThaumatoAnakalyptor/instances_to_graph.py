@@ -698,7 +698,7 @@ def worker_build_GT(args):
                 winding_angles1 = calculate_winding_angle_pointcloud_instance(vertices1, gt_splitter) # instance winding angles. # Takes Scan coordinate system
 
                 # align winding angles
-                winding_angle_difference, winding_angles2, scene2, mesh2, percentage_valid = align_winding_angles(vertices1_spelufo, winding_angles1, mesh_gt_stuff, umbilicus_path, 15, gt_splitter) # aling to GT mesh per point. # takes spelufo coordinate system
+                winding_angle_difference, winding_angles2, scene2, mesh2, percentage_valid = align_winding_angles(vertices1_spelufo, winding_angles1, mesh_gt_stuff, umbilicus_path, 15, gt_splitter, debug=True) # aling to GT mesh per point. # takes spelufo coordinate system
                 if percentage_valid > 0.5:
                     best_alignment = find_best_alignment(winding_angle_difference) # best alignment to a wrap
                     # Adjust winding angle of graph nodes
