@@ -1378,9 +1378,16 @@ def write_graph_to_binary(file_name, graph):
         f.write(struct.pack('I', len(nodes)))
         for node in nodes_list:
             # write the node z positioin as f
-            f.write(struct.pack('f', nodes[node]['centroid'][1]))
+            f.write(struct.pack('f', float(nodes[node]['centroid'][1])))
             # write the node winding angle as f
-            f.write(struct.pack('f', nodes[node]['winding_angle']))
+            f.write(struct.pack('f', float(nodes[node]['winding_angle'])))
+            # write gt flag as bool
+            f.write(struct.pack('?', bool('winding_angle_gt' in nodes[node])))
+            # write gt winding angle as f
+            if 'winding_angle_gt' in nodes[node]:
+                f.write(struct.pack('f', float(nodes[node]['winding_angle_gt'])))
+            else:
+                f.write(struct.pack('f', float(0.0)))
 
         for node in adj_list:
             # Write the node ID
@@ -1452,7 +1459,7 @@ def compute(overlapp_threshold, start_point, path, recompute=False, stop_event=N
     
     # Build graph
     if recompute:
-        start_fresh = False
+        start_fresh = continue_from <= -1
         if start_fresh:
             scroll_graph = ScrollGraph(overlapp_threshold, umbilicus_path)
         else:
