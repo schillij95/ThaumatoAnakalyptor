@@ -668,7 +668,7 @@ def init_worker_build_GT(mesh_file, pointcloud_dir):
     print("Worker initialized for building the ground truth.")
 
 def worker_build_GT(args):
-    print(f"Processing: {args}")
+    # print(f"Processing: {args}")
     tar_filename, umbilicus_path = args
     nodes_winding_alignment = []
 
