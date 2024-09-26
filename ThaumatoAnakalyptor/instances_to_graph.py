@@ -18,6 +18,7 @@ from ezdxf.math import Vec3
 import random
 from copy import deepcopy
 import struct
+import multiprocessing
 
 from .instances_to_sheets import select_points, get_vector_mean, alpha_angles, adjust_angles_zero, adjust_angles_offset, add_overlapp_entries_to_patches_list, assign_points_to_tiles, compute_overlap_for_pair, overlapp_score, fit_sheet, winding_switch_sheet_score_raw_precomputed_surface, find_starting_patch, save_main_sheet, update_main_sheet
 from .sheet_to_mesh import load_xyz_from_file, scale_points, umbilicus_xz_at_y, shuffling_points_axis
@@ -657,6 +658,56 @@ def process_block(args):
     # Process and return results...
     return score_sheets, score_switching_sheets, score_bad_edges, patches_centroids
 
+def init_worker_build_GT(mesh_file, pointcloud_dir):
+    """
+    Initialize worker for building the ground truth.
+    """
+    global valid_triangles, winding_angles, output_dir, gt_splitter, mesh_gt_stuff
+    valid_triangles, winding_angles, output_dir, gt_splitter = set_up_mesh(mesh_file, pointcloud_dir, continue_from=3) # already initialized, only load data
+    mesh_gt_stuff = load_mesh_vertices_quality(mesh_file) # each worker needs its own copy
+
+def worker_build_GT(args):
+    tar_filename, umbilicus_path = args
+    # Standardize subvolume_size to a NumPy array
+    subvolume_size = np.atleast_1d(subvolume_size).astype(int)
+    if subvolume_size.shape[0] == 1:
+        subvolume_size = np.repeat(subvolume_size, 3)
+
+    if os.path.isfile(tar_filename):
+        with tarfile.open(tar_filename, 'r') as archive, tempfile.TemporaryDirectory() as temp_dir:
+            # Extract all .ply files at once
+            ply_files = [m for m in archive.getmembers() if m.name.endswith(".ply")]
+            archive.extractall(path=temp_dir, members=archive.getmembers())
+
+            # Process each .ply file
+            for ply_member in ply_files:
+                ply_file_path = os.path.join(temp_dir, ply_member.name)
+                ply_file = ply_member.name
+                # print(ply_file_path)
+                # ids = tuple([*map(int, ply_member.name.split("_"))])
+                ids = tuple([*map(int, tar_filename.split(".")[-2].split("/")[-1].split("_"))]+[int(ply_file.split(".")[-2].split("_")[-1])])
+                ids = (int(ids[0]), int(ids[1]), int(ids[2]), int(ids[3]))
+
+                # 3D instance pointcloud
+                vertices1 = o3d.io.read_point_cloud(ply_file_path)
+                # to numpy
+                vertices1 = np.asarray(vertices1.points)
+                # adjust coordinate frame
+                vertices1 = scale_points(vertices1, 4.0, axis_offset=-500)
+                vertices1, _ = shuffling_points_axis(vertices1, vertices1, [2, 0, 1])
+                winding_angles1 = calculate_winding_angle_pointcloud_instance(vertices1, gt_splitter) # instance winding angles
+
+                # align winding angles
+                winding_angle_difference, winding_angles2, scene2, mesh2, percentage_valid = align_winding_angles(vertices1, winding_angles1, mesh_gt_stuff, umbilicus_path, 15, gt_splitter) # aling to GT mesh per point
+                best_alignment = find_best_alignment(winding_angle_difference) # best alignment to a wrap
+                if percentage_valid > 0.5:
+                    print(f"Best alignment: {best_alignment}")
+                else:
+                    print(f"Invlaide alignment: {best_alignment}")
+
+                # Adjust the winding angles of the instances to have the same winding angle base as the GT mesh
+                winding_angles1 -= best_alignment
+
 class ScrollGraph(Graph):
     def __init__(self, overlapp_threshold, umbilicus_path):
         super().__init__()
@@ -919,39 +970,30 @@ class ScrollGraph(Graph):
         self.compute_node_edges()
         return (factor_0, factor_not_0, factor_bad)
     
-    def add_ground_truth_from_mesh(self, mesh_file, pointcloud_dir, continue_from=0):
-        axis_indices = [2, 0, 1]
-        umbilicus_path = os.path.join(os.path.dirname(pointcloud_dir), "umbilicus.txt")
+    def add_ground_truth_from_mesh(self, path_instances, mesh_file, continue_from=0):
+        umbilicus_path = os.path.join(os.path.dirname(path_instances), "umbilicus.txt")
         # Load GT data
-        valid_triangles, winding_angles, output_dir, gt_splitter = set_up_mesh(mesh_file, pointcloud_dir, continue_from=continue_from) # each worker needs its own copy
-        mesh_gt_stuff = load_mesh_vertices_quality(mesh_file) # each worker needs its own copy
+        valid_triangles, winding_angles, output_dir, gt_splitter = set_up_mesh(mesh_file, path_instances, continue_from=continue_from) # each worker needs its own copy, initialize single threaded, then load the result into the threads
 
         # Load the node instance, compare to scroll GT mesh, add winding angle information if instance within the GT mesh.
         # use multiprocessing pool with initializer for scene
-        pass
-        # PC instance path from node name
-        input_instance_pointcloud = None # TODO
-        # 3D instance pointcloud
-        vertices1 = o3d.io.read_point_cloud(input_instance_pointcloud)
-        # to numpy
-        vertices1 = np.asarray(vertices1.points)
-        # adjust coordinate frame
-        vertices1 = scale_points(vertices1, 4.0, axis_offset=-500)
-        vertices1, _ = shuffling_points_axis(vertices1, vertices1, axis_indices)
-        winding_angles1 = calculate_winding_angle_pointcloud_instance(vertices1, gt_splitter) # instance winding angles
+        with multiprocessing.Pool(processes=multiprocessing.cpu_count()//2, initializer=init_worker_build_GT, initargs=(mesh_file, path_instances)) as pool:
+            # PC instance path from node name
+            blocks_tar_files = glob.glob(path_instances + '/*.tar')
+            ## multithread
+            tasks = []
+            for i, blocks_tar_file in enumerate(blocks_tar_files):
+                # Append tasks without passing the large constant data
+                tasks.append((blocks_tar_file, umbilicus_path))
 
-        # align winding angles
-        winding_angle_difference, winding_angles2, scene2, mesh2, percentage_valid = align_winding_angles(vertices1, winding_angles1, mesh_gt_stuff, umbilicus_path, 15, gt_splitter) # aling to GT mesh per point
-        best_alignment = find_best_alignment(winding_angle_difference) # best alignment to a wrap
-        print(f"Best alignment: {best_alignment}")
-
-        # Adjust the winding angles of the instances to have the same winding angle base as the GT mesh
-        winding_angles1 -= best_alignment
+            print(f"Processing {len(tasks)} blocks")
+            # Use pool.imap to execute the worker function
+            list(tqdm(pool.imap(worker_build_GT, tasks), desc="Processing GT point clouds", total=len(tasks)))
         
         # for all edges between two nodes with GT data, decide if edge is in-/valid
         pass
 
-    def build_graph(self, path_instances, start_point, num_processes=4, prune_unconnected=False, start_fresh=True):
+    def build_graph(self, path_instances, start_point, num_processes=4, prune_unconnected=False, start_fresh=True, gt_mesh_file=None):
         if start_fresh:
             blocks_tar_files = glob.glob(path_instances + '/*.tar')
 
@@ -1010,7 +1052,8 @@ class ScrollGraph(Graph):
             print(f"Nr nodes: {len(self.nodes)}, nr edges: {len(self.edges)}")
 
         # Add GT data to nodes
-        self.add_ground_truth_from_mesh() # TODO
+        if gt_mesh_file is not None:
+            self.add_ground_truth_from_mesh(path_instances, gt_mesh_file) # TODO
 
         return start_block, patch_id
     
@@ -1344,7 +1387,7 @@ def load_graph_winding_angle_from_binary(filename, graph):
     print(f"Number of nodes remaining: {len(nodes_graph)} from {num_nodes}. Number of nodes in graph: {len(graph.nodes)}")
     return graph
 
-def compute(overlapp_threshold, start_point, path, recompute=False, stop_event=None, toy_problem=False, update_graph=False, flip_winding_direction=False):
+def compute(overlapp_threshold, start_point, path, recompute=False, stop_event=None, toy_problem=False, update_graph=False, flip_winding_direction=False, gt_mesh_file=None):
 
     umbilicus_path = os.path.dirname(path) + "/umbilicus.txt"
     start_block, patch_id = (0, 0, 0), 0
@@ -1366,7 +1409,7 @@ def compute(overlapp_threshold, start_point, path, recompute=False, stop_event=N
         else:
             scroll_graph = load_graph(recompute_path)
         num_processes = max(1, cpu_count() - 2)
-        start_block, patch_id = scroll_graph.build_graph(path, num_processes=num_processes, start_point=start_point, prune_unconnected=False, start_fresh=start_fresh)
+        start_block, patch_id = scroll_graph.build_graph(path, num_processes=num_processes, start_point=start_point, prune_unconnected=False, start_fresh=start_fresh, gt_mesh_file=gt_mesh_file)
         print("Saving built graph...")
         scroll_graph.save_graph(recompute_path)
     
@@ -1476,6 +1519,7 @@ def random_walks():
     parser.add_argument('--update_graph', help='Update graph', action='store_true')
     parser.add_argument('--create_graph', help='Create graph. Directly creates the binary .bin graph file from a previously constructed graph .pkl', action='store_true')
     parser.add_argument('--flip_winding_direction', help='Flip winding direction', action='store_true')
+    parser.add_argument('--gt_mesh_file', type=str, help='Ground truth mesh file', default=None)
 
     # Take arguments back over
     args = parser.parse_args()
@@ -1527,7 +1571,7 @@ def random_walks():
         scroll_graph_solved.save_graph(save_path.replace("blocks", "graph_BP_solved") + ".pkl")
     else:
         # Compute
-        compute(overlapp_threshold=overlapp_threshold, start_point=start_point, path=path, recompute=recompute, toy_problem=args.toy_problem, update_graph=args.update_graph, flip_winding_direction=args.flip_winding_direction)
+        compute(overlapp_threshold=overlapp_threshold, start_point=start_point, path=path, recompute=recompute, toy_problem=args.toy_problem, update_graph=args.update_graph, flip_winding_direction=args.flip_winding_direction, gt_mesh_file=args.gt_mesh_file)
 
 if __name__ == '__main__':
     random_walks()

@@ -163,7 +163,7 @@ float closest_valid_winding_angle(float f_init, float f_target) {
     if (std::abs(f_target - result) > 10.0f) {
         std::cout << "Difference between f_target and result: " << std::abs(f_target - result) << std::endl;
     }
-    if (std::abs(x - (f_target - f_init) / 360.0f) > 1e-5) {
+    if (std::abs(x - (f_target - f_init) / 360.0f) > 1e-4) {
         std::cout << "Difference between x and (f_target - f_init) / 360.0f: " << std::abs(x - (f_target - f_init) / 360.0f) << std::endl;
         std::cout << "f_init: " << f_init << ", f_target: " << f_target << ", x: " << x << ", result: " << result << std::endl;
     }
@@ -227,7 +227,7 @@ void find_largest_connected_component(std::vector<Node>& graph) {
             remaining_nodes++;
         }
     }
-    std::cout << "Remaining nodes: " << remaining_nodes << " out of " << initial_non_deleted << " initial non deleted edges, of total edge: " << num_nodes << std::endl;
+    std::cout << "Remaining nodes: " << remaining_nodes << " out of " << initial_non_deleted << " initial non deleted nodes, of total edge: " << num_nodes << std::endl;
 }
 
 void dfs_assign_f_star(int node_index, std::vector<Node>& graph, std::vector<bool>& visited) {
@@ -639,7 +639,14 @@ void create_video_from_histograms(const std::string& directory, const std::strin
 
 bool is_edge_valid(const std::vector<Node>& graph, const Edge& edge, const Node& current_node, float threshold = 0.1) {
     float diff = graph[edge.target_node].f_star - current_node.f_star;
-    return std::abs(diff - edge.k) < 360 * threshold;
+    bool valid =true;
+    if (edge.same_block) {
+        valid = std::abs(diff - edge.k) < 360 * threshold;
+    }
+    else if (!edge.same_block) {
+        valid = std::abs(diff - edge.k) < 360 * threshold;
+    }
+    return valid;
 }
 
 bool remove_invalid_edges(std::vector<Node>& graph, float threshold = 0.1) {
@@ -813,14 +820,14 @@ void solve(std::vector<Node>& graph, argparse::ArgumentParser* program, int num_
     std::vector<size_t> valid_indices;
     
 
-    float invalid_edge_threshold = 1.1f;
+    float invalid_edge_threshold = 3.5f;
 
     int edges_deletion_round = 0;
     while (true) {
         // store only the valid indices to speed up the loop
         valid_indices = get_valid_indices(graph);
         // Do 2 rounds of edge deletion
-        if (edges_deletion_round > 1) {
+        if (edges_deletion_round > 40 || invalid_edge_threshold <= 0.30) {
             // Do last of updates with 3x times iterations and spring constant 1.0
             num_iterations = num_iterations * 3;
             spring_constant = 1.0f;
@@ -829,6 +836,10 @@ void solve(std::vector<Node>& graph, argparse::ArgumentParser* program, int num_
         }
         // Solve for each spring constant
         for (int64_t i = -1; i < steps+1; ++i) {
+            // Skip the first iterations if the warmup is already done
+            if (edges_deletion_round > 1 && i < steps) {
+                continue;
+            }
             int num_iterations_iteration = num_iterations;
             float o_iteration = o;
             float spring_constant_iteration = i == -1 ? spring_constants[0] : spring_constants[i];
@@ -893,13 +904,13 @@ void solve(std::vector<Node>& graph, argparse::ArgumentParser* program, int num_
             }
         }
         // After first edge deletion round remove the invalid edges
-        if (edges_deletion_round == 0) {
+        if (edges_deletion_round >= 0) {
             // Remove edges with too much difference between f_star and k
             remove_invalid_edges(graph, invalid_edge_threshold);
         }
         find_largest_connected_component(graph);
         // Reduce the threshold by 20% each time
-        invalid_edge_threshold *= 0.8f;
+        invalid_edge_threshold *= 0.7f;
         invalid_edge_threshold -= 0.1f;
         if (invalid_edge_threshold < 0.05) {
             invalid_edge_threshold = 0.05;

@@ -283,6 +283,9 @@ def set_up_mesh(mesh_file, pointcloud_dir, continue_from=0, save_meshes=False):
         # Load winding angles
         with open(os.path.join(output_dir, "winding_angles_triangles.pkl"), "rb") as f:
             winding_angles, triangles = pickle.load(f)
+        umbilicus_path = os.path.join(os.path.dirname(pointcloud_dir), "umbilicus.txt")
+        splitter =  MeshSplitter(mesh_file, umbilicus_path)
+        splitter.vertices_np[:, 0] = winding_angles
 
     print(f"Loaded winding angles for {len(winding_angles)} vertices")
     

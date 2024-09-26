@@ -1290,6 +1290,8 @@ class WalkToSheet():
             os.makedirs(test_folder)
             # test
             for test_angle in range(int(min_wind), int(max_wind), 360):
+                if (test_angle // 360 % 20) > 2:
+                    continue
                 start_index, end_index = self.points_at_winding_angle(points, test_angle+180, max_angle_diff=180)
                 points_test = points[start_index:end_index]
                 colors_test = points_test[:,3]
