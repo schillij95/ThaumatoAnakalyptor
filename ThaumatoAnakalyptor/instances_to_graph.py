@@ -664,7 +664,7 @@ def init_worker_build_GT(mesh_file, pointcloud_dir):
     """
     global valid_triangles, winding_angles, output_dir, gt_splitter, mesh_gt_stuff
     valid_triangles, winding_angles, output_dir, gt_splitter = set_up_mesh(mesh_file, pointcloud_dir, continue_from=3) # already initialized, only load data
-    mesh_gt_stuff = load_mesh_vertices_quality(mesh_file) # each worker needs its own copy
+    mesh_gt_stuff = load_mesh_vertices_quality(mesh_file) # each worker needs its own copy. # spelufo coordinate system
     print("Worker initialized for building the ground truth.")
 
 def worker_build_GT(args):
@@ -693,11 +693,12 @@ def worker_build_GT(args):
                 vertices1 = np.asarray(vertices1.points)
                 # adjust coordinate frame
                 vertices1 = scale_points(vertices1, 4.0, axis_offset=-500)
-                vertices1, _ = shuffling_points_axis(vertices1, vertices1, [2, 0, 1])
-                winding_angles1 = calculate_winding_angle_pointcloud_instance(vertices1, gt_splitter) # instance winding angles
+                vertices1_spelufo = vertices1 + 500
+                vertices1, _ = shuffling_points_axis(vertices1, vertices1, [2, 0, 1]) # Scan Coordinate System
+                winding_angles1 = calculate_winding_angle_pointcloud_instance(vertices1, gt_splitter) # instance winding angles. # Takes Scan coordinate system
 
                 # align winding angles
-                winding_angle_difference, winding_angles2, scene2, mesh2, percentage_valid = align_winding_angles(vertices1, winding_angles1, mesh_gt_stuff, umbilicus_path, 15, gt_splitter) # aling to GT mesh per point
+                winding_angle_difference, winding_angles2, scene2, mesh2, percentage_valid = align_winding_angles(vertices1_spelufo, winding_angles1, mesh_gt_stuff, umbilicus_path, 15, gt_splitter) # aling to GT mesh per point. # takes spelufo coordinate system
                 if percentage_valid > 0.5:
                     best_alignment = find_best_alignment(winding_angle_difference) # best alignment to a wrap
                     # Adjust winding angle of graph nodes
@@ -705,7 +706,7 @@ def worker_build_GT(args):
                     print(f"Best alignment: {best_alignment}")
                 elif i == 0:
                     # Check if too far away from GT Mesh
-                    winding_angle_difference, winding_angles2, scene2, mesh2, percentage_valid = align_winding_angles(vertices1, winding_angles1, mesh_gt_stuff, umbilicus_path, 210, gt_splitter) # aling to GT mesh per point
+                    winding_angle_difference, winding_angles2, scene2, mesh2, percentage_valid = align_winding_angles(vertices1_spelufo, winding_angles1, mesh_gt_stuff, umbilicus_path, 210, gt_splitter) # aling to GT mesh per point. # takes spelufo coordinate system
                     # Still 0 percent -> no patch in this subvolume is valid
                     if percentage_valid == 0.0:
                         # print("No valid patches in this subvolume.")

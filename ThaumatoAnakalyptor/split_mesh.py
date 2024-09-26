@@ -28,6 +28,8 @@ class MeshSplitter:
 
         # Load the umbilicus data
         umbilicus_data = load_xyz_from_file(umbilicus_path)
+        if len(umbilicus_data) == 0:
+            raise ValueError("No umbilicus data found.")
         # scale and swap axis
         umbilicus_data = scale_points(umbilicus_data, 1.0, axis_offset=-500) * scale_factor
         umbilicus_data, _ = shuffling_points_axis(umbilicus_data, umbilicus_data, axis_indices)
