@@ -895,7 +895,7 @@ void solve(std::vector<Node>& graph, argparse::ArgumentParser* program, int num_
         valid_indices = get_valid_indices(graph);
         valid_gt_indices = get_valid_gt_indices(graph);
         // Do 2 rounds of edge deletion
-        if (edges_deletion_round > 40 || invalid_edge_threshold <= 0.30) {
+        if (edges_deletion_round > 40 || invalid_edge_threshold <= 0.05) {
             // Do last of updates with 3x times iterations and spring constant 1.0
             num_iterations = num_iterations * 3;
             spring_constant = 1.0f;
@@ -1208,6 +1208,12 @@ int main(int argc, char** argv) {
         .default_value(false)   // Set default to false
         .implicit_value(true);  // If present, set to true
 
+    // Multithreading number threads
+    program.add_argument("--threads")
+        .help("Number of threads (int)")
+        .default_value(-1)
+        .scan<'i', int>();
+
     try {
         program.parse_args(argc, argv);
         same_winding_factor = program.get<float>("--same_winding_factor");
@@ -1215,6 +1221,11 @@ int main(int argc, char** argv) {
         std::cerr << err.what() << std::endl;
         std::cerr << program;
         return 1;
+    }
+
+    // Set number threads
+    if (program.get<int>("--threads") > 0) {
+        omp_set_num_threads(program.get<int>("--threads"));
     }
 
     // Load the graph from the input binary file
