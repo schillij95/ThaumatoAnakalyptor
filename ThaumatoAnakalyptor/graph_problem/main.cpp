@@ -31,6 +31,8 @@ struct Node {
     float f_init;
     float f_tilde;
     float f_star;
+    bool gt;
+    float gt_f_star;
     bool deleted = false;
     std::vector<Edge> edges;
 };
@@ -56,6 +58,8 @@ std::vector<Node> load_graph_from_binary(const std::string &file_name, bool clip
     for (unsigned int i = 0; i < num_nodes; ++i) {
         infile.read(reinterpret_cast<char*>(&graph[i].z), sizeof(float));
         infile.read(reinterpret_cast<char*>(&graph[i].f_init), sizeof(float));
+        infile.read(reinterpret_cast<char*>(&graph[i].gt), sizeof(bool));
+        infile.read(reinterpret_cast<char*>(&graph[i].gt_f_star), sizeof(float));
         graph[i].f_tilde = graph[i].f_init;
         graph[i].f_star = graph[i].f_init;
     }
