@@ -14,6 +14,7 @@ Julian Schilliger 2024 ThaumatoAnakalyptor
 #include <iomanip>
 #include <filesystem>
 #include <argparse.hpp>
+#include <random>
 
 namespace fs = std::filesystem;
 
@@ -546,6 +547,55 @@ float approximate_matching_loss(const std::vector<Node>& graph, float a = 1.0f) 
     return loss;
 }
 
+float computeMeanError(const std::vector<Node>& graph, const std::vector<size_t>& valid_gt_indices, int n_pairs = 10'000) {
+    if (valid_gt_indices.size() < 2) {
+        return 0.0f; // Not enough valid ground truth nodes to form pairs
+    }
+
+    float total_error = 0.0f;
+    int pair_count = 0;
+    
+    std::random_device rd;
+    std::mt19937 gen(rd()); // Standard mersenne_twister_engine for random number generation
+    std::uniform_int_distribution<> dis(0, valid_gt_indices.size() - 1);
+
+    // Loop for a maximum of n_pairs random pairs
+    for (int i = 0; i < n_pairs; ++i) {
+        // Randomly pick two distinct nodes with valid ground truth
+        size_t idx_i = valid_gt_indices[dis(gen)];
+        size_t idx_j = valid_gt_indices[dis(gen)];
+        
+        // Ensure we don't compare a node with itself
+        while (idx_i == idx_j) {
+            idx_j = valid_gt_indices[dis(gen)];
+        }
+
+        const Node& node_i = graph[idx_i];
+        const Node& node_j = graph[idx_j];
+
+        // Compute the distance1 (ground truth distances)
+        float dist1 = std::abs(node_i.gt_f_star - node_j.gt_f_star);
+
+        // Compute the distance2 (computed f_star distances)
+        float dist2 = std::abs(node_i.f_star - node_j.f_star);
+
+        // Compute the absolute error
+        float error = std::abs(dist1 - dist2);
+
+        // Accumulate the error
+        total_error += error;
+        ++pair_count;
+    }
+
+    // If no valid pairs are found, return 0 to avoid division by zero
+    if (pair_count == 0) {
+        return 0.0f;
+    }
+
+    // Return the mean error
+    return total_error / pair_count;
+}
+
 void calculate_histogram(const std::vector<Node>& graph, const std::string& filename = std::string(), int num_buckets = 1000) {
     // Find min and max f_star values
     float min_f = min_f_star(graph);
@@ -761,6 +811,19 @@ std::vector<size_t> get_valid_indices(const std::vector<Node>& graph) {
     return valid_indices;
 }
 
+std::vector<size_t> get_valid_gt_indices(const std::vector<Node>& graph) {
+    std::vector<size_t> valid_gt_indices;
+    size_t num_valid_nodes = 0;
+    for (size_t i = 0; i < graph.size(); ++i) {
+        if (!graph[i].deleted && graph[i].gt) {
+            valid_gt_indices.push_back(i);
+            num_valid_nodes++;
+        }
+    }
+    std::cout << "Number of valid gt nodes: " << num_valid_nodes << std::endl;
+    return valid_gt_indices;
+}
+
 // This is an example of a solve function that takes the graph and parameters as input
 void solve(std::vector<Node>& graph, argparse::ArgumentParser* program, int num_iterations = 10000) {
     // Default values for parameters
@@ -822,7 +885,7 @@ void solve(std::vector<Node>& graph, argparse::ArgumentParser* program, int num_
 
     // store only the valid indices to speed up the loop
     std::vector<size_t> valid_indices;
-    
+    std::vector<size_t> valid_gt_indices;
 
     float invalid_edge_threshold = 3.5f;
 
@@ -830,6 +893,7 @@ void solve(std::vector<Node>& graph, argparse::ArgumentParser* program, int num_
     while (true) {
         // store only the valid indices to speed up the loop
         valid_indices = get_valid_indices(graph);
+        valid_gt_indices = get_valid_gt_indices(graph);
         // Do 2 rounds of edge deletion
         if (edges_deletion_round > 40 || invalid_edge_threshold <= 0.30) {
             // Do last of updates with 3x times iterations and spring constant 1.0
@@ -872,8 +936,6 @@ void solve(std::vector<Node>& graph, argparse::ArgumentParser* program, int num_
                 update_nodes(graph, o_iteration, spring_constant_iteration, valid_indices);
 
                 if (iter % 100 == 0) {
-                    std::cout << "\rIteration: " << iter << std::flush;  // Updates the same line
-
                     // Generate filename with zero padding
                     std::ostringstream filename;
                     filename << "histogram/histogram_" 
@@ -888,6 +950,10 @@ void solve(std::vector<Node>& graph, argparse::ArgumentParser* program, int num_
                     // Calculate new weights factors
                     float scale = calculate_scale(graph, estimated_windings);
                     update_weights(graph, scale);
+
+                    // Print
+                    float mean_error = computeMeanError(graph, valid_gt_indices);
+                    std::cout << "\rIteration: " << iter << " Mean Error to GT: " << mean_error << std::flush;  // Updates the same line
 
                     // escape if estimated windings reached
                     if (first_estimated_iteration) {
@@ -1030,7 +1096,7 @@ void construct_ground_truth_graph(std::vector<Node>& graph) {
     // Delete node withouth ground truth
     for (size_t i = 0; i < graph.size(); ++i) {
         graph[i].deleted = !graph[i].gt;
-        // asign gt to f_star
+        // assign gt to f_star
         graph[i].f_star = graph[i].gt_f_star;
     }
 }
@@ -1166,17 +1232,16 @@ int main(int argc, char** argv) {
     // Calculate and display the histogram of f_star values
     // calculate_histogram(graph);
 
-    // Automatically determing winding direction
-    if (program.get<bool>("--auto")) {
-        auto_winding_direction(graph, &program);
-    }
-
     // Check if the ground truth graph construction is enabled
     if (program.get<bool>("--gt_graph")) {
         // Construct the ground truth graph
         construct_ground_truth_graph(graph);
     }
     else {
+        // Automatically determing winding direction
+        if (program.get<bool>("--auto")) {
+            auto_winding_direction(graph, &program);
+        }
         // Solve the problem using a solve function
         num_iterations = program.get<int>("--num_iterations");
         solve(graph, &program, num_iterations);
