@@ -2378,7 +2378,6 @@ std::vector<std::vector<float>> optimize_ordered_pointset(
     return std::move(optimizer.optimize_ordered_pointset_processor());
 }
 
-
 PYBIND11_MODULE(pointcloud_processing, m) {
     m.doc() = "pybind11 module for parallel point cloud processing";
 

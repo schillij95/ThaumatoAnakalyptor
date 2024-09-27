@@ -1024,6 +1024,17 @@ void auto_winding_direction(std::vector<Node>& graph, argparse::ArgumentParser* 
     }
 }
 
+void construct_ground_truth_graph(std::vector<Node>& graph) {
+    std::cout << "Constructing Ground Truth Graph" << std::endl;
+
+    // Delete node withouth ground truth
+    for (size_t i = 0; i < graph.size(); ++i) {
+        graph[i].deleted = !graph[i].gt;
+        // asign gt to f_star
+        graph[i].f_star = graph[i].gt_f_star;
+    }
+}
+
 int main(int argc, char** argv) {
     // Parse the input graph file from arguments using argparse
     argparse::ArgumentParser program("Graph Solver");
@@ -1125,6 +1136,12 @@ int main(int argc, char** argv) {
         .default_value(false)   // Set default to false
         .implicit_value(true);  // If present, set to true
 
+    // Add boolean flag --gt_graph
+    program.add_argument("--gt_graph")
+        .help("Enable ground truth graph construction")
+        .default_value(false)   // Set default to false
+        .implicit_value(true);  // If present, set to true
+
     try {
         program.parse_args(argc, argv);
         same_winding_factor = program.get<float>("--same_winding_factor");
@@ -1154,9 +1171,16 @@ int main(int argc, char** argv) {
         auto_winding_direction(graph, &program);
     }
 
-    // Solve the problem using a solve function
-    num_iterations = program.get<int>("--num_iterations");
-    solve(graph, &program, num_iterations);
+    // Check if the ground truth graph construction is enabled
+    if (program.get<bool>("--gt_graph")) {
+        // Construct the ground truth graph
+        construct_ground_truth_graph(graph);
+    }
+    else {
+        // Solve the problem using a solve function
+        num_iterations = program.get<int>("--num_iterations");
+        solve(graph, &program, num_iterations);
+    }
 
     // print the min and max f_star values
     std::cout << "Min f_star: " << min_f_star(graph) << std::endl;
