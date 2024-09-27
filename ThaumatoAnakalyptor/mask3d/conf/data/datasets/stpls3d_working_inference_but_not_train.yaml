@@ -38,6 +38,7 @@ train_dataset:
   is_elastic_distortion: true
   color_drop: 0.0
   non_labeled_class: ${general.non_labeled_class}
+  downsampling_ratios: [1]
 
 validation_dataset:
   _target_: datasets.semseg.SemanticSegmentationDataset
@@ -66,6 +67,7 @@ validation_dataset:
   eval_inner_core: ${general.eval_inner_core}
   filter_out_classes: [0]
   label_offset: 1
+  downsampling_ratios: [1]
 
 test_dataset:
   _target_: datasets.semseg.SemanticSegmentationDataset
@@ -94,3 +96,4 @@ test_dataset:
   eval_inner_core: ${general.eval_inner_core}
   filter_out_classes: [0]
   label_offset: 1
+  downsampling_ratios: [1]

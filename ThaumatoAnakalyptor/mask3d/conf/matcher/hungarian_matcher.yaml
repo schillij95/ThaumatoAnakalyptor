@@ -1,6 +1,6 @@
 # @package _group_
 _target_: models.matcher.HungarianMatcher
-cost_class: 2.
+cost_class: 1. # was 2 and then 0.1
 cost_mask: 5.
-cost_dice: 2.
+cost_dice: 3.5 # was 2
 num_points: -1

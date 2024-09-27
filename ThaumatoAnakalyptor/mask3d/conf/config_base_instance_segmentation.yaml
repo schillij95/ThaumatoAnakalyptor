@@ -12,16 +12,16 @@ general:
   save_visualizations: false
   visualization_point_size: 20
   decoder_id: -1
-  export: false
+  export: true
   use_dbscan: false
   ignore_class_threshold: 100
   project_name: scannet
-  workspace: jonasschult
+  workspace: jordi-ngl
   experiment_name: DEBUG_ABLATION
   num_targets: 19
   add_instance: true
   dbscan_eps: 0.95
-  dbscan_min_points: 1
+  dbscan_min_points: 5
   non_labeled_class: 2
 
 
@@ -44,7 +44,7 @@ general:
 
   max_batch_size: 99999999
 
-  save_dir: saved/${general.experiment_name}
+  save_dir: saved/train
   # time/commit/md5(config)_uuid
   # time/experiment_id/version_uuid
   # experiment_id: 1 # commit[:8], or unique from logger
@@ -61,7 +61,7 @@ defaults:
   - model: mask3d
   - metrics: miou
   - optimizer: adamw
-  - scheduler: onecyclelr
+  - scheduler: lambdalr #lambdalr
   - trainer: trainer600
   - callbacks: callbacks_instance_segmentation
   - matcher: hungarian_matcher

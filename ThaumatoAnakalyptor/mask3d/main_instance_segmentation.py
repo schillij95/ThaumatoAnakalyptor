@@ -15,6 +15,24 @@ from utils.utils import (
 )
 from pytorch_lightning import Trainer, seed_everything
 
+def load_checkpoint_without_optimizer(cfg, model):
+    # Load the checkpoint into a dictionary
+    checkpoint = torch.load(cfg.general.checkpoint)
+    
+    # Remove optimizer and scheduler states if they exist
+    if "optimizer" in checkpoint:
+        del checkpoint["optimizer"]
+        print("Removed optimizer state from checkpoint.")
+    
+    if "lr_scheduler" in checkpoint:
+        del checkpoint["lr_scheduler"]
+        print("Removed learning rate scheduler state from checkpoint.")
+    
+    # Load the model weights
+    model.load_state_dict(checkpoint["state_dict"])
+    print("Model weights loaded from checkpoint.")
+    
+    return cfg, model
 
 def get_parameters(cfg: DictConfig):
     logger = logging.getLogger(__name__)
@@ -37,11 +55,12 @@ def get_parameters(cfg: DictConfig):
 
     if not os.path.exists(cfg.general.save_dir):
         os.makedirs(cfg.general.save_dir)
+    
     else:
         print("EXPERIMENT ALREADY EXIST")
         cfg["trainer"][
             "resume_from_checkpoint"
-        ] = f"{cfg.general.save_dir}/last-epoch.ckpt"
+        ] = f"/workspace/ThaumatoAnakalyptor/mask3d/saved/train/last-epoch-combined.ckpt"
 
     for log in cfg.logging:
         print(log)
@@ -56,8 +75,9 @@ def get_parameters(cfg: DictConfig):
             cfg, model
         )
     if cfg.general.checkpoint is not None:
-        cfg, model = load_checkpoint_with_missing_or_exsessive_keys(cfg, model)
-
+        cfg, model = load_checkpoint_without_optimizer(cfg, model)
+    
+    #print(f"Learning rate has been reset to {cfg.optimizer.lr}")
     logger.info(flatten_dict(OmegaConf.to_container(cfg, resolve=True)))
     return cfg, model, loggers
 
@@ -75,20 +95,22 @@ def train(cfg: DictConfig):
     callbacks.append(RegularCheckpointing())
 
     # Adding ModelCheckpoint to automatically save model weights
+    '''
     checkpoint_callback = ModelCheckpoint(
-        dirpath=str(cfg.general.save_dir),  # Directory to save the model
+        dirpath="/workspace/ThaumatoAnakalyptor/mask3d/saved/train",  # Directory to save the model
         filename='weights-{epoch}-{step}',  # Name of the file
         save_top_k=1,                       # Save only the top k models
         save_last=True,                     # Save the last model as well
-        monitor='val_loss',                 # Metric to monitor for saving
+        monitor='val_loss_mean',                 # Metric to monitor for saving
         mode='min',                         # Minimize the monitored metric
         save_weights_only=True,             # Save only the weights
     )
-    callbacks.append(checkpoint_callback)
+    callbacks.append(checkpoint_callback)'''
 
     runner = Trainer(
         logger=loggers,
-        gpus=cfg.general.gpus,
+        #gpus=cfg.general.gpus,
+        gpus=[0, 1, 2, 3, 4, 5],
         accelerator="gpu",
         strategy='ddp',
         callbacks=callbacks,
@@ -105,7 +127,8 @@ def test(cfg: DictConfig):
     os.chdir(hydra.utils.get_original_cwd())
     cfg, model, loggers = get_parameters(cfg)
     runner = Trainer(
-        gpus=cfg.general.gpus,
+        #gpus=cfg.general.gpus,
+        gpus=[0, 1, 2, 3, 4, 5],
         accelerator="gpu",
         strategy='ddp',
         logger=loggers,

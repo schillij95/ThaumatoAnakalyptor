@@ -1,11 +1,11 @@
 # @package _group_
 - _target_: pytorch_lightning.callbacks.ModelCheckpoint
-  monitor: val_mean_ap_50
+  monitor: train_loss_mean
   save_last: true
   save_top_k: 1
-  mode: max
+  mode: min
   dirpath: ${general.save_dir}
-  filename: "{epoch}-{val_mean_ap_50:.3f}"
+  filename: "{epoch}-{train_loss_mean:.3f}"
   every_n_epochs: 1
 
 - _target_: pytorch_lightning.callbacks.LearningRateMonitor

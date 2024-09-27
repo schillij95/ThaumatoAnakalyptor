@@ -3,7 +3,7 @@ import torch.nn as nn
 from copy import deepcopy
 import logging
 import os
-os.environ["WANDB_MODE"] = "dryrun" # turn off annoying bugging wandb logging
+#os.environ["WANDB_MODE"] = "dryrun" # turn off annoying bugging wandb logging
 import sys
 # add current path to sys.path
 sys.path.append(os.path.dirname(os.path.realpath(__file__)))
@@ -62,7 +62,7 @@ def get_parameters(cfg: DictConfig):
     else:
         cfg["trainer"][
             "resume_from_checkpoint"
-        ] = f"ThaumatoAnakalyptor/mask3d/{cfg.general.save_dir}/last-epoch.ckpt"
+        ] = f"{cfg.general.save_dir}/last-epoch-newvoxel-down.ckpt"
 
     for log in cfg.logging:
         print(log)
@@ -78,7 +78,7 @@ def get_parameters(cfg: DictConfig):
         )
     if cfg.general.checkpoint is not None:
         cfg, model = load_checkpoint_with_missing_or_exsessive_keys(cfg, model)
-        
+        print(f"LOADED CHECKPOINT {cfg.general.checkpoint}", end="\n\n\n")
     logger.info(flatten_dict(OmegaConf.to_container(cfg, resolve=True)))
     return cfg, model, loggers
 
@@ -149,28 +149,30 @@ def init_(cfg: DictConfig):
     stpls3d_config = OmegaConf.load("ThaumatoAnakalyptor/mask3d/conf/data/datasets/stpls3d_working_inference_but_not_train.yaml")
 
     OmegaConf.set_struct(cfg, False)
-    cfg.general.experiment_name = f'validation_query_{CURR_QUERY}_topk_{CURR_TOPK}_dbscan_{CURR_DBSCAN}_size_{CURR_SIZE}'
-    cfg.general.project_name = "stpls3d_test"
+    cfg.general.experiment_name = f""
+    cfg.general.project_name = "thaumato_inference"
     # print("stpl cfg", stpls3d_config)
     cfg.data = OmegaConf.merge(cfg.data, stpls3d_config)
     cfg.general.num_targets = 2
     cfg.data.num_labels = 2
-    cfg.data.voxel_size = 0.333
-    cfg.data.num_workers = 10
+    cfg.data.voxel_size = 0.25 # was 0.333
+    cfg.data.num_workers = 10 # was 10
     cfg.data.cache_data = False
     cfg.data.cropping_v1 = False
-    cfg.general.reps_per_epoch = 100
+    cfg.general.reps_per_epoch = 100 # was 100
     cfg.model.num_queries = CURR_QUERY
     cfg.general.on_crops = False # Initially was True
     cfg.model.config.backbone._target_ = "models.Res16UNet18B"
     cfg.general.train_mode = False
-    cfg.general.checkpoint = "ThaumatoAnakalyptor/mask3d/saved/train/last-epoch.ckpt"
+    cfg.general.checkpoint = "/workspace/ThaumatoAnakalyptor/mask3d/saved/train/last-epoch-newvoxel-down.ckpt"
     cfg.data.crop_length = CURR_SIZE
     cfg.general.eval_inner_core = 50.0
     cfg.general.topk_per_image = CURR_TOPK
     cfg.general.use_dbscan = False # Initially was on, but uses A LOT of compute on CPU. quite slow.
     cfg.general.dbscan_eps = CURR_DBSCAN
     cfg.data.test_mode = "test"
+    cfg.data.mode = "test"
+    cfg.data.downsampling_ratios = [1]
     cfg.general.export = True
     OmegaConf.set_struct(cfg, True)
     # because hydra wants to change dir for some reason
@@ -333,6 +335,7 @@ def to_surfaces(points, normals, colors, predictions, filter_class=1):
 
     returns: np.array of shape (N, 3)
     '''
+
     # Prediction list of dicts
     if isinstance(predictions, list):
         surfaces_list = []
@@ -347,25 +350,33 @@ def to_surfaces(points, normals, colors, predictions, filter_class=1):
             scores_list_list.append(scores_list)
         return surfaces_list, surfaces_normals_list, surfaces_colors_list, scores_list_list
     
-    mask_list = []
-    scores_list = []
-    # filter out all classes except filter_class
-    for i in range(len(list(predictions["pred_classes"]))):
-        if predictions["pred_classes"][i] == filter_class:
-            mask_list.append(predictions["pred_masks"][:, i])
-            scores_list.append(predictions["pred_scores"][i])
+    elif isinstance(predictions, dict):
+        mask_list = []
+        scores_list = []
+        # filter out all classes except filter_class
+        for i in range(len(list(predictions["pred_classes"]))):
+            if predictions["pred_classes"][i] == filter_class:
+                mask_list.append(predictions["pred_masks"][:, i])
+                scores_list.append(predictions["pred_scores"][i])
 
-    # construct surfaces list
-    surfaces = []
-    surfaces_normals = []
-    surfaces_colors = []
-    for i, mask in enumerate(mask_list):
-        mask = mask.astype(bool)
-        surfaces.append(points[mask])
-        surfaces_normals.append(normals[mask])
-        surfaces_colors.append(colors[mask])
+        # construct surfaces list
+        surfaces = []
+        surfaces_normals = []
+        surfaces_colors = []
 
-    return surfaces, surfaces_normals, surfaces_colors, scores_list
+        #print(mask_list, len(mask_list))
+        for i, mask in enumerate(mask_list):
+            mask = mask.astype(bool)
+            #print(mask.shape, points.shape, colors.shape)
+            if np.any(mask):
+                surfaces.append(points[mask])
+                surfaces_normals.append(normals[mask])
+                surfaces_colors.append(colors[mask])
+
+        return surfaces, surfaces_normals, surfaces_colors, scores_list
+    
+    else:
+        raise TypeError
     
 
 if __name__ == "__main__":

@@ -38,6 +38,7 @@ train_dataset:
   is_elastic_distortion: true
   color_drop: 0.0
   non_labeled_class: ${general.non_labeled_class}
+  downsampling_ratios: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 validation_dataset:
   _target_: datasets.semseg.SemanticSegmentationDataset

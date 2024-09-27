@@ -2,14 +2,14 @@
 _target_: models.Mask3D
 
 # transformer parameters
-hidden_dim: 128
+hidden_dim: 128 # was 128
 dim_feedforward: 1024
 num_queries: 100
-num_heads: 8
-num_decoders: 3
-dropout: 0.0
-pre_norm: false
-use_level_embed: false
+num_heads: 8 # was 8
+num_decoders: 3 # was 3
+dropout: 0.1 # was 0
+pre_norm: true # was false
+use_level_embed: false # was false
 normalize_pos_enc: true
 positional_encoding_type: "fourier"
 gauss_scale: 1.0

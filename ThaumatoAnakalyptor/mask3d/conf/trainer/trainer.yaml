@@ -1,7 +1,42 @@
 # @package _group_
+#deterministic: false
+#max_epochs: 1000
+#min_epochs: 1
+#resume_from_checkpoint: null
+#check_val_every_n_epoch: 50
+#num_sanity_val_steps: -1
+
+
+# @package _group_
+
+# Basic Training Configuration
 deterministic: false
 max_epochs: 1000
 min_epochs: 1
 resume_from_checkpoint: null
-check_val_every_n_epoch: 50
+check_val_every_n_epoch: 1
 num_sanity_val_steps: -1
+
+# Precision Configuration (Automatic Mixed Precision)
+precision: 16  # Enables mixed precision training
+
+# Gradient Accumulation
+accumulate_grad_batches: 4  # Accumulate gradients over 4 batches before updating weights
+
+# Gradient Clipping
+gradient_clip_val: 10  # Clip gradients with a maximum norm of 10
+
+# Logging and Progress
+log_every_n_steps: 10  # Log metrics every 50 steps
+
+# Learning Rate Scheduling (if configured in your optimizer)
+# Example of integrating LR scheduler within your configuration
+lr_scheduler:
+  scheduler: ReduceLROnPlateau
+  monitor: val_loss
+  mode: min
+  patience: 10  # Number of validation steps with no improvement before reducing LR
+  factor: 0.1  # Factor by which the learning rate will be reduced
+  min_lr: 1e-6  # Minimum learning rate
+  verbose: true  # Whether to print the details of the LR reduction
+
