@@ -1457,6 +1457,11 @@ def compute(overlapp_threshold, start_point, path, recompute=False, stop_event=N
             scroll_graph = ScrollGraph(overlapp_threshold, umbilicus_path)
         else:
             scroll_graph = load_graph(recompute_path)
+        count_gt_added = 0
+        for node in scroll_graph.nodes:
+            if 'winding_angle_gt' in scroll_graph.nodes[node]:
+                count_gt_added += 1
+        print(f"Number of nodes with GT winding angle: {count_gt_added}")
         num_processes = max(1, cpu_count() - 2)
         start_block, patch_id = scroll_graph.build_graph(path, num_processes=num_processes, start_point=start_point, prune_unconnected=False, start_fresh=start_fresh, gt_mesh_file=gt_mesh_file, continue_from=continue_from)
         print("Saving built graph...")
