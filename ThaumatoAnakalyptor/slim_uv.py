@@ -3,12 +3,13 @@
 import os
 import open3d as o3d
 import numpy as np
-from math import sqrt
+from math import sqrt, cos, sin, radians
 from tqdm import tqdm
 import igl
 from PIL import Image
 import cv2
 import multiprocessing
+from scipy.stats import pearsonr
 
 Image.MAX_IMAGE_PIXELS = None
 
@@ -394,6 +395,44 @@ class Flatboi:
         area = sqrt(s*(s-ab)*(s-bc)*(s-ca)) # 3d area
 
         return L2, G, area, abs(A)
+	
+    def align_uv_map(self, uv, volume_axis, rotate_angle):
+        # Randomly sample 500 points or all points, whichever is smaller
+        num_points = min(500, uv.shape[0])
+        sampled_indices = np.random.choice(uv.shape[0], num_points, replace=False)
+        sampled_uv = uv[sampled_indices]
+
+        # Initialize variables to store the best angle and highest correlation
+        best_angle = 0
+        highest_correlation = -1
+
+        # Iterate over trial angles (every half degree)
+        for angle in range(0, 360, 1):
+            # Rotate the UV map by the trial angle
+            theta = radians(angle)
+            rotation_matrix = np.array([[cos(theta), -sin(theta)], [sin(theta), cos(theta)]])
+            rotated_uv = np.dot(sampled_uv, rotation_matrix.T)
+
+            # Measure the Pearson correlation between -V and the specified volume axis
+            negative_v = -rotated_uv[:, 1]
+            correlation, _ = pearsonr(negative_v, volume_axis[sampled_indices])
+
+            # Update the best angle if the current correlation is higher
+            if correlation > highest_correlation:
+                highest_correlation = correlation
+                best_angle = angle
+        
+        # Adjust the best angle by adding 180 degrees
+        best_angle = (best_angle + rotate_angle) % 360
+
+        # Rotate the entire UV map by the best angle
+        theta = radians(best_angle)
+        rotation_matrix = np.array([[cos(theta), -sin(theta)], [sin(theta), cos(theta)]])
+        rotated_uv = np.dot(uv, rotation_matrix.T)
+
+        print(f"Best alignment angle: {best_angle} degrees with correlation: {highest_correlation:.3f}")
+        
+        return rotated_uv, best_angle, highest_correlation
     
     def stretch_metrics(self, uv):
         if len(uv.shape) == 2:
@@ -444,6 +483,8 @@ def main():
     parser.add_argument('--path', type=str, help='Path of .obj Mesh', default=path)
     parser.add_argument('--iter', type=int, help='Max number of iterations.')
     parser.add_argument('--ic', type=str, help='Initial condition for SLIM. Options: original, arap, harmonic', default='arap')
+    parser.add_argument('--axis', type=str, help='Volume axis for alignment. Options: x, y, z', default='z')
+    parser.add_argument('--rotate', type=int, help='Angle to add to the best alignment angle. Default is 180 degrees.', default=180)
 
     # Take arguments back over
     args = parser.parse_args()
@@ -469,8 +510,14 @@ def main():
 
     flatboi = Flatboi(path, args.iter)
     harmonic_uvs, harmonic_energies = flatboi.slim(initial_condition=args.ic)
-    flatboi.save_img(harmonic_uvs)
-    flatboi.save_obj(harmonic_uvs)
+    
+	# Align the UV map
+    volume_axis = flatboi.vertices[:, {'x': 0, 'y': 1, 'z': 2}[args.axis.lower()]]
+    aligned_uvs, best_angle, highest_correlation = flatboi.align_uv_map(harmonic_uvs, volume_axis, args.rotate)
+    print(f"Best alignment angle: {best_angle} degrees with correlation: {highest_correlation:.3f}")
+
+    flatboi.save_img(aligned_uvs)
+    flatboi.save_obj(aligned_uvs)
     print_array_to_file(harmonic_energies, energies_file)       
     flatboi.save_mtl()
 
