@@ -130,8 +130,11 @@ libarchive-dev \
 libtbb-dev  \
 libopencv-dev
 
-# build C++ ThaumatoAnakalyptor code
-COPY ./ThaumatoAnakalyptor/sheet_generation/ /workspace/ThaumatoAnakalyptor/sheet_generation/
+# build C++ ThaumatoAnakalyptor code with the submodules
+RUN git clone --recurse-submodules https://github.com/schillij95/ThaumatoAnakalyptor /ThaumatoAnakalyptor_temp
+RUN mkdir -p /workspace
+RUN cp -rn /ThaumatoAnakalyptor_temp/. /workspace && rm -rf /ThaumatoAnakalyptor_temp
+
 WORKDIR /workspace/ThaumatoAnakalyptor/sheet_generation/
 
 # Remove the existing build directory to clear any old configurations
@@ -144,15 +147,11 @@ RUN ls -la
 RUN cmake .. \
 && cmake --build .
 
-WORKDIR /
-
-# Git clone the ThaumatoAnakalyptor repository into the workspace as base
-RUN git clone --recurse-submodules https://github.com/schillij95/ThaumatoAnakalyptor /ThaumatoAnakalyptor_temp
-RUN mkdir -p /workspace
-RUN cp -rn /ThaumatoAnakalyptor_temp/. /workspace && rm -rf /ThaumatoAnakalyptor_temp
-
 # Build the graph_problem
 WORKDIR /workspace/ThaumatoAnakalyptor/graph_problem/
+
+# Install argparse
+RUN curl -L https://raw.githubusercontent.com/p-ranav/argparse/master/include/argparse/argparse.hpp -o /workspace/ThaumatoAnakalyptor/graph_problem/argparse.hpp
 
 # Remove the existing build directory to clear any old configurations
 RUN rm -rf build && mkdir -p build
