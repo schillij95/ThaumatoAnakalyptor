@@ -475,7 +475,7 @@ def score_same_block_patches(patch1, patch2, overlapp_threshold, umbilicus_dista
     """
     # Calculate winding switch sheet scores
     distance_raw = umbilicus_distance(patch1, patch2)
-    score_raw, k = np.mean(distance_raw), np.sign(distance_raw)
+    score_raw, k = np.abs(distance_raw), np.sign(distance_raw)
     k = k * overlapp_threshold["winding_direction"] # because of scroll's specific winding direction
 
     score_val = (overlapp_threshold["max_winding_switch_sheet_distance"] - score_raw) / (overlapp_threshold["max_winding_switch_sheet_distance"] - overlapp_threshold["min_winding_switch_sheet_distance"]) # calculate score
