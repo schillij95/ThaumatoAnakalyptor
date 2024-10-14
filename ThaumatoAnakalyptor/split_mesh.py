@@ -9,9 +9,14 @@ from scipy.interpolate import interp1d
 from copy import deepcopy
 from tqdm import tqdm
 import os
+from datetime import datetime
+
+import sys
+sys.path.append('ThaumatoAnakalyptor/sheet_generation/build')
+import meshing_utils
 
 class MeshSplitter:
-    def __init__(self, mesh_path, umbilicus_path):
+    def __init__(self, mesh_path, umbilicus_path, scale_factor=1.0):
         # Load mesh
         self.mesh_path = mesh_path
         self.mesh = o3d.io.read_triangle_mesh(mesh_path)
@@ -23,8 +28,10 @@ class MeshSplitter:
 
         # Load the umbilicus data
         umbilicus_data = load_xyz_from_file(umbilicus_path)
+        if len(umbilicus_data) == 0:
+            raise ValueError("No umbilicus data found.")
         # scale and swap axis
-        umbilicus_data = scale_points(umbilicus_data, 1.0, axis_offset=-500)
+        umbilicus_data = scale_points(umbilicus_data, 1.0, axis_offset=-500) * scale_factor
         umbilicus_data, _ = shuffling_points_axis(umbilicus_data, umbilicus_data, axis_indices)
         # Separate the coordinates
         x, y, z = umbilicus_data.T
@@ -74,33 +81,42 @@ class MeshSplitter:
         """
         Compute the adjacency list for the mesh.
         """
-        adjacent_dict = {}
-        for triangle in tqdm(np.array(self.mesh.triangles)):
-            for i in range(3):
-                vertex = int(triangle[i])
-                adjacent = int(triangle[(i + 1) % 3])
-                if vertex not in adjacent_dict:
-                    adjacent_dict[vertex] = set()
-                adjacent_dict[vertex].add(adjacent)
-                if adjacent not in adjacent_dict:
-                    adjacent_dict[adjacent] = set()
-                adjacent_dict[adjacent].add(vertex)
+        # adjacent_dict = {}
+        # for triangle in tqdm(np.array(self.mesh.triangles)):
+        #     for i in range(3):
+        #         vertex = int(triangle[i])
+        #         adjacent = int(triangle[(i + 1) % 3])
+        #         if vertex not in adjacent_dict:
+        #             adjacent_dict[vertex] = set()
+        #         adjacent_dict[vertex].add(adjacent)
+        #         if adjacent not in adjacent_dict:
+        #             adjacent_dict[adjacent] = set()
+        #         adjacent_dict[adjacent].add(vertex)
 
-        vertices = np.array(self.mesh.vertices)
-        for vertex in range(vertices.shape[0]):
-            vertex = int(vertex)
-            if vertex not in adjacent_dict:
-                adjacent_dict[vertex] = []
-            else:
-                adjacent_dict[vertex] = list(adjacent_dict[vertex])
+        # vertices = np.array(self.mesh.vertices)
+        # for vertex in range(vertices.shape[0]):
+        #     vertex = int(vertex)
+        #     if vertex not in adjacent_dict:
+        #         adjacent_dict[vertex] = []
+        #     else:
+        #         adjacent_dict[vertex] = list(adjacent_dict[vertex])
+        # self.adjacency_list = adjacent_dict
 
-        self.adjacency_list = adjacent_dict
+        triangles = np.array(self.mesh.triangles)
+        triangles = [[int(triangle[0]), int(triangle[1]), int(triangle[2])] for triangle in triangles]
+        adjacency_list = meshing_utils.build_triangle_adjacency_list_vertices(triangles)
+
+        adjacency_dict = {}
+        for triangle_idx, adjacent_vertices in enumerate(adjacency_list):
+            adjacency_dict[triangle_idx] = adjacent_vertices
+        self.adjacency_list = adjacency_dict
 
     def get_adjacent_vertices(self, vertex_idx):
         # Check if the adjacency list exists for the mesh
         if not hasattr(self, 'adjacency_list'):
             print("Generating adjacency list...")
             self.compute_adjacency_list()  # Compute the adjacency list if it doesn't exist
+            print("Adjacency list generated.")
         # Get and return adjacent vertex indices directly
         adjacent = self.adjacency_list[int(vertex_idx)]
         return adjacent
@@ -266,7 +282,11 @@ class MeshSplitter:
             self.vertices_np = npzfile['vertices']
 
 
-    def split_mesh(self, split_width):
+    def split_mesh(self, split_width, stamp=None):
+        # window mesh folder name with datetime string
+        if stamp is None:
+            stamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        window_mesh_name = f"windowed_mesh_{stamp}"
         # Function to cut the mesh into pieces along the x-axis
         vertices = np.asarray(self.mesh.vertices)
         normals = np.asarray(self.mesh.vertex_normals)
@@ -298,7 +318,7 @@ class MeshSplitter:
             print(f"Nr uvs in cut mesh: {len(np.asarray(cut_mesh.triangle_uvs))}")
             print(f"Nr vertices in cut mesh: {len(np.asarray(cut_mesh.vertices))}")
             
-            path_window = os.path.join(os.path.dirname(self.mesh_path), "windowed_mesh", os.path.basename(self.mesh_path).replace(".obj", f"_window_{int(window_start)}_{int(window_end)}.obj"))
+            path_window = os.path.join(os.path.dirname(self.mesh_path), window_mesh_name, os.path.basename(self.mesh_path).replace(".obj", f"_window_{int(window_start)}_{int(window_end)}.obj"))
             mesh_paths.append(path_window)
             # Create the directory if it doesn't exist
             os.makedirs(os.path.dirname(path_window), exist_ok=True)
@@ -306,16 +326,16 @@ class MeshSplitter:
             o3d.io.write_triangle_mesh(path_window, cut_mesh)
             window_start = window_end
         
-        return mesh_paths
+        return mesh_paths, stamp
         
-    def compute(self, split_width=50000, fresh_start=True):
+    def compute(self, split_width=50000, fresh_start=True, stamp=None):
         if fresh_start:
             self.compute_uv_with_bfs(0)
             self.scale_uv_x()
             self.save_vertices()
         else:
             self.load_vertices()
-        return self.split_mesh(split_width)
+        return self.split_mesh(split_width, stamp=stamp)
 
 if __name__ == '__main__':
     import argparse
