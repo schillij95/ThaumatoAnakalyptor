@@ -1130,17 +1130,18 @@ class WalkToSheet():
             # reset same vector indices
             global angle_vector_indices_dp
             angle_vector_indices_dp = {}
+        else:
+            valid_ts = []
+            valid_normals = []
+            angle_vector = []
 
         return [valid_ts], [valid_normals], [angle_vector]
     
-    def clip_valid_angles_fragment(self, result_ts, result_normals, angle_vector, angle_step, valid_p_winding=0.1, valid_p_z=0.1):
+    def clip_valid_angles_fragment(self, result_ts, result_normals, angle_vector, angle_step, valid_p_winding=0.01, valid_p_z=0.01):
         # Clip away invalid windings at the beginning and end of the ordered pointset
         steps_per_winding = 360 / angle_step / 120
         nr_windings = int(np.ceil(len(result_ts)/steps_per_winding))
 
-        valid_ts_s = []
-        valid_normals_s = []
-        angle_vector_s = []
         start_indices = []
         end_indices = []
 
@@ -1175,14 +1176,12 @@ class WalkToSheet():
                 else:
                     break
 
-            print(f"Clipped windings from {valid_start_indx} to {valid_end_indx}. Total length: {nr_windings}.")
             # Add some extra windings
             if valid_start_indx < valid_end_indx:
-                if valid_start_indx > 0:
-                    valid_start_indx -= 1
-                if valid_end_indx < nr_windings:
-                    valid_end_indx += 1
+                valid_start_indx = max(valid_start_indx - 3, 0)
+                valid_end_indx = min(valid_end_indx + 3, nr_windings)
             # Translate indices from winding to pointset indices
+            print(f"Clipped fragment windings from {valid_start_indx} to {valid_end_indx}. Total length: {nr_windings}.")
             valid_start_indx_ = int(valid_start_indx * steps_per_winding)
             valid_end_indx_ = min(int(valid_end_indx * steps_per_winding), len(result_ts))
 
@@ -1274,7 +1273,7 @@ class WalkToSheet():
         test_pointset_ply_path = os.path.join(test_folder, f"ordered_pointset_test_cpp.ply")
         self.pointcloud_from_ordered_pointset(pointset, os.path.join(self.save_path, test_pointset_ply_path))
            
-    def rolled_ordered_pointset(self, points, normals, continue_from=0, fragment=False, debug=False, angle_step=0.5, z_spacing=10):
+    def rolled_ordered_pointset(self, points, normals, continue_from=0, fragment=False, debug=False, angle_step=0.5, z_spacing=10, learning_rate=0.2, iterations=11, unfix_factor=2.5):
         # some debugging visualization of seperate pointcloud windings
         if debug:
             # get winding angles
@@ -1291,6 +1290,8 @@ class WalkToSheet():
             os.makedirs(test_folder)
             # test
             for test_angle in range(int(min_wind), int(max_wind), 360):
+                if (test_angle // 360 % 20) > 2:
+                    continue
                 start_index, end_index = self.points_at_winding_angle(points, test_angle+180, max_angle_diff=180)
                 points_test = points[start_index:end_index]
                 colors_test = points_test[:,3]
@@ -1356,6 +1357,7 @@ class WalkToSheet():
             if not fragment:
                 valid_ts_s, valid_normals_s, angle_vector_s = self.clip_valid_windings(result_ts, result_normals, angle_vector, angle_step, valid_p_winding=valid_p, valid_p_z=valid_p)
             else:
+                valid_p = 0.1
                 start_indices, end_indices = self.clip_valid_angles_fragment(result_ts, result_normals, angle_vector, angle_step, valid_p_winding=valid_p, valid_p_z=valid_p)
 
                 # optimize before cutting the pointset apart
@@ -1373,7 +1375,7 @@ class WalkToSheet():
 
                 # Optimize the full pointset for smooth surface with best guesses for interpolated t values
                 interpolated_ts = self.optimize_adjacent_cpp(interpolated_ts, neighbours_dict, fixed_points, 
-                                                            learning_rate=0.2, iterations=11, error_val_d=0.0001, unfix_factor=2.5,
+                                                            learning_rate=learning_rate, iterations=iterations, error_val_d=0.0001, unfix_factor=unfix_factor,
                                                             verbose=True)
                 
                 valid_ts_s = [interpolated_ts[start_indices[i]-start_index_0:end_indices[i]-start_index_0] for i in range(len(start_indices))]
@@ -1619,7 +1621,7 @@ class WalkToSheet():
         # Return the paths to the split meshes
         return split_mesh_paths, stamp
 
-    def unroll(self, fragment=False, debug=False, continue_from=0, z_range=None, angle_step=1, z_spacing=10):
+    def unroll(self, fragment=False, debug=False, continue_from=0, z_range=None, angle_step=1, z_spacing=10, learning_rate=0.2, iterations=11, unfix_factor=2.5):
 
         # Set to false to load precomputed partial results during development
         start_fresh = continue_from <= 1
@@ -1664,7 +1666,7 @@ class WalkToSheet():
 
         pointset_ply_path = os.path.join(self.save_path, "ordered_pointset.ply")
         # get nodes
-        ordered_pointsets_s = self.rolled_ordered_pointset(points_originals_selected, normals_originals_selected, angle_step=angle_step, continue_from=continue_from, fragment=fragment, debug=debug, z_spacing=z_spacing)
+        ordered_pointsets_s = self.rolled_ordered_pointset(points_originals_selected, normals_originals_selected, angle_step=angle_step, continue_from=continue_from, fragment=fragment, debug=debug, z_spacing=z_spacing, learning_rate=learning_rate, iterations=iterations, unfix_factor=unfix_factor)
 
         self.pointcloud_from_ordered_pointset(ordered_pointsets_s[0], pointset_ply_path)
         stamp = None
@@ -1702,6 +1704,9 @@ if __name__ == '__main__':
     parser.add_argument('--z_range', type=int, nargs=2, default=[-2147483648, 2147483647], help='Range of z values to mesh in')
     parser.add_argument('--angle_step', type=float, default=0.5, help='Angle step for the unrolling')
     parser.add_argument('--z_spacing', type=int, default=10, help='Angle step for the unrolling')
+    parser.add_argument('--learning_rate', type=float, default=0.2, help='Learning rate for the optimization')
+    parser.add_argument('--iterations', type=int, default=11, help='Number of iterations for the optimization')
+    parser.add_argument('--unfix_factor', type=float, default=2.5, help='Unfix factor for the optimization. Higher = less unfixed points')
 
     args = parser.parse_args()
 
@@ -1727,7 +1732,7 @@ if __name__ == '__main__':
     
     walk = WalkToSheet(graph, args.path, start_point, scale_factor, split_width=args.split_width)
     # walk.save_graph_pointcloud(reference_path)
-    walk.unroll(fragment=args.fragment, debug=args.debug, continue_from=args.continue_from, z_range=z_range, angle_step=args.angle_step, z_spacing=args.z_spacing)
+    walk.unroll(fragment=args.fragment, debug=args.debug, continue_from=args.continue_from, z_range=z_range, angle_step=args.angle_step, z_spacing=args.z_spacing, learning_rate=args.learning_rate, iterations=args.iterations, unfix_factor=args.unfix_factor)
 
 # Example command: python3 -m ThaumatoAnakalyptor.graph_to_mesh --path /scroll.volpkg/working/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks --graph /scroll.volpkg/working/scroll3_surface_points/1352_3600_5002/point_cloud_colorized_verso_subvolume_graph_BP_solved.pkl --start_point 1352 3600 5002 --debug
 # python3 -m ThaumatoAnakalyptor.graph_to_mesh --path /scroll2v2_surface_points/point_cloud_colorized_verso_subvolume_blocks --graph /scroll2v2_surface_points/1352_3600_5002/point_cloud_colorized_verso_subvolume_graph_BP_solved.pkl --start_point 1352 3600 5002
