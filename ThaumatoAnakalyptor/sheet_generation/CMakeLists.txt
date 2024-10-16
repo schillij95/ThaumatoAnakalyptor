@@ -30,6 +30,8 @@ include_directories(${LibArchive_INCLUDE_DIRS})
 
 pybind11_add_module(sheet_generation solver.cpp)
 pybind11_add_module(pointcloud_processing pointcloud_processing.cpp)
+pybind11_add_module(meshing_utils meshing_utils.cpp)
 # Link YAML-CPP library
 target_link_libraries(sheet_generation PRIVATE yaml-cpp Eigen3::Eigen ${CMAKE_THREAD_LIBS_INIT})
 target_link_libraries(pointcloud_processing PRIVATE ${CMAKE_THREAD_LIBS_INIT} ${LibArchive_LIBRARIES} TBB::tbb hdbscan OpenMP::OpenMP_CXX)
+target_link_libraries(meshing_utils PRIVATE ${CMAKE_THREAD_LIBS_INIT} ${LibArchive_LIBRARIES} TBB::tbb hdbscan OpenMP::OpenMP_CXX)
