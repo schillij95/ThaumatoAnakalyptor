@@ -148,7 +148,7 @@ This example shows how to do segmentation on Scroll 3 (PHerc0332).
     python3 -m ThaumatoAnakalyptor.pointcloud_to_instances --path "<scroll-path>/scroll3_surface_points" --dest "<scroll-path>/scroll3_surface_points" --umbilicus_path "<scroll-path>/PHerc0332.volpkg/volumes/umbilicus.txt" --main_drive "" --alternative_ply_drives "" --max_umbilicus_dist -1 --gpus 1
     ```
 
-- **Segmentation Steps:** Additional details for each segmentation step are provided in the [instructions](ThaumatoAnakalyptor/instructions.txt) document.
+- **Segmentation Steps:**
     The first time the script ```instances_to_graph.py```  is run on a new scroll, flag ```--recompute``` should be set to 1, the flag ```--continue_from``` should be set to -1. This will generate the overlapping graph of the scroll. For subsequent runs, flag ```--recompute``` should be set to 0 to speed up the process. Flag ```--continue_from``` can be set to the step you would like to continue from.
     ```bash
     python3 -m ThaumatoAnakalyptor.instances_to_graph --path "<scroll-path>/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks" --recompute 1 --continue_from -1
