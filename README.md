@@ -189,7 +189,7 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
     ```bash
     python3 -m ThaumatoAnakalyptor.large_mesh_to_surface --input_mesh <scroll-path>/scroll3_surface_points/1352_3600_5002/point_cloud_colorized_verso_subvolume_blocks/windowed_mesh_<time-tag> --scroll <scroll-path>/PHerc0332.volpkg/volume_grids/20231027191953 --nr_workers 16 --gpus 1 --display 
     ```
-    *Note*: The rendering also works with ome-zarr ```.zarr``` files. At the moment an empty ```---scroll``` directory will not result in an error.
+    *Note*: The rendering also works with ome-zarr ```.zarr``` files. At the moment an empty ```--scroll``` directory will not result in an error.
 
 - **Resource Requirements:** RTX4090 or equivalent CUDA-enabled GPU with at least 24GB VRAM, 196GB RAM + 250GB swap and a multithreaded CPU with >= 32 threads is required. NVME SSD is recommended for faster processing. Approximately twice the storage space of the initial scroll scan is required for the intermediate data.
 
