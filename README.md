@@ -3,8 +3,8 @@
 **ThaumatoAnakalyptor** is an advanced automatic segmentation pipeline designed for high-precision extraction of papyrus sheet segmentations from CT scans of ancient scrolls with minimal human intervention.
 
 <figure>
-  <img src="pictures/thaumato_0-5m_scroll3.png" alt="0.5 meter long segmentation of scroll 3" width="100%">
-  <figcaption><i>0.5 meter long automatic segmentation of scroll 3.</i></figcaption>
+  <img src="pictures/thaumato_0-5m_scroll3.png" alt="0.5 meter long segmentation of Scroll 3" width="100%">
+  <figcaption><i>0.5 meter long automatic segmentation of Scroll 3.</i></figcaption>
 </figure>
 
 For a detailed report and a roadmap with possible future improvements to Thaumato that could be implemented to win [monthly progress prizes](https://scrollprize.org/2024_prizes), check this [PDF](documentation/ThaumatoAnakalyptor___Technical_Report_and_Roadmap.pdf).
@@ -31,7 +31,7 @@ Ink labeling and segment inspection can efficiently be done with a purpose built
 <p>
     <img src="pictures/pointcloud_slice_scroll3.png" width="55%" >
     <img src="pictures/thaumato_mesh_sample.png" alt="Mesh Formation" width="38%">
-    <figcaption><i>Slice view trough the PointCloud volume of scroll 3 (left) and Sample mesh (right).</i></figcaption>
+    <figcaption><i>Slice view trough the PointCloud volume of Scroll 3 (left) and Sample mesh (right).</i></figcaption>
     </p>
     <img src="pictures/bending.png" width="93%">
     <figcaption><i>Stitched sheet PointCloud during the segmentation process. One half winding.</i></figcaption>
@@ -49,7 +49,7 @@ The core principle of ThaumatoAnakalyptor involves extracting 3D points on papyr
 
 
 ## Running the Code
-This example shows how to do segmentation on scroll 3 (PHerc0332).
+This example shows how to do segmentation on Scroll 3 (PHerc0332).
 
 ### Download Data
 - **Scroll Data:**
@@ -149,7 +149,6 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
     ```
 
 - **Segmentation Steps:** Additional details for each segmentation step are provided in the [instructions](ThaumatoAnakalyptor/instructions.txt) document.
-    First, pick a ```--starting_point```.
     The first time the script ```instances_to_graph.py```  is run on a new scroll, flag ```--recompute``` should be set to 1, the flag ```--continue_from``` should be set to -1. This will generate the overlapping graph of the scroll. For subsequent runs, flag ```--recompute``` should be set to 0 to speed up the process. Flag ```--continue_from``` can be set to the step you would like to continue from.
     ```bash
     python3 -m ThaumatoAnakalyptor.instances_to_graph --path "<scroll-path>/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks" --recompute 1 --continue_from -1
