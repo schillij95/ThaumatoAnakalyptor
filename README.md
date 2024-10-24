@@ -150,22 +150,29 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
 
 - **Segmentation Steps:** Additional details for each segmentation step are provided in the [instructions](ThaumatoAnakalyptor/instructions.txt) document.
     First, pick a ```--starting_point```.
-    The first time the script ```Random_Walks.py```  is run on a new scroll, flag ```--recompute``` should be set to 1. This will generate the overlapping graph of the scroll. For subsequent runs, flag ```--recompute``` should be set to 0 to speed up the process. Flag ```--continue_segmentation``` can be set to 1 if there already is a previous segmentation with the same starting point that you would like to continue.
+    The first time the script ```instances_to_graph.py```  is run on a new scroll, flag ```--recompute``` should be set to 1, the flag ```--continue_from``` should be set to -1. This will generate the overlapping graph of the scroll. For subsequent runs, flag ```--recompute``` should be set to 0 to speed up the process. Flag ```--continue_from``` can be set to the step you would like to continue from.
     ```bash
-    python3 -m ThaumatoAnakalyptor.Random_Walks --path "<scroll-path>/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks" --starting_point 3113 5163 10920 --sheet_k_range -3 3 --sheet_z_range -10000 40000 --min_steps 16 --min_end_steps 4 --max_nr_walks 300000 --continue_segmentation 0 --recompute 1 --walk_aggregation_threshold 5
+    python3 -m ThaumatoAnakalyptor.instances_to_graph --path "<scroll-path>/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks" --recompute 1 --continue_from -1
     ```
 
-    For subsequent continuations of a segmentation, for example:
+    In a next step you can use a graph solver of your liking. So far, the C++ solver is integrated completely. To segment Scroll 3 between the z height of 5000 and 7000, set the flags ```--z_min``` and ```--z_max```.
+
     ```bash
-    python3 -m ThaumatoAnakalyptor.Random_Walks --path "<scroll-path>/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks" --starting_point 3113 5163 10920 --sheet_k_range -3 3 --sheet_z_range -10000 40000 --min_steps 16 --min_end_steps 4 --max_nr_walks 300000 --continue_segmentation 1 --recompute 0 --walk_aggregation_threshold 5
+    .ThaumatoAnakalyptor/graph_problem/build/graph_problem --input_graph "<scroll-path>/scroll3_surface_points/1352_3600_5002/graph.bin" --output_graph "<scroll-path>/scroll3_surface_points/1352_3600_5002/output_graph.bin" --auto --auto_num_iterations 2000 --video --z_min 5000 --z_max 7000 --num_iterations 2000 --estimated_windings 60 --steps 3 --spring_constant 1.2
+    ```
+
+    Finally, translate the solution back from a .bin to a .pkl:
+    ```bash
+    python3 -m ThaumatoAnakalyptor.instances_to_graph --path "<scroll-path>/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks" --create_graph
     ```
 
 - **Meshing Steps:** 
     When you are happy with the segmentation, the next step is to generate the mesh. This can be done with the following commands:
     ```bash
-    python3 -m ThaumatoAnakalyptor.graph_to_mesh --path  <scroll-path>/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks --graph 3113_5163_10920/point_cloud_colorized_verso_subvolume_graph_RW_solved.pkl --start_point 3113 5163 10920 --scale_factor 2.0
+    python3 -m ThaumatoAnakalyptor.graph_to_mesh --path  <scroll-path>/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks --graph 1352_3600_5002/point_cloud_colorized_verso_subvolume_graph_BP_solved.pkl 1352 3600 5002 --z_range 5000 7000 --angle_step 2.0 --unfix_factor 5.0 --continue_from 0 --scale_factor 2.0
     ```
     The ```scale_factor``` depends on the resolution of the scroll scan. For 8um resolution, the ```scale_factor``` is 1.0. For 4um resolution, the ```scale_factor``` is 2.0.
+    You should now have created a folder ```<scroll-path>/scroll3_surface_points/1352_3600_5002/point_cloud_colorized_verso_subvolume_blocks/windowed_mesh_<time-tag>```.
 
 - **Texturing Steps:**
     Rendering is GPU accelerated. First run the following commands:
@@ -180,8 +187,9 @@ This example shows how to do segmentation on scroll 3 (PHerc0332).
     ```
     To display the rendering process, use the flag ```--display```.
     ```bash
-    python3 -m ThaumatoAnakalyptor.large_mesh_to_surface --input_mesh <scroll-path>/scroll3_surface_points/3113_5163_10920/point_cloud_colorized_verso_subvolume_blocks/mesh_flatboi.obj --output_folder <scroll-path>/PHerc0332.volpkg/working_3113_5163_10920 --grid_cell <scroll-path>/PHerc0332.volpkg/volume_grids/20231027191953 --nr_workers 16 --gpus 1 --display 
+    python3 -m ThaumatoAnakalyptor.large_mesh_to_surface --input_mesh <scroll-path>/scroll3_surface_points/1352_3600_5002/point_cloud_colorized_verso_subvolume_blocks/windowed_mesh_<time-tag> --scroll <scroll-path>/PHerc0332.volpkg/volume_grids/20231027191953 --nr_workers 16 --gpus 1 --display 
     ```
+    *Note*: The rendering also works with ome-zarr ```.zarr``` files. At the moment an empty ```---scroll``` directory will not result in an error.
 
 - **Resource Requirements:** RTX4090 or equivalent CUDA-enabled GPU with at least 24GB VRAM, 196GB RAM + 250GB swap and a multithreaded CPU with >= 32 threads is required. NVME SSD is recommended for faster processing. Approximately twice the storage space of the initial scroll scan is required for the intermediate data.
 
