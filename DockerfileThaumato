@@ -160,7 +160,7 @@ WORKDIR /workspace/ThaumatoAnakalyptor/graph_problem/build/
 # print out the contents of the current working directory
 RUN ls -la
 
-RUN cmake .. \
+RUN cmake -DENABLE_GPU=OFF .. \
 && cmake --build .
 
 WORKDIR /

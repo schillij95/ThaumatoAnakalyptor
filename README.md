@@ -157,8 +157,11 @@ This example shows how to do segmentation on Scroll 3 (PHerc0332).
     In a next step you can use a graph solver of your liking. So far, the C++ solver is integrated completely. To segment Scroll 3 between the z height of 5000 and 7000, set the flags ```--z_min``` and ```--z_max```.
 
     ```bash
-    .ThaumatoAnakalyptor/graph_problem/build/graph_problem --input_graph "<scroll-path>/scroll3_surface_points/1352_3600_5002/graph.bin" --output_graph "<scroll-path>/scroll3_surface_points/1352_3600_5002/output_graph.bin" --auto --auto_num_iterations 2000 --video --z_min 5000 --z_max 7000 --num_iterations 2000 --estimated_windings 60 --steps 3 --spring_constant 1.2
+    ./ThaumatoAnakalyptor/graph_problem/build/graph_problem --input_graph "<scroll-path>/scroll3_surface_points/1352_3600_5002/graph.bin" --output_graph "<scroll-path>/scroll3_surface_points/1352_3600_5002/output_graph.bin" --auto --auto_num_iterations 2000 --video --z_min 5000 --z_max 7000 --num_iterations 2000 --estimated_windings 60 --steps 3 --spring_constant 1.2
     ```
+
+    *Note*:
+        ```./ThaumatoAnakalyptor/graph_problem/build/graph_problem_gpu``` runs the solver on GPU. If you cannot compile it for GPU, you can adjust the CMakeLists.txt to exclude the GPU compilation.
 
     Finally, translate the solution back from a .bin to a .pkl:
     ```bash
