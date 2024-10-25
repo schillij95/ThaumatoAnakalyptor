@@ -128,7 +128,7 @@ def compute_loss(graph, bp_decoding, variables, L, mu, verbose=True):
     node_f_star += decoded_shifts.astype(np.float64) * 360
 
     # Set node_f_star to -1 for deactivated nodes
-    node_f_star[deactivated_mask] = -1
+    # node_f_star[deactivated_mask] = -1
 
     # Get the certainty and k values from the edges (convert to float32 for stability)
     edge_certainties = graph.edges_feats[:, 0] # Certainty values
