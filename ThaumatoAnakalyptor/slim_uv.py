@@ -31,7 +31,7 @@ class Flatboi:
     input_obj: str
     output_obj: str
     max_iter: int
-    def __init__(self, obj_path: str, max_iter: int, output_obj: str = None):
+    def __init__(self, obj_path: str, max_iter: int, output_obj: str = None, um: float = 7.91):
         self.stretch_factor = 1000.0
         self.input_obj = obj_path
         if output_obj is not None:
@@ -39,12 +39,69 @@ class Flatboi:
         else:
             self.output_obj = obj_path.replace(".obj", "_flatboi.obj")
         self.max_iter = max_iter
-        self.read_mesh()
+        self.um = um
+        obj_path = self.downsample_mesh()
+        self.read_mesh(obj_path)
         self.filter_mesh()
 
-    def read_mesh(self):
-        self.mesh = o3d.io.read_triangle_mesh(self.input_obj)
+    def downsample_mesh(self):
+        # Load the initial mesh with open3d for the uvs
+        self.read_mesh(self.input_obj)
+        # Load the mesh vertices (V) and faces (F) with Libigl
+        V, F = igl.read_triangle_mesh(self.input_obj)
+        
+        # Compute the area of each triangle and the total surface area
+        triangle_areas = igl.doublearea(V, F) / 2.0
+        total_area = np.sum(triangle_areas)
+        # to um. 1 unit = um
+        total_area = total_area * self.um * self.um / (1000.0 * 1000.0)
+        print("Total surface area (sqmm):", total_area)
+        print("Average area (sqmm) per triangle:", total_area / F.shape[0])
+
+        # Determine the target number of triangles
+        target_area_per_triangle = 0.1  # Desired area (sqmm) per triangle
+        target_num_triangles = int(total_area / target_area_per_triangle)
+
+        if target_num_triangles >= F.shape[0]:
+            print("No need to downsample")
+            return self.input_obj
+        
+        # Decimate the mesh
+        print(f"Target number of triangles: {target_num_triangles}")
+        res = igl.decimate(V, F, target_num_triangles)
+        print(len(list(res)))
+        success, U, G, J, I = res
+        print(f"Decimation successful: {success}")
+        print(f"Downsampling completed. Reached {U.shape[0]} vertices and {G.shape[0]} triangles. Before: {V.shape[0]} vertices and {F.shape[0]} triangles.")
+
+        print(f"Shape of I and J. I: {I.shape}, J: {J.shape}")
+        print(f"Shape of uv: {self.original_uvs.shape}")
+
+        uvs = self.original_uvs.reshape((-1, 3, 2))
+        # Map original UVs to the new faces using J
+        downsampled_uvs = uvs[J].reshape((-1, 2))
+        
+        # Save the downsampled mesh
+        # Create a new Open3D mesh from the downsampled vertices and faces
+        downsampled_mesh = o3d.geometry.TriangleMesh()
+        downsampled_mesh.vertices = o3d.utility.Vector3dVector(U)
+        downsampled_mesh.vertex_normals = o3d.utility.Vector3dVector(self.vertex_normals[I])
+        downsampled_mesh.triangles = o3d.utility.Vector3iVector(G)
+        downsampled_mesh = downsampled_mesh.compute_vertex_normals()
+        
+        # Set UVs as triangle attributes if Open3D supports this version for export (or use another library)
+        downsampled_mesh.triangle_uvs = o3d.utility.Vector2dVector(downsampled_uvs)
+        
+        # Save the mesh with UVs to an OBJ file
+        obj_path = self.input_obj.replace(".obj", "_downsampled.obj")
+        o3d.io.write_triangle_mesh(obj_path, downsampled_mesh)
+        print("Downsampled mesh saved with UVs.")
+        return obj_path
+        
+    def read_mesh(self, obj_path):
+        self.mesh = o3d.io.read_triangle_mesh(obj_path)
         self.vertices = np.asarray(self.mesh.vertices, dtype=np.float64) / self.stretch_factor
+        self.vertex_normals = np.asarray(self.mesh.vertex_normals, dtype=np.float64)
         self.triangles = np.asarray(self.mesh.triangles, dtype=np.int64)
         self.original_uvs = np.asarray(self.mesh.triangle_uvs, dtype=np.float64)
 
@@ -67,7 +124,6 @@ class Flatboi:
         self.triangles = np.array([self.triangles[i] for i in range(len(self.triangles)) if filter_list[i]])
         print(f"Filtered out {len_before - len(self.triangles)} triangles with 0 area of total {len_before} triangles.")
         # assert len(self.triangles) == len(self.original_uvs), f"Number of triangles and uvs do not match. {len(self.triangles)} != {len(self.original_uvs)}"
-
 
     def generate_boundary(self):
         res = igl.boundary_loop(self.triangles)
@@ -206,7 +262,7 @@ class Flatboi:
                 converged = False
                 break
 
-        if converged:
+        if converged and not np.any(np.isnan(slim.vertices())) and not np.any(np.isinf(slim.vertices())):
             print("Converg(ed/ing)")
             slim_uvs = slim.vertices()
         else:
@@ -485,6 +541,7 @@ def main():
     parser.add_argument('--ic', type=str, help='Initial condition for SLIM. Options: original, arap, harmonic', default='arap')
     parser.add_argument('--axis', type=str, help='Volume axis for alignment. Options: x, y, z', default='z')
     parser.add_argument('--rotate', type=int, help='Angle to add to the best alignment angle. Default is 180 degrees.', default=180)
+    parser.add_argument('--um', type=float, help='Unit size in um.', default=7.91)
 
     # Take arguments back over
     args = parser.parse_args()
@@ -508,7 +565,7 @@ def main():
 
     print(f"Adding UV coordinates to mesh {path}")
 
-    flatboi = Flatboi(path, args.iter)
+    flatboi = Flatboi(path, args.iter, um=args.um)
     harmonic_uvs, harmonic_energies = flatboi.slim(initial_condition=args.ic)
     
 	# Align the UV map
