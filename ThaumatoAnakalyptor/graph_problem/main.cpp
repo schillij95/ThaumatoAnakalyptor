@@ -1867,6 +1867,14 @@ int main(int argc, char** argv) {
     std::string output_graph_file = program.get<std::string>("--output_graph");
     save_graph_to_binary(output_graph_file, graph);
 
+    // Calculate the exact matching loss
+    float exact_score2 = exact_matching_score(graph);
+    std::cout << "Exact Matching Score: " << exact_score2 << std::endl;
+
+    // Calculate the approximate matching loss
+    float approx_loss2 = approximate_matching_loss(graph, 1.0f);
+    std::cout << "Approximate Matching Loss: " << approx_loss2 << std::endl;
+
     return 0;
 }
 

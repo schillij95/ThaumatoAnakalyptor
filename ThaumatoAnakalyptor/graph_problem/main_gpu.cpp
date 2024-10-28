@@ -1397,6 +1397,10 @@ int main(int argc, char** argv) {
         construct_ground_truth_graph(graph);
     }
     else {
+        // Automatically determing winding direction
+        if (program.get<bool>("--auto")) {
+            auto_winding_direction(graph, &program);
+        }
         // Solve the problem using a solve function
         fix_gt_parts(graph, {6000}, -10, 10.0f * max_certainty, program.get<bool>("--fix_all_gt"));
         num_iterations = program.get<int>("--num_iterations");
@@ -1410,6 +1414,14 @@ int main(int argc, char** argv) {
     // Save the graph back to a binary file
     std::string output_graph_file = program.get<std::string>("--output_graph");
     save_graph_to_binary(output_graph_file, graph);
+
+    // Calculate the exact matching loss
+    float exact_score2 = exact_matching_score(graph);
+    std::cout << "Exact Matching Score: " << exact_score2 << std::endl;
+
+    // Calculate the approximate matching loss
+    float approx_loss2 = approximate_matching_loss(graph, 1.0f);
+    std::cout << "Approximate Matching Loss: " << approx_loss2 << std::endl;
 
     return 0;
 }
