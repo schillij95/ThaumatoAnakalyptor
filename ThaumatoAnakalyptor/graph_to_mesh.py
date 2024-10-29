@@ -12,7 +12,7 @@ import random
 import subprocess
 
 # Custom imports
-from .instances_to_graph import load_graph, ScrollGraph
+from .Random_Walks import load_graph, ScrollGraph
 from .slim_uv import Flatboi, print_array_to_file
 from .split_mesh import MeshSplitter
 
@@ -110,7 +110,8 @@ def flatten_subprocess(mesh_path):
                 "python3", "-m", "ThaumatoAnakalyptor.slim_uv", 
                 "--path", mesh_path, 
                 "--iter", str(5), 
-                "--ic", "ordered"
+                "--ic", "ordered",
+                "--downsample"
             ]
     # Running the command
     flatteing = subprocess.Popen(command)
