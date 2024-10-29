@@ -256,12 +256,13 @@ class Flatboi:
             for v in range(self.triangles.shape[1]):
                 uv[self.triangles[t,v]] = uvs[t,v]
 
-        bnd = np.array([[0]])
-        bnd_uv = np.zeros((bnd.shape[0], 2), dtype=np.float64)
-        for i in range(bnd.shape[0]):
-            bnd_uv[i] = uv[bnd[i]]
+        arap = igl.ARAP(self.vertices, self.triangles, 2, np.zeros(0))
+        print("ARAP")
+        for _ in tqdm(range(10), desc="ARAP"):
+            uv = arap.solve(np.zeros((0, 1)), uv)
+        uva = arap.solve(np.zeros((0, 1)), uv)
 
-        return np.zeros((0, 1), dtype=np.int32), np.zeros((0,2), dtype=np.float64), uv
+        return np.zeros((0, 1), dtype=np.int32), np.zeros((0,2), dtype=np.float64), uva
     
     def orient_uvs(self, vertices):
         # Assert that no NaNs or Infs are present
