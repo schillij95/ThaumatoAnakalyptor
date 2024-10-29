@@ -315,12 +315,39 @@ class Flatboi:
 
         return bnd, bnd_uv, uv
     
+    def arap_solver_ic(self, uv):
+        # jiggle the uv and vertices a little bit randomly to counteract numerical issues
+        uv += np.random.rand(*uv.shape) * 0.0001
+        vertices_jiggled = self.vertices.copy() + np.random.rand(*self.vertices.shape) * 0.0001
+
+        arap = igl.ARAP(vertices_jiggled, self.triangles, 2, np.zeros(0))
+        print("ARAP")
+        success = False
+        for i in tqdm(range(11), desc="ARAP"):
+            uva = arap.solve(np.zeros((0, 0)), uv)
+            # Check for numerical issues in uv
+            if np.any(np.isnan(uva)):
+                print(f"Numerical issue: NaN values encountered in uv at iteration {i}")
+                break
+            elif np.any(np.isinf(uva)):
+                print(f"Numerical issue: Infinite values encountered in uv at iteration {i}")
+                break
+            success = True
+            uv = uva
+        if not success:
+            print("Fallback to harmonic arap")
+            _, _, uv = self.arap_ic()
+        return uv
+    
     def ordered_ic(self):
         uv = np.zeros((self.vertices.shape[0], 2), dtype=np.float64)
         uvs = self.original_uvs.reshape((self.triangles.shape[0], self.triangles.shape[1], 2))
         for t in range(self.triangles.shape[0]):
             for v in range(self.triangles.shape[1]):
                 uv[self.triangles[t,v]] = uvs[t,v]
+
+        if self.downsample:
+            uv = self.arap_solver_ic(uv)
 
         return np.zeros((0, 1), dtype=np.int32), np.zeros((0,2), dtype=np.float64), uv
     
