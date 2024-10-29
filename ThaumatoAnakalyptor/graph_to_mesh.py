@@ -73,9 +73,9 @@ def angle_between(v1, v2=np.array([1, 0])):
     return np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
 
 def flatten_args(args):
-    save_path, mesh_path = args
+    save_path, mesh_path, downsample = args
     print(f"Flattening {mesh_path}")
-    flatten_subprocess(mesh_path)
+    flatten_subprocess(mesh_path, downsample)
 
 def flatten(save_path, mesh_path):
     mesh_output_path = mesh_path.replace(".obj", "_flatboi.obj")
@@ -104,15 +104,16 @@ def flatten(save_path, mesh_path):
     flatboi.save_mtl()
     print(f"Saved flattened mesh to {mesh_output_path}")
 
-def flatten_subprocess(mesh_path):
+def flatten_subprocess(mesh_path, downsample):
     # Call mesh_to_surface as a separate process
     command = [
                 "python3", "-m", "ThaumatoAnakalyptor.slim_uv", 
                 "--path", mesh_path, 
                 "--iter", str(5), 
-                "--ic", "ordered",
-                "--downsample"
+                "--ic", "ordered"
             ]
+    if downsample:
+        command += ["--downsample"]
     # Running the command
     flatteing = subprocess.Popen(command)
     flatteing.wait()
@@ -1622,7 +1623,7 @@ class WalkToSheet():
         # Return the paths to the split meshes
         return split_mesh_paths, stamp
 
-    def unroll(self, fragment=False, debug=False, continue_from=0, z_range=None, angle_step=1, z_spacing=10, learning_rate=0.2, iterations=11, unfix_factor=2.5):
+    def unroll(self, fragment=False, debug=False, continue_from=0, z_range=None, angle_step=1, z_spacing=10, learning_rate=0.2, iterations=11, unfix_factor=2.5, downsample=False):
 
         # Set to false to load precomputed partial results during development
         start_fresh = continue_from <= 1
@@ -1682,7 +1683,7 @@ class WalkToSheet():
             split_mesh_paths, stamp = self.split(mesh_path, split_width=self.split_width, fresh_start=(continue_from <= 6), stamp=stamp)
 
             # Flatten mesh
-            args = [(self.save_path, split_mesh_path) for split_mesh_path in split_mesh_paths]
+            args = [(self.save_path, split_mesh_path, downsample) for split_mesh_path in split_mesh_paths]
             # num_threads = min(max(1, multiprocessing.cpu_count() // 2), 5)
             # with multiprocessing.Pool(num_threads) as pool:
             #     tqdm(pool.imap(flatten_args, args), total=len(args), desc="Flattening meshes")
@@ -1708,6 +1709,7 @@ if __name__ == '__main__':
     parser.add_argument('--learning_rate', type=float, default=0.2, help='Learning rate for the optimization')
     parser.add_argument('--iterations', type=int, default=11, help='Number of iterations for the optimization')
     parser.add_argument('--unfix_factor', type=float, default=2.5, help='Unfix factor for the optimization. Higher = less unfixed points')
+    parser.add_argument('--downsample', action='store_true', help='Downsample the mesh')
 
     args = parser.parse_args()
 
@@ -1733,7 +1735,7 @@ if __name__ == '__main__':
     
     walk = WalkToSheet(graph, args.path, start_point, scale_factor, split_width=args.split_width)
     # walk.save_graph_pointcloud(reference_path)
-    walk.unroll(fragment=args.fragment, debug=args.debug, continue_from=args.continue_from, z_range=z_range, angle_step=args.angle_step, z_spacing=args.z_spacing, learning_rate=args.learning_rate, iterations=args.iterations, unfix_factor=args.unfix_factor)
+    walk.unroll(fragment=args.fragment, debug=args.debug, continue_from=args.continue_from, z_range=z_range, angle_step=args.angle_step, z_spacing=args.z_spacing, learning_rate=args.learning_rate, iterations=args.iterations, unfix_factor=args.unfix_factor, downsample=args.downsample)
 
 # Example command: python3 -m ThaumatoAnakalyptor.graph_to_mesh --path /scroll.volpkg/working/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks --graph /scroll.volpkg/working/scroll3_surface_points/1352_3600_5002/point_cloud_colorized_verso_subvolume_graph_BP_solved.pkl --start_point 1352 3600 5002 --debug
 # python3 -m ThaumatoAnakalyptor.graph_to_mesh --path /scroll2v2_surface_points/point_cloud_colorized_verso_subvolume_blocks --graph /scroll2v2_surface_points/1352_3600_5002/point_cloud_colorized_verso_subvolume_graph_BP_solved.pkl --start_point 1352 3600 5002
