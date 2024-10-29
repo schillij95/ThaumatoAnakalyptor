@@ -12,7 +12,7 @@ import random
 import subprocess
 
 # Custom imports
-from .Random_Walks import load_graph, ScrollGraph
+from .instances_to_graph import load_graph, ScrollGraph
 from .slim_uv import Flatboi, print_array_to_file
 from .split_mesh import MeshSplitter
 
