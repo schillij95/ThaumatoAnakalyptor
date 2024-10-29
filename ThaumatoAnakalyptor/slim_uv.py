@@ -321,13 +321,7 @@ class Flatboi:
             for v in range(self.triangles.shape[1]):
                 uv[self.triangles[t,v]] = uvs[t,v]
 
-        arap = igl.ARAP(self.vertices, self.triangles, 2, np.zeros(0))
-        print("ARAP")
-        for _ in tqdm(range(10), desc="ARAP"):
-            uv = arap.solve(np.zeros((0, 1)), uv)
-        uva = arap.solve(np.zeros((0, 1)), uv)
-
-        return np.zeros((0, 1), dtype=np.int32), np.zeros((0,2), dtype=np.float64), uva
+        return np.zeros((0, 1), dtype=np.int32), np.zeros((0,2), dtype=np.float64), uv
     
     def orient_uvs(self, vertices):
         # Assert that no NaNs or Infs are present
