@@ -40,6 +40,7 @@ class Flatboi:
             self.output_obj = obj_path.replace(".obj", "_flatboi.obj")
         self.max_iter = max_iter
         self.um = um
+        self.downsample = downsample
         if downsample:
             obj_path = self.downsample_mesh()
         self.read_mesh(obj_path)
@@ -436,21 +437,23 @@ class Flatboi:
         bnd = bnd.astype(np.int64)
         bnd_uv = bnd_uv.astype(np.float64)
 
-        uv = self.orient_uvs(uv) # Enables the UVs to be oriented correctly for the slim optimization
+        slim_uvs = self.orient_uvs(uv) # Enables the UVs to be oriented correctly for the slim optimization
 
         energies = []
 
-        print("Log ARAP Energy")
-        slim = igl.SLIM(self.vertices, self.triangles, v_init=uv, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_LOG_ARAP, soft_penalty=0)
-        slim_uvs, energies_ = self.slim_optimization(slim, uv)
-        energies.extend(list(energies_))
-        print_errors(slim_uvs)
+        if self.downsample:
+            # More initializations if the mesh was downsampled
+            print("Log ARAP Energy")
+            slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_LOG_ARAP, soft_penalty=0)
+            slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs)
+            energies.extend(list(energies_))
+            print_errors(slim_uvs)
 
-        print("ARAP Energy")
-        slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_ARAP, soft_penalty=0)
-        slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs)
-        energies.extend(list(energies_))
-        print_errors(slim_uvs)
+            print("ARAP Energy")
+            slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_ARAP, soft_penalty=0)
+            slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs)
+            energies.extend(list(energies_))
+            print_errors(slim_uvs)
 
         # initializing SLIM with Symmetric Dirichlet Distortion Energy (isometric)
         print("Symmetric Dirichlet Distortion Energy")
@@ -473,7 +476,7 @@ class Flatboi:
 
         print("Conformal Energy")
         slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_CONFORMAL, soft_penalty=0)
-        slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs, iterations=30)
+        slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs, iterations=30 if self.downsample else None)
         energies.extend(list(energies_))
         print_errors(slim_uvs)
 
@@ -688,10 +691,11 @@ def main():
     parser.add_argument('--axis', type=str, help='Volume axis for alignment. Options: x, y, z', default='z')
     parser.add_argument('--rotate', type=int, help='Angle to add to the best alignment angle. Default is 180 degrees.', default=180)
     parser.add_argument('--um', type=float, help='Unit size in um.', default=7.91)
-    parser.add_argument('--downsample', action='store_true', help='Downsample the mesh before adding UVs.')
+    parser.add_argument('--downsample', action='store_true', help='EXPERIMENTAL: Downsample the mesh before adding UVs.')
 
     # Take arguments back over
     args = parser.parse_args()
+    print(f"Flattening arguments: {args}")
     path = args.path
 
     # Check if the input file exists and is a .obj file

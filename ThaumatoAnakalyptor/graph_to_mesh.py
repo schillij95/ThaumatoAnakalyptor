@@ -10,6 +10,7 @@ import pickle
 from copy import deepcopy
 import random
 import subprocess
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 # Custom imports
 from .instances_to_graph import load_graph, ScrollGraph
@@ -75,7 +76,7 @@ def angle_between(v1, v2=np.array([1, 0])):
 def flatten_args(args):
     save_path, mesh_path, downsample = args
     print(f"Flattening {mesh_path}")
-    flatten_subprocess(mesh_path, downsample)
+    return flatten_subprocess(mesh_path, downsample)
 
 def flatten(save_path, mesh_path):
     mesh_output_path = mesh_path.replace(".obj", "_flatboi.obj")
@@ -117,6 +118,7 @@ def flatten_subprocess(mesh_path, downsample):
     # Running the command
     flatteing = subprocess.Popen(command)
     flatteing.wait()
+    return None
 
 def compute_means_adjacent_args(args):
     return compute_means_adjacent(*args)
@@ -1687,8 +1689,21 @@ class WalkToSheet():
             # num_threads = min(max(1, multiprocessing.cpu_count() // 2), 5)
             # with multiprocessing.Pool(num_threads) as pool:
             #     tqdm(pool.imap(flatten_args, args), total=len(args), desc="Flattening meshes")
-            for arg in args:
-                flatten_args(arg)
+            num_procs = 12
+            # for i in range(0, len(args), num_procs):
+            #     flat_ps = []
+            #     stop = min(i+num_procs, len(args))
+            #     for arg in args[i:stop]:
+            #         f_p = flatten_args(arg)
+            #         flat_ps.append(f_p)
+            #     for f_p in flat_ps:
+            #         f_p.wait()
+            #         print(f"Finished flattening mesh piece {f_p}.")
+        with ProcessPoolExecutor(max_workers=num_procs) as executor:
+            futures = {executor.submit(flatten_args, arg): arg for arg in args}
+            for future in as_completed(futures):
+                arg = futures[future]
+                print(f"Finished flattening mesh piece {arg}.")
             print(f"Finished mesh piece {i+1} of {len(ordered_pointsets_s)}.")
 
 if __name__ == '__main__':
