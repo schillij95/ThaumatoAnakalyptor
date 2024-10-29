@@ -6,17 +6,24 @@
 
 
 import argparse
+import os
+
+# Disable GPU memory preallocation in JAX
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 import jax
+#jax.config.update("jax_enable_x64", False)
+
 import numpy as np
 from pgmax import vgroup, fgroup, fgraph, infer
-from utils_node_deactivationl.factors import compute_ell, create_log_potential_matrix, compute_loss, smooth_graph
+from utils_node_deactivation.factors import compute_ell, create_log_potential_matrix, create_log_potential_matrix_nd, compute_loss
 from utils_node_deactivation.graph import load_graph_from_binary, Graph, extract_largest_connected_component, maximum_spanning_tree, bfs, update_f_star, save_graph, load_graph_from_binary_new, load_graph_from_binary_results
+from utils_node_deactivation.bin_writer import save_npz_to_binary
 from tqdm import tqdm
 from typing import Optional
 import gc
 
 class BPSolver:
-    def __init__(self, graph_path, L: int, Big_iterations: int=5 , bp_iterations: int = 500, mu=3, z_min: Optional[int] = None, z_max: Optional[int] = None):
+    def __init__(self, graph_path, L: int, Big_iterations: int=5 , bp_iterations: int = 500, mu=3, z_min: Optional[int] = None, z_max: Optional[int] = None, resume: bool = False):
         self.graph_path = graph_path
         self.L = L
         self.tollerance = 10
@@ -26,14 +33,18 @@ class BPSolver:
 
         if graph_path.endswith(".npz"):
             data = np.load(graph_path)
-            self.graph = Graph(edges_nodes=data['edges_nodes'], edges_feats=data['edges_feats'], nodes_f=data['nodes_f'])
+            try:
+                self.graph = Graph(edges_nodes=data['edges_nodes'], edges_feats=data['edges_feats'], nodes_f=data['nodes_f'], nodes_d=data['nodes_d'])
+            except:
+                self.graph = Graph(edges_nodes=data['edges_nodes'], edges_feats=data['edges_feats'], nodes_f=data['nodes_f'])
         else:
             try:
                 self.graph = load_graph_from_binary_new(graph_path)
             except:
                 self.graph = load_graph_from_binary(graph_path) # old format
+            
         print(f"Num nodes: {self.graph.nodes_f.shape[0]}, num edges: {self.graph.edges_feats.shape[0]}")
-
+        print(f"Z range of graph {self.graph.nodes_z.min()} {self.graph.nodes_z.max()}")
         if (z_min is not None) & (z_max is not None):
             assert(z_max > z_min)
             old_to_new = self.z_filter(z_min, z_max)
@@ -65,13 +76,16 @@ class BPSolver:
         #self.error_stats()
 
         print("Graph loaded and initialized")
-        self.initialize_bp()
+        # Initialize variables and factor graph once
+        self.num_states = 2 * self.L + 2  # Maximum number of states
+        self.variables = vgroup.NDVarArray(num_states=self.num_states, shape=(self.num_nodes,))
+        self.fg = fgraph.FactorGraph(variable_groups=self.variables)
+
+        # Initialize BP once
+        self.initialize_bp(deactivation=(self.max_error <= 8))
         gc.collect()
 
         print("BP initialized")
-
-
-
 
     def error_stats(self):
 
@@ -93,30 +107,63 @@ class BPSolver:
         for q, value in zip(quantiles, quantile_values):
             print(f"{q:.1f}th percentile: {value:.6f}")
 
-        self.max_error = np.max(abs_error[edges_active])
+        self.max_error = np.max(abs_error[edges_active])        
         print(f"Max absolute error: {self.max_error}")
         print(f"Avg absolute error: {np.mean(abs_error[edges_active]):.6f}")
 
-    
+    def initialize_bp(self, deactivation: bool = False):
+        print(f"Initializing BP with updated factors and deactivation {deactivation}")
+        # Delete previous factor graph and BP inferer to free memory
+        if hasattr(self, 'fg'):
+            del self.fg
+        if hasattr(self, 'bp'):
+            del self.bp
+        if hasattr(self, 'bp_arrays'):
+            del self.bp_arrays
+        gc.collect()
+        jax.clear_caches()
 
-    def initialize_bp(self):
-        print("Initializing BP with updated factors")
-        # Defining variabls and initializing factor graph on variables
-        self.variables = vgroup.NDVarArray(num_states=2*self.L+2, shape=(self.num_nodes,))#now states are 2*L+2, with the last corresponding to node removal
+        # Create new factor graph with existing variables
         self.fg = fgraph.FactorGraph(variable_groups=self.variables)
 
-        # Creating log potential matrix
-        log_potential_matrices = create_log_potential_matrix(self.graph.edges_feats[:, 0], self.L, self.graph.nodes_f[self.graph.edges_nodes[:, 0]], self.graph.nodes_f[self.graph.edges_nodes[:, 1]], self.graph.edges_deactivation,self.graph.edges_feats[:, 1],self.mu)
+        # Create log potential matrices with appropriate adjustments
+        if deactivation:
+            # Use potentials including deactivation
+            log_potential_matrices = create_log_potential_matrix_nd(
+                np.ones_like(self.graph.edges_feats[:, 0]), self.L, # putting all weights to 1
+                self.graph.nodes_f[self.graph.edges_nodes[:, 0]],
+                self.graph.nodes_f[self.graph.edges_nodes[:, 1]],
+                self.graph.edges_deactivation, self.graph.edges_feats[:, 1], self.mu
+            )
+        else:
+            # Use potentials without deactivation, set deactivation states to a large negative value
+            log_potential_matrices = create_log_potential_matrix(
+                np.ones_like(self.graph.edges_feats[:, 0]), self.L, # putting all weights to 1
+                self.graph.nodes_f[self.graph.edges_nodes[:, 0]],
+                self.graph.nodes_f[self.graph.edges_nodes[:, 1]],
+                self.graph.edges_deactivation, self.graph.edges_feats[:, 1]
+            )
+            # Adjust potentials to disable deactivation states
+            num_non_deactivation_states = 2 * self.L + 1
+            # Pad the potentials to match the maximum number of states
+            pad_width = self.num_states - num_non_deactivation_states
+            log_potential_matrices = np.pad(
+                log_potential_matrices,
+                ((0, 0), (0, pad_width), (0, pad_width)),
+                constant_values=-np.inf
+            )
 
+
+        # Create factors
+        print("Creating factors...")
         skipped = 0
-        # Now, loop over the edges to create pairwise factors and add them to the factor graph
         for i in tqdm(range(self.graph.edges_nodes.shape[0]), desc="Creating factors"):
             # Use precomputed values to create the pairwise factor
             pairwise_factor = fgroup.PairwiseFactorGroup(
                 variables_for_factors=[[self.variables[self.graph.edges_nodes[i, 0]], self.variables[self.graph.edges_nodes[i, 1]]]],
                 log_potential_matrix=log_potential_matrices[i]
             )
-            
+                    
             # Add the factor to the factor graph
             try:
                 self.fg.add_factors(pairwise_factor)
@@ -126,52 +173,38 @@ class BPSolver:
         print(f"Factors skipped: {skipped/self.graph.edges_nodes.shape[0]}%")
         gc.collect()
 
-        print("Initializing the BP state, can take a while...")
-        # Set random seed
-        rng = jax.random.PRNGKey(0)
-        # Step 1: Initialize the BP solver
-        self.bp = infer.build_inferer(self.fg.bp_state, backend="bp")
+        # Check if any factors were added
+        if not self.fg.factor_groups:
+            raise ValueError("No factors were added to the factor graph.")
 
-        # Step 2: Initialize the BP state
+        print("Initializing the BP state, can take a while...")
+        # Initialize the BP solver
+        self.bp = infer.build_inferer(self.fg.bp_state, backend="bp")
         self.bp_arrays = self.bp.init()
 
-    def run(self):
-        iteration = 0
-        counter = 0
-        for _ in range(self.Big_iterations):
-            current_max_error = self.max_error
-            bp_decoding = infer.decode_map_states(self.bp.get_beliefs(self.bp_arrays))
-            # Compute the error using the decoded MAP states
-            loss = compute_loss(self.graph, bp_decoding, self.variables, self.L,self.mu, verbose=False)
-            print(f"Big iteration: {iteration}, Loss: {loss}")
 
-            self.bp_arrays = self.bp.run(self.bp_arrays, num_iters=self.bp_iterations, temperature=0)
+    def run(self):
+        for iteration in range(self.Big_iterations):
+            # Re-initialize BP
+            if iteration > 0:
+                self.initialize_bp(deactivation=(self.max_error <= 8))
+
+            # Run BP
+            self.bp_arrays = self.bp.run(self.bp_arrays, num_iters=self.bp_iterations*(iteration+1), temperature=0)
+
+            # Get BP decoding
             bp_decoding = infer.decode_map_states(self.bp.get_beliefs(self.bp_arrays))
-            # Compute the error using the decoded MAP states
-            loss = compute_loss(self.graph, bp_decoding, self.variables, self.L, self.mu,verbose=False)
-            print(f"Loss after BP: {loss}")
+
+            # Compute loss
+            loss = compute_loss(self.graph, bp_decoding, self.variables, self.L, self.mu, verbose=False)
+            print(f"Big iteration: {iteration}, Loss: {loss}")
             print(f"Number of nodes deactivated: {sum(self.graph.nodes_deactivation)}")
             print(f"Number of edges deactivated: {sum(self.graph.edges_deactivation)}")
 
             # Update graph
             update_f_star(self.graph, bp_decoding, self.variables, self.L)
             self.error_stats()
-            """
-            if self.max_error >= current_max_error:
-                if counter >= self.tollerance:
-                    break
-                else:
-                    counter += 1
-            """
-            jax.clear_backends()
-            gc.collect()
-            self.initialize_bp()
-            iteration += 1
-        
-        #print("Final smoothing")
-        # Final Laplacian smoothing
-        #self.graph.nodes_f += smooth_graph(self.graph)*360
-        #self.error_stats()
+
 
 
     def z_filter(self, z_min: int, z_max: int):
@@ -200,7 +233,7 @@ class BPSolver:
     def save_result(self, output):
         print("Loading again the original graph")
         if self.graph_path.endswith(".npz"):
-            data = np.load(self.graph_path)
+            data = np.load(self.graph_path) 
             original_graph = Graph(edges_nodes=data['edges_nodes'], edges_feats=data['edges_feats'], nodes_f=data['nodes_f'])
         else:
             try:
@@ -212,9 +245,9 @@ class BPSolver:
 
         # Initializing deleted nodes
         original_graph.nodes_d = np.ones(original_graph.nodes_f.shape[0], dtype=np.bool_)
-        original_graph.nodes_d[self.old_keep_indices] = 0
+        original_graph.nodes_d[self.old_keep_indices] = self.graph.nodes_deactivation
 
-        save_graph(output, self.graph)
+        save_graph(output, original_graph)
 
 def main():
     # Parse command-line arguments
@@ -223,7 +256,7 @@ def main():
     # Define the arguments
     parser.add_argument("graph_path", type=str, help="Path to the graph file (binary or npz format).")
     parser.add_argument("L", type=int, help="The range L (maximum shift) for the BP solver.")
-    parser.add_argument("--bp_iterations", type=int, default=500, help="Number of BP iterations to run (default: 500).")
+    parser.add_argument("--bp_iterations", type=int, default=300, help="Number of BP iterations to run (default: 500).")
     parser.add_argument("--Big_iterations", type=int, default=5, help="Number of message redefinitions.")
     parser.add_argument("--z_min", type=int, default=None, help="Minimum z value for filtering (default: None).")
     parser.add_argument("--z_max", type=int, default=None, help="Maximum z value for filtering (default: None).")
@@ -250,8 +283,10 @@ def main():
     # Save the result
     solver.save_result(args.output)
 
+    save_npz_to_binary(args.output, args.output.replace(".npz", ".bin"))
+
 if __name__ == "__main__":
     main()
 
 # Example usage:
-# python bp_pgmax.py path/to/graph.npz 4 --bp_iterations 500 --output final_result.npz
+# python bp_pgmax_node_deactivation.py path/to/graph.bin 4 --Big_iterations 5 --bp_iterations 500 --z_min 100 --z_max 500 --output graph.npz

@@ -59,6 +59,42 @@ def create_log_potential_matrix(certainty: NDArray[np.float64], L: np.uint8,
                                            node2_f_star: NDArray[np.float64], 
                                            edges_deactivation: NDArray[np.bool_],
                                            k: NDArray[np.float64],
+                                           ) -> NDArray[np.float64]:
+    """
+    Vectorized creation of log potential matrices for multiple edges.
+    
+    Arguments:
+    - certainty: an array of certainty values (shape: [num_edges])
+    - L: a scalar (np.uint8) value, range of the states (states go from -L to L)
+    - node1_f_star: an array of f_star values for the first set of nodes (shape: [num_edges])
+    - node2_f_star: an array of f_star values for the second set of nodes (shape: [num_edges])
+    - edges_deactivation: a boolean array indicating deactivated edges
+    - k: an array of k values (shape: [num_edges])
+
+    Returns:
+    - log_potential_matrices: an array of computed log potential matrices for all edges
+                              (shape: [num_edges, 2L+1, 2L+1])
+    """    
+    # Step 1: Vectorized computation of ell for all edges
+    ell = compute_ell(node1_f_star, node2_f_star, edges_deactivation, k)  # shape: [num_edges]
+    
+    # Step 2: Create shifts from -L to L
+    shifts = np.arange(-L, L + 1, dtype=np.float64)  # shape: [matrix_size]
+    
+    # Step 3: Create grids of shift1 and shift2 values, broadcasted over all edges
+    shift1_grid, shift2_grid = np.meshgrid(shifts, shifts, indexing='ij')  # shape: [matrix_size, matrix_size]
+    
+    # Step 4: Compute the interaction for each edge (vectorized over all edges)
+    # We expand ell and certainty for broadcasting with the grid
+    interaction = -certainty[:, None, None] * np.exp(np.abs(ell[:, None, None] + shift1_grid - shift2_grid))
+
+    return interaction
+
+def create_log_potential_matrix_nd(certainty: NDArray[np.float64], L: np.uint8,
+                                           node1_f_star: NDArray[np.float64], 
+                                           node2_f_star: NDArray[np.float64], 
+                                           edges_deactivation: NDArray[np.bool_],
+                                           k: NDArray[np.float64],
                                            mu: float) -> NDArray[np.float64]:
     """
     Vectorized creation of log potential matrices for multiple edges.

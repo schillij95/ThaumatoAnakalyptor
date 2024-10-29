@@ -292,9 +292,7 @@ def update_f_star(graph: Graph, bp_decoding, variables, L: int):
     activated_mask = ~deactivated_mask
 
     graph.nodes_f[activated_mask] += decoded_shifts[activated_mask].astype(np.float64) * 360
-
     
-
     #Set node_deactivation
     graph.nodes_deactivation=deactivated_mask
 
@@ -306,7 +304,7 @@ def update_f_star(graph: Graph, bp_decoding, variables, L: int):
     deactivated_edges_mask = deactivated_mask[node1_indices] | deactivated_mask[node2_indices]
     graph.edges_deactivation=deactivated_edges_mask
     
-def save_graph(file_name, graph):
+def save_graph(file_name, graph, temp=False):
     """
     Saves the graph's node data (stored in graph.nodes_f) to a compressed NPZ file.
 
@@ -315,7 +313,10 @@ def save_graph(file_name, graph):
     - graph: An object containing a numpy array `nodes_f` with node data.
     """
     # Save the graph nodes_f as a compressed .npz file
-    np.savez_compressed(file_name, nodes_f=graph.nodes_f, nodes_d=graph.nodes_d,nodes_deactivation=graph.nodes_deactivation)
+    if temp is True:
+        np.savez_compressed(file_name, edges_nodes=graph.edges_nodes, edges_feats=graph.edges_feats, nodes_f=graph.nodes_f, nodes_d=graph.nodes_d)
+    else:
+        np.savez_compressed(file_name, nodes_f=graph.nodes_f, nodes_d=graph.nodes_d)
     print(f"Graph saved to {file_name}")
 
 def load_graph_from_binary_results(file_name: str) -> Graph:
