@@ -44,63 +44,129 @@ class Flatboi:
         self.read_mesh(obj_path)
         self.filter_mesh()
 
+        
+    def filter_largest_connected_component(self, mesh):
+        # Compute connected components
+        triangle_clusters, cluster_n_triangles, _ = mesh.cluster_connected_triangles()
+
+        print(f"Number of connected components: {len(cluster_n_triangles)}")
+        
+        # Find the largest connected component based on the number of triangles
+        largest_cluster_idx = np.argmax(cluster_n_triangles)
+        
+        # Filter triangles to keep only those in the largest connected component
+        triangles_to_keep = np.where(triangle_clusters == largest_cluster_idx)[0]
+
+        vertices_to_keep = np.unique(np.asarray(mesh.triangles)[triangles_to_keep])
+
+        print(f"Keeping {len(vertices_to_keep)} vertices and {len(triangles_to_keep)} triangles from the largest connected component. Of total {len(mesh.vertices)} vertices and {len(mesh.triangles)} triangles.")
+
+        # Select triangles and vertices for the largest connected component
+        mesh_filtered = mesh.select_by_index(list(vertices_to_keep), cleanup=False)
+        
+        # Filter UVs by mapping them to the selected triangles
+        original_uvs = np.asarray(mesh.triangle_uvs).reshape(-1, 3, 2)
+        filtered_uvs = original_uvs[triangles_to_keep].reshape(-1, 2)
+        
+        # Set the filtered UVs to the new mesh
+        mesh_filtered.triangle_uvs = o3d.utility.Vector2dVector(filtered_uvs)
+        
+        return mesh_filtered
+
     def downsample_mesh(self):
-        # Load the initial mesh with open3d for the uvs
-        self.read_mesh(self.input_obj)
-        # Load the mesh vertices (V) and faces (F) with Libigl
-        V, F = igl.read_triangle_mesh(self.input_obj)
+        # Load the initial mesh with open3d for the uvs, vertices and triangles
+        self.read_mesh(self.input_obj, stretch=False) # no stretch
         
         # Compute the area of each triangle and the total surface area
-        triangle_areas = igl.doublearea(V, F) / 2.0
+        triangle_areas = igl.doublearea(self.vertices, self.triangles) / 2.0
         total_area = np.sum(triangle_areas)
         # to um. 1 unit = um
         total_area = total_area * self.um * self.um / (1000.0 * 1000.0)
         print("Total surface area (sqmm):", total_area)
-        print("Average area (sqmm) per triangle:", total_area / F.shape[0])
+        print("Average area (sqmm) per triangle:", total_area / self.triangles.shape[0])
 
         # Determine the target number of triangles
         target_area_per_triangle = 0.1  # Desired area (sqmm) per triangle
         target_num_triangles = int(total_area / target_area_per_triangle)
 
-        if target_num_triangles >= F.shape[0]:
+        if target_num_triangles >= self.triangles.shape[0]:
             print("No need to downsample")
             return self.input_obj
-        
+
         # Decimate the mesh
         print(f"Target number of triangles: {target_num_triangles}")
-        res = igl.decimate(V, F, target_num_triangles)
+        res = igl.decimate(self.vertices, self.triangles, target_num_triangles)
         print(len(list(res)))
         success, U, G, J, I = res
         print(f"Decimation successful: {success}")
-        print(f"Downsampling completed. Reached {U.shape[0]} vertices and {G.shape[0]} triangles. Before: {V.shape[0]} vertices and {F.shape[0]} triangles.")
+        print(f"Downsampling completed. Reached {U.shape[0]} vertices and {G.shape[0]} triangles. Before: {self.vertices.shape[0]} vertices and {self.triangles.shape[0]} triangles.")
 
-        print(f"Shape of I and J. I: {I.shape}, J: {J.shape}")
-        print(f"Shape of uv: {self.original_uvs.shape}")
-
-        uvs = self.original_uvs.reshape((-1, 3, 2))
-        # Map original UVs to the new faces using J
-        downsampled_uvs = uvs[J].reshape((-1, 2))
+        assert np.all(I >= 0), "Some vertices do not have UVs."
         
         # Save the downsampled mesh
         # Create a new Open3D mesh from the downsampled vertices and faces
         downsampled_mesh = o3d.geometry.TriangleMesh()
         downsampled_mesh.vertices = o3d.utility.Vector3dVector(U)
-        downsampled_mesh.vertex_normals = o3d.utility.Vector3dVector(self.vertex_normals[I])
+        # Handle normals
+        if hasattr(self, 'vertex_normals') and len(self.vertex_normals) > 0:
+            downsampled_mesh.vertex_normals = o3d.utility.Vector3dVector(self.vertex_normals[I])
+        else:
+            downsampled_mesh.compute_vertex_normals()
         downsampled_mesh.triangles = o3d.utility.Vector3iVector(G)
         downsampled_mesh = downsampled_mesh.compute_vertex_normals()
-        
-        # Set UVs as triangle attributes if Open3D supports this version for export (or use another library)
-        downsampled_mesh.triangle_uvs = o3d.utility.Vector2dVector(downsampled_uvs)
-        
+
+        # Set UVs as triangle attributes
+        if self.original_uvs is not None and self.original_uvs.size > 0:
+            uvs = self.original_uvs.reshape((-1, 3, 2))
+            assert np.all(uvs >= 0), "Some triangles do not have UVs."
+            # get uvs for each vertex. each vertex whenever it is inside a triangle, has the same uv
+            vertex_uvs = np.zeros((self.vertices.shape[0], 2), dtype=np.float64) - 1.0
+            for t in range(self.triangles.shape[0]):
+                for v in range(self.triangles.shape[1]):
+                    # if np.all(vertex_uvs[self.triangles[t,v]] >= 0):
+                    #     assert np.allclose(vertex_uvs[self.triangles[t,v]], uvs[t,v]), "UVs do not match."
+                    vertex_uvs[self.triangles[t,v]] = uvs[t,v].copy()
+
+            assert np.all(vertex_uvs >= 0), "Some vertices do not have UVs."
+
+            # Map to decimated_vertex_uvs
+            downsampled_vertex_uvs = np.zeros((U.shape[0], 2), dtype=np.float64) - 1.0
+            for i in range(U.shape[0]):
+                if I[i] >= 0:
+                    downsampled_vertex_uvs[i] = vertex_uvs[I[i]].copy()
+                else:
+                    print(f"Vertex {i} does not have a corresponding UV.")
+
+            assert np.all(downsampled_vertex_uvs >= 0), "Some vertices do not have UVs."
+
+            # Map to downsampled_uvs
+            downsampled_uvs = np.zeros((G.shape[0], 3, 2), dtype=np.float64)
+            for t in range(G.shape[0]):
+                for v in range(G.shape[1]):
+                    downsampled_uvs[t,v] = downsampled_vertex_uvs[G[t,v]].copy()
+            # Reshape
+            downsampled_uvs = downsampled_uvs.reshape((-1, 2))
+
+            # Set the UVs
+            downsampled_mesh.triangle_uvs = o3d.utility.Vector2dVector(downsampled_uvs)
+        else:
+            print("Original mesh has no UVs; skipping UV mapping.")
+                
         # Save the mesh with UVs to an OBJ file
         obj_path = self.input_obj.replace(".obj", "_downsampled.obj")
         o3d.io.write_triangle_mesh(obj_path, downsampled_mesh)
         print("Downsampled mesh saved with UVs.")
         return obj_path
         
-    def read_mesh(self, obj_path):
+    def read_mesh(self, obj_path, stretch=True):
         self.mesh = o3d.io.read_triangle_mesh(obj_path)
-        self.vertices = np.asarray(self.mesh.vertices, dtype=np.float64) / self.stretch_factor
+
+        # select largest connected component
+        self.mesh = self.filter_largest_connected_component(self.mesh)
+
+        self.vertices = np.asarray(self.mesh.vertices, dtype=np.float64)
+        if stretch:
+            self.vertices /= self.stretch_factor
         self.vertex_normals = np.asarray(self.mesh.vertex_normals, dtype=np.float64)
         self.triangles = np.asarray(self.mesh.triangles, dtype=np.int64)
         self.original_uvs = np.asarray(self.mesh.triangle_uvs, dtype=np.float64)
@@ -249,22 +315,30 @@ class Flatboi:
             if new_energy >= float("inf") or new_energy == float("nan") or np.isnan(new_energy) or np.isinf(new_energy):
                 converged = False
                 break
-            elif new_energy < temp_energy:
-                if abs(new_energy - temp_energy) < threshold:
+            elif new_energy < temp_energy or abs(new_energy - temp_energy) < threshold:
+                converged = True
+                if new_energy < temp_energy and abs(new_energy - temp_energy) < threshold:
+                    break
+                elif new_energy == temp_energy:
                     converged = True
                     break
                 else:
-                    converged = True
-            elif new_energy == temp_energy:
-                converged = True
-                break
+                    if not np.any(np.isnan(slim.vertices())) and not np.any(np.isinf(slim.vertices())):
+                        print("updating slim_uvs")
+                        old_uvs = slim.vertices().copy()
             else:
                 converged = False
                 break
 
         if converged and not np.any(np.isnan(slim.vertices())) and not np.any(np.isinf(slim.vertices())):
             print("Converg(ed/ing)")
-            slim_uvs = slim.vertices()
+            slim_uvs = slim.vertices().copy()
+        elif np.any(np.isnan(slim.vertices())):
+            print("Nan values in slim vertices")
+            slim_uvs = old_uvs
+        elif np.any(np.isinf(slim.vertices())):
+            print("Inf values in slim vertices")
+            slim_uvs = old_uvs
         else:
             print("Not Converged")
             slim_uvs = old_uvs
@@ -306,10 +380,22 @@ class Flatboi:
 
         energies = []
 
+        print("Log ARAP Energy")
+        slim = igl.SLIM(self.vertices, self.triangles, v_init=uv, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_LOG_ARAP, soft_penalty=0)
+        slim_uvs, energies_ = self.slim_optimization(slim, uv)
+        energies.extend(list(energies_))
+        print_errors(slim_uvs)
+
+        print("ARAP Energy")
+        slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_ARAP, soft_penalty=0)
+        slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs)
+        energies.extend(list(energies_))
+        print_errors(slim_uvs)
+
         # initializing SLIM with Symmetric Dirichlet Distortion Energy (isometric)
         print("Symmetric Dirichlet Distortion Energy")
-        slim = igl.SLIM(self.vertices, self.triangles, v_init=uv, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_SYMMETRIC_DIRICHLET, soft_penalty=0)
-        slim_uvs, energies_ = self.slim_optimization(slim, uv, iterations=30) # 30 iterations
+        slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_SYMMETRIC_DIRICHLET, soft_penalty=0)
+        slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs, iterations=30) # 30 iterations
         energies.extend(list(energies_))
         print_errors(slim_uvs)
 
@@ -327,7 +413,7 @@ class Flatboi:
 
         print("Conformal Energy")
         slim = igl.SLIM(self.vertices, self.triangles, v_init=slim_uvs, b=bnd, bc=bnd_uv, energy_type=igl.SLIM_ENERGY_TYPE_CONFORMAL, soft_penalty=0)
-        slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs)
+        slim_uvs, energies_ = self.slim_optimization(slim, slim_uvs, iterations=30)
         energies.extend(list(energies_))
         print_errors(slim_uvs)
 
