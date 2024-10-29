@@ -31,7 +31,7 @@ class Flatboi:
     input_obj: str
     output_obj: str
     max_iter: int
-    def __init__(self, obj_path: str, max_iter: int, output_obj: str = None, um: float = 7.91):
+    def __init__(self, obj_path: str, max_iter: int, output_obj: str = None, um: float = 7.91, downsample: bool = True):
         self.stretch_factor = 1000.0
         self.input_obj = obj_path
         if output_obj is not None:
@@ -40,7 +40,8 @@ class Flatboi:
             self.output_obj = obj_path.replace(".obj", "_flatboi.obj")
         self.max_iter = max_iter
         self.um = um
-        obj_path = self.downsample_mesh()
+        if downsample:
+            obj_path = self.downsample_mesh()
         self.read_mesh(obj_path)
         self.filter_mesh()
         
@@ -72,9 +73,10 @@ class Flatboi:
         
         return mesh_filtered
     
-    def downsample_mesh_with_texture(self):
+    def downsample_mesh_with_texture(self, target_area_per_triangle=0.05):
         """
         This function gives comparable results to the downsample_mesh function, but needs the pymeshlab library.
+        target_area_per_triangle: Desired area (sqmm) per triangle
         """
         import pymeshlab
         # Load the initial mesh with open3d for the uvs, vertices and triangles
@@ -103,7 +105,6 @@ class Flatboi:
         print("Average area (sqmm) per triangle:", total_area / self.triangles.shape[0])
 
         # Determine the target number of triangles
-        target_area_per_triangle = 0.1  # Desired area (sqmm) per triangle
         target_num_triangles = int(total_area / target_area_per_triangle)
 
         if target_num_triangles >= self.triangles.shape[0]:
@@ -138,7 +139,7 @@ class Flatboi:
         print(f"Downsampled mesh saved with UVs to {obj_path}")
         return obj_path
 
-    def downsample_mesh(self):
+    def downsample_mesh(self, target_area_per_triangle=0.05):
         # Load the initial mesh with open3d for the uvs, vertices and triangles
         self.read_mesh(self.input_obj, stretch=False) # no stretch
         
@@ -151,7 +152,6 @@ class Flatboi:
         print("Average area (sqmm) per triangle:", total_area / self.triangles.shape[0])
 
         # Determine the target number of triangles
-        target_area_per_triangle = 0.1  # Desired area (sqmm) per triangle
         target_num_triangles = int(total_area / target_area_per_triangle)
 
         if target_num_triangles >= self.triangles.shape[0]:
@@ -694,6 +694,7 @@ def main():
     parser.add_argument('--axis', type=str, help='Volume axis for alignment. Options: x, y, z', default='z')
     parser.add_argument('--rotate', type=int, help='Angle to add to the best alignment angle. Default is 180 degrees.', default=180)
     parser.add_argument('--um', type=float, help='Unit size in um.', default=7.91)
+    parser.add_argument('--downsample', action='store_true', help='Downsample the mesh before adding UVs.')
 
     # Take arguments back over
     args = parser.parse_args()
@@ -717,7 +718,7 @@ def main():
 
     print(f"Adding UV coordinates to mesh {path}")
 
-    flatboi = Flatboi(path, args.iter, um=args.um)
+    flatboi = Flatboi(path, args.iter, um=args.um, downsample=args.downsample)
     harmonic_uvs, harmonic_energies = flatboi.slim(initial_condition=args.ic)
     
 	# Align the UV map
