@@ -232,7 +232,7 @@ class Flatboi:
 
         self.vertices = np.asarray(self.mesh.vertices, dtype=np.float64)
         if stretch:
-            self.vertices /= self.stretch_factor
+            self.vertices = np.asarray(self.mesh.vertices, dtype=np.float64) / self.stretch_factor
         self.vertex_normals = np.asarray(self.mesh.vertex_normals, dtype=np.float64)
         self.triangles = np.asarray(self.mesh.triangles, dtype=np.int64)
         self.original_uvs = np.asarray(self.mesh.triangle_uvs, dtype=np.float64)
