@@ -32,7 +32,7 @@ from ThaumatoAnakalyptor.sheet_to_mesh import umbilicus_xy_at_z
 # import computation functions
 from ThaumatoAnakalyptor.generate_half_sized_grid import compute as compute_grid_cells
 from ThaumatoAnakalyptor.grid_to_pointcloud import compute as compute_pointcloud
-from ThaumatoAnakalyptor.Random_Walks import compute as compute_stitch_sheet
+from ThaumatoAnakalyptor.instances_to_graph import compute as compute_stitch_sheet
 
 class GraphicsView(QGraphicsView):
     def __init__(self, scene, parent=None):
