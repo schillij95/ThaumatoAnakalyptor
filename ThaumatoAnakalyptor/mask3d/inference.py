@@ -146,7 +146,7 @@ def init_(cfg: DictConfig):
 
     # Manually load the specific config that "stpls3d" points to.
     os.chdir(hydra.utils.get_original_cwd())
-    stpls3d_config = OmegaConf.load("ThaumatoAnakalyptor/mask3d/conf/data/datasets/stpls3d.yaml")
+    stpls3d_config = OmegaConf.load("ThaumatoAnakalyptor/mask3d/conf/data/datasets/stpls3d_working_inference_but_not_train.yaml")
 
     OmegaConf.set_struct(cfg, False)
     cfg.general.experiment_name = f'validation_query_{CURR_QUERY}_topk_{CURR_TOPK}_dbscan_{CURR_DBSCAN}_size_{CURR_SIZE}'

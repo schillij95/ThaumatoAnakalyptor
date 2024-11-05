@@ -74,11 +74,24 @@ def train(cfg: DictConfig):
 
     callbacks.append(RegularCheckpointing())
 
+    # Adding ModelCheckpoint to automatically save model weights
+    checkpoint_callback = ModelCheckpoint(
+        dirpath=str(cfg.general.save_dir),  # Directory to save the model
+        filename='weights-{epoch}-{step}',  # Name of the file
+        save_top_k=1,                       # Save only the top k models
+        save_last=True,                     # Save the last model as well
+        monitor='val_loss',                 # Metric to monitor for saving
+        mode='min',                         # Minimize the monitored metric
+        save_weights_only=True,             # Save only the weights
+    )
+    callbacks.append(checkpoint_callback)
+
     runner = Trainer(
         logger=loggers,
         gpus=cfg.general.gpus,
+        accelerator="gpu",
+        strategy='ddp',
         callbacks=callbacks,
-        weights_save_path=str(cfg.general.save_dir),
         **cfg.trainer,
     )
     runner.fit(model)
@@ -93,8 +106,9 @@ def test(cfg: DictConfig):
     cfg, model, loggers = get_parameters(cfg)
     runner = Trainer(
         gpus=cfg.general.gpus,
+        accelerator="gpu",
+        strategy='ddp',
         logger=loggers,
-        weights_save_path=str(cfg.general.save_dir),
         **cfg.trainer,
     )
     runner.test(model)
