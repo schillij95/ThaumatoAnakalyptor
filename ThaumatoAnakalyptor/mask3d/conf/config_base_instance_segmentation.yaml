@@ -50,7 +50,7 @@ general:
   # experiment_id: 1 # commit[:8], or unique from logger
   # version: 1 # md5[:8] of config
 
-  gpus: 1
+  gpus: -1
 
 defaults:
   - data: indoor
