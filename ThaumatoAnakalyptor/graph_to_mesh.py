@@ -298,13 +298,14 @@ class WalkToSheet():
 
         sheet_infos = []
         for node in tqdm(self.graph.nodes, desc="Building points"):
-            if 'assigned_k' not in self.graph.nodes[node]:
-                continue
+            #if 'assigned_k' not in self.graph.nodes[node]:
+            #    continue
             winding_angle = self.graph.nodes[node]['winding_angle']
             block, patch_id = node[:3], node[3]
             patch_sheet_patch_info = (block, int(patch_id), winding_angle)
             sheet_infos.append(patch_sheet_patch_info)
         time_start = time.time()
+        print(sheet_infos)
         points, normals, colors = pointcloud_processing.load_pointclouds(sheet_infos, self.path, z_range[0], z_range[1], True)
         print(f"Time to load pointclouds: {time.time() - time_start}")
         print(f"Shape of patch_points: {np.array(points).shape}")

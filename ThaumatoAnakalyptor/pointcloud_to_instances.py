@@ -3,10 +3,10 @@
 import numpy as np
 import os
 import open3d as o3d
-import tarfile
-
+#import tarfile
+import py7zr
 import time
-
+import colorcet as cc
 # surface points extraction
 import torch
 from torch.utils.data import Dataset, DataLoader
@@ -85,9 +85,9 @@ def save_surface_ply(surface_points, normals, colors, score, distance, coeff, n,
 def save_block_ply_args(args):
     save_block_ply(*args)
 
-def save_block_ply(block_points, block_normals, block_colors, block_scores, block_name, score_threshold=0.5, distance_threshold=10.0, n=4, alpha = 1000.0, slope_alpha = 0.1, post_process=True, block_distances_precomputed=None, block_coeffs_precomputed=None, check_exist=True):
-    # Check if tar file exists
-    if check_exist and os.path.exists(block_name + '.tar'):
+def save_block_ply(block_points, block_normals, block_colors, block_scores, block_name, score_threshold=0.5, distance_threshold=10.0, n=4, alpha=1000.0, slope_alpha=0.1, post_process=True, block_distances_precomputed=None, block_coeffs_precomputed=None, check_exist=True):
+    # Check if 7z file exists
+    if check_exist and os.path.exists(block_name + '.7z'):
         return
 
     # Save to a temporary file first to ensure data integrity
@@ -124,19 +124,15 @@ def save_block_ply(block_points, block_normals, block_colors, block_scores, bloc
                 continue
             save_surface_ply(block_points[i], block_normals[i], block_colors[i], block_scores[i], block_distances[i], block_coeffs[i], n, os.path.join(temp_block_name, f"surface_{i}.ply"))
 
-    # Delete the temporary tar file if it exists
-    if os.path.exists(temp_block_name + '.tar'):
-        os.remove(temp_block_name + '.tar')
+    # Delete the temporary 7z file if it exists
+    if os.path.exists(temp_block_name + '.7z'):
+        os.remove(temp_block_name + '.7z')
 
     used_name_block = block_name if os.path.exists(block_name) else temp_block_name
 
-    # Tar the temp folder without including the 'temp' name inside the tar
-    with tarfile.open(temp_block_name + '.tar', 'w') as tar:
-        for root, _, files in os.walk(used_name_block):
-            for file in files:
-                full_file_path = os.path.join(root, file)
-                arcname = full_file_path[len(used_name_block) + 1:]
-                tar.add(full_file_path, arcname=arcname)
+    # Create the 7z archive
+    with py7zr.SevenZipFile(temp_block_name + '.7z', 'w') as archive:
+        archive.writeall(used_name_block, '')
 
     # Remove the temp folder
     for root, dirs, files in os.walk(used_name_block, topdown=False):
@@ -151,13 +147,13 @@ def save_block_ply(block_points, block_normals, block_colors, block_scores, bloc
         print(e)
         print(f"Error removing {used_name_block}")
 
-    # Rename the tarball to the original filename (without '_temp')
+    # Rename the 7z archive to the original filename (without '_temp')
     try:
-        os.rename(temp_block_name + '.tar', block_name + '.tar')
-        # print(f"Saved {block_name}.tar")
+        os.rename(temp_block_name + '.7z', block_name + '.7z')
+        #print(f"Saved {block_name}.7z")
     except Exception as e:
         print(e)
-        print(f"Error renaming {temp_block_name}.tar to {block_name}.tar")
+        print(f"Error renaming {temp_block_name}.7z to {block_name}.7z")
 
 def post_process_surfaces(surfaces, surfaces_normals, surfaces_colors, scores, score_threshold=0.5, distance_threshold=10.0, n=4, alpha = 1000.0, slope_alpha = 0.1):
     indices = [] # valid surfaces
@@ -187,6 +183,13 @@ def post_process_surfaces(surfaces, surfaces_normals, surfaces_colors, scores, s
     surfaces_normals = [surfaces_normals[i] for i in indices]
     surfaces_colors = [surfaces_colors[i] for i in indices]
     scores = [scores[i] for i in indices]
+    
+     # Get the Glasbey colormap
+    glasbey_cmap = cc.cm.glasbey
+    num_colors = len(indices)
+    for i in range(len(indices)):
+        color = glasbey_cmap(i/num_colors)[:3]
+        surfaces_colors[i][:] = color
 
     return surfaces, surfaces_normals, surfaces_colors, scores, distances_list, coeff_list
 
@@ -582,10 +585,10 @@ class PointCloudDataset(Dataset):
                     z_prime = z
                     start_coord = np.array([x_prime,y_prime,z_prime])
                     block_name = path + f"_subvolume_blocks/{start_coord[0]:06}_{start_coord[1]:06}_{start_coord[2]:06}" # nice ordering in the folder
-                    block_name_tar = block_name + ".tar"
+                    block_name_tar = block_name + ".7z"
                     block_name_tar_alternatives = []
                     for alternative_drive in alternative_drives:
-                        block_name_tar_alternatives.append(block_name.replace(main_drive, alternative_drive) + ".tar")
+                        block_name_tar_alternatives.append(block_name.replace(main_drive, alternative_drive) + ".7z")
 
                     # Skip if the block tar already exists. Same for alternative path
                     if (not (fix_umbilicus and fix_umbilicus_recompute(start_coord * 200.0 / 50.0, 200, umbilicus_points, umbilicus_points_old))) and (os.path.exists(block_name_tar) or any([os.path.exists(block_name_tar_alternative) for block_name_tar_alternative in block_name_tar_alternatives])):
@@ -599,6 +602,8 @@ class PointCloudDataset(Dataset):
                         # print(f"Subvolume {start_coord} has no points.")
                         continue
                     
+
+
                     subvolumes_points.append(subvolume_points)
                     subvolumes_normals.append(subvolume_normals)
                     subvolumes_colors.append(subvolume_colors)
