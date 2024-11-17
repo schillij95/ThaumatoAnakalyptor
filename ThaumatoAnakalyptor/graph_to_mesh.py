@@ -298,8 +298,8 @@ class WalkToSheet():
 
         sheet_infos = []
         for node in tqdm(self.graph.nodes, desc="Building points"):
-            #if 'assigned_k' not in self.graph.nodes[node]:
-            #    continue
+            if 'assigned_k' not in self.graph.nodes[node]:
+                continue
             winding_angle = self.graph.nodes[node]['winding_angle']
             block, patch_id = node[:3], node[3]
             patch_sheet_patch_info = (block, int(patch_id), winding_angle)
