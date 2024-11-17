@@ -6,6 +6,7 @@ import pickle
 import glob
 import os
 import tarfile
+import py7zr
 import tempfile
 import open3d as o3d
 import json
@@ -169,27 +170,55 @@ def subvolume_surface_patches_folder(file, subvolume_size=50, sample_ratio=1.0):
         subvolume_size = np.repeat(subvolume_size, 3)
 
     patches_list = []
-    tar_filename = f"{file}.tar"
 
-    if os.path.isfile(tar_filename):
-        with tarfile.open(tar_filename, 'r') as archive, tempfile.TemporaryDirectory() as temp_dir:
-            # Extract all .ply files at once
-            ply_files = [m for m in archive.getmembers() if m.name.endswith(".ply")]
-            archive.extractall(path=temp_dir, members=archive.getmembers())
+    tar_filename = f"{file}.tar"
+    zip_filename = f"{file}.7z"
+
+    if os.path.isfile(tar_filename) or os.path.isfile(zip_filename):
+        # Open the archive
+        if os.path.isfile(tar_filename):
+            archive = tarfile.open(tar_filename, 'r')
+            archive_type = 'tar'
+        else:
+            archive = py7zr.SevenZipFile(zip_filename, 'r')
+            archive_type = '7z'
+
+        with archive, tempfile.TemporaryDirectory() as temp_dir:
+            if archive_type == 'tar':
+                # Extract all .ply files
+                archive.extractall(path=temp_dir)
+                # Get list of .ply files
+                ply_files = [m.name for m in archive.getmembers() if m.name.endswith(".ply")]
+            else:
+                # Extract all files
+                archive.extractall(path=temp_dir)
+                # Get list of .ply files
+                ply_files = []
+                for root, dirs, files in os.walk(temp_dir):
+                    for file_name in files:
+                        if file_name.endswith(".ply"):
+                            ply_files.append(os.path.relpath(os.path.join(root, file_name), temp_dir))
 
             # Process each .ply file
-            for ply_member in ply_files:
-                ply_file_path = os.path.join(temp_dir, ply_member.name)
-                ply_file = ply_member.name
-                # print(ply_file_path)
-                # ids = tuple([*map(int, ply_member.name.split("_"))])
-                ids = tuple([*map(int, tar_filename.split(".")[-2].split("/")[-1].split("_"))]+[int(ply_file.split(".")[-2].split("_")[-1])])
-                ids = (int(ids[0]), int(ids[1]), int(ids[2]), int(ids[3]))
+            for ply_file in ply_files:
+                ply_file_path = os.path.join(temp_dir, ply_file)
+                volume_ids = extract_ids(file)
+                patch_number = int(os.path.splitext(os.path.basename(ply_file))[0].split('_')[-1])
+                ids = (*volume_ids, patch_number)
                 main_sheet_patch = (ids[:3], ids[3], float(0.0))
                 surface_dict, _ = build_patch(main_sheet_patch, tuple(subvolume_size), ply_file_path, sample_ratio=float(sample_ratio))
                 patches_list.append(surface_dict)
 
     return patches_list
+
+def extract_ids(file_name):
+    """
+    Extract IDs from file name.
+    """
+    base_name = os.path.basename(file_name)
+    name_parts = base_name.split("_")
+    ids = tuple(map(int, name_parts))
+    return ids
 
 def build_patch_tar(main_sheet_patch, subvolume_size, path, sample_ratio=1.0):
     """
@@ -204,16 +233,25 @@ def build_patch_tar(main_sheet_patch, subvolume_size, path, sample_ratio=1.0):
     xyz, patch_nr, _ = main_sheet_patch
     file = path + f"/{xyz[0]:06}_{xyz[1]:06}_{xyz[2]:06}"
     tar_filename = f"{file}.tar"
+    zip_filename = f"{file}.7z"
 
-    if os.path.isfile(tar_filename):
-        with tarfile.open(tar_filename, 'r') as archive, tempfile.TemporaryDirectory() as temp_dir:
-            # Extract all .ply files at once
-            archive.extractall(path=temp_dir, members=archive.getmembers())
+    if os.path.isfile(tar_filename) or os.path.isfile(zip_filename):
+        # Open the archive
+        if os.path.isfile(tar_filename):
+            archive = tarfile.open(tar_filename, 'r')
+            archive_type = 'tar'
+        else:
+            archive = py7zr.SevenZipFile(zip_filename, 'r')
+            archive_type = '7z'
+
+        with archive, tempfile.TemporaryDirectory() as temp_dir:
+            # Extract all files
+            archive.extractall(path=temp_dir)
 
             ply_file = f"surface_{patch_nr}.ply"
             ply_file_path = os.path.join(temp_dir, ply_file)
-            ids = tuple([*map(int, tar_filename.split(".")[-2].split("/")[-1].split("_"))]+[int(ply_file.split(".")[-2].split("_")[-1])])
-            ids = (int(ids[0]), int(ids[1]), int(ids[2]), int(ids[3]))
+            volume_ids = extract_ids(file)
+            ids = (*volume_ids, patch_nr)
             res = build_patch(main_sheet_patch, tuple(subvolume_size), ply_file_path, sample_ratio=float(sample_ratio))
             return res
 
@@ -669,50 +707,83 @@ def init_worker_build_GT(mesh_file, pointcloud_dir):
 
 def worker_build_GT(args):
     # print(f"Processing: {args}")
-    tar_filename, umbilicus_path = args
+    filename, umbilicus_path = args
     nodes_winding_alignment = []
 
-    if os.path.isfile(tar_filename):
-        with tarfile.open(tar_filename, 'r') as archive, tempfile.TemporaryDirectory() as temp_dir:
-            # Extract all .ply files at once
-            ply_files = [m for m in archive.getmembers() if m.name.endswith(".ply")]
-            archive.extractall(path=temp_dir, members=archive.getmembers())
+    if filename.endswith(".tar"):
+        # Handle .tar files
+        if os.path.isfile(filename):
+            with tarfile.open(filename, 'r') as archive, tempfile.TemporaryDirectory() as temp_dir:
+                # Extract all .ply files at once
+                ply_files = [m for m in archive.getmembers() if m.name.endswith(".ply")]
+                archive.extractall(path=temp_dir, members=archive.getmembers())
 
-            # Process each .ply file
-            for i, ply_member in enumerate(ply_files):
-                ply_file_path = os.path.join(temp_dir, ply_member.name)
-                ply_file = ply_member.name
-                # print(ply_file_path)
-                # ids = tuple([*map(int, ply_member.name.split("_"))])
-                ids = tuple([*map(int, tar_filename.split(".")[-2].split("/")[-1].split("_"))]+[int(ply_file.split(".")[-2].split("_")[-1])])
-                ids = (int(ids[0]), int(ids[1]), int(ids[2]), int(ids[3]))
+                # Process each .ply file
+                for i, ply_member in enumerate(ply_files):
+                    ply_file_path = os.path.join(temp_dir, ply_member.name)
+                    ply_file = ply_member.name
+                    ids = tuple([*map(int, filename.split(".")[-2].split("/")[-1].split("_"))]+[int(ply_file.split(".")[-2].split("_")[-1])])
+                    ids = (int(ids[0]), int(ids[1]), int(ids[2]), int(ids[3]))
 
-                # 3D instance pointcloud
-                vertices1 = o3d.io.read_point_cloud(ply_file_path)
-                # to numpy
-                vertices1 = np.asarray(vertices1.points)
-                # adjust coordinate frame
-                vertices1 = scale_points(vertices1, 4.0, axis_offset=-500)
-                vertices1_spelufo = vertices1 + 500
-                vertices1, _ = shuffling_points_axis(vertices1, vertices1, [2, 0, 1]) # Scan Coordinate System
-                winding_angles1 = calculate_winding_angle_pointcloud_instance(vertices1, gt_splitter) # instance winding angles. # Takes Scan coordinate system
+                    # Process the .ply file (example processing)
+                    vertices1 = o3d.io.read_point_cloud(ply_file_path)
+                    vertices1 = np.asarray(vertices1.points)
+                    vertices1 = scale_points(vertices1, 4.0, axis_offset=-500)
+                    vertices1_spelufo = vertices1 + 500
+                    vertices1, _ = shuffling_points_axis(vertices1, vertices1, [2, 0, 1])
+                    winding_angles1 = calculate_winding_angle_pointcloud_instance(vertices1, gt_splitter)
 
-                # align winding angles
-                winding_angle_difference, winding_angles2, scene2, mesh2, percentage_valid = align_winding_angles(vertices1_spelufo, winding_angles1, mesh_gt_stuff, umbilicus_path, 15, gt_splitter, debug=False) # aling to GT mesh per point. # takes spelufo coordinate system
-                if percentage_valid > 0.5:
-                    best_alignment = find_best_alignment(winding_angle_difference) # best alignment to a wrap
-                    # Adjust winding angle of graph nodes
-                    nodes_winding_alignment.append((ids, best_alignment))
-                    # print(f"Best alignment: {best_alignment}")
-                elif i == 0:
-                    # Check if too far away from GT Mesh
-                    winding_angle_difference, winding_angles2, scene2, mesh2, percentage_valid = align_winding_angles(vertices1_spelufo, winding_angles1, mesh_gt_stuff, umbilicus_path, 210, gt_splitter) # aling to GT mesh per point. # takes spelufo coordinate system
-                    # Still 0 percent -> no patch in this subvolume is valid
-                    if percentage_valid == 0.0:
-                        # print("No valid patches in this subvolume.")
-                        break
-                    
-                    # print(f"Invalid alignment: {percentage_valid} percentage valid")
+                    winding_angle_difference, winding_angles2, scene2, mesh2, percentage_valid = align_winding_angles(
+                        vertices1_spelufo, winding_angles1, mesh_gt_stuff, umbilicus_path, 15, gt_splitter, debug=False
+                    )
+                    if percentage_valid > 0.5:
+                        best_alignment = find_best_alignment(winding_angle_difference)
+                        nodes_winding_alignment.append((ids, best_alignment))
+                    elif i == 0:
+                        winding_angle_difference, winding_angles2, scene2, mesh2, percentage_valid = align_winding_angles(
+                            vertices1_spelufo, winding_angles1, mesh_gt_stuff, umbilicus_path, 210, gt_splitter
+                        )
+                        if percentage_valid == 0.0:
+                            break
+                        
+    elif filename.endswith(".7z"):
+        # Handle .7z files
+        if os.path.isfile(filename):
+            with py7zr.SevenZipFile(filename, 'r') as archive, tempfile.TemporaryDirectory() as temp_dir:
+                archive.extractall(path=temp_dir)
+                # List all extracted .ply files
+                ply_files = [
+                    os.path.join(root, file)
+                    for root, _, files in os.walk(temp_dir)
+                    for file in files if file.endswith(".ply")
+                ]
+
+                # Process each .ply file
+                for i, ply_file_path in enumerate(ply_files):
+                    ply_file = os.path.basename(ply_file_path)
+                    ids = tuple([*map(int, filename.split(".")[-2].split("/")[-1].split("_"))]+[int(ply_file.split(".")[-2].split("_")[-1])])
+                    ids = (int(ids[0]), int(ids[1]), int(ids[2]), int(ids[3]))
+
+                    # Process the .ply file (example processing)
+                    vertices1 = o3d.io.read_point_cloud(ply_file_path)
+                    vertices1 = np.asarray(vertices1.points)
+                    vertices1 = scale_points(vertices1, 4.0, axis_offset=-500)
+                    vertices1_spelufo = vertices1 + 500
+                    vertices1, _ = shuffling_points_axis(vertices1, vertices1, [2, 0, 1])
+                    winding_angles1 = calculate_winding_angle_pointcloud_instance(vertices1, gt_splitter)
+
+                    winding_angle_difference, winding_angles2, scene2, mesh2, percentage_valid = align_winding_angles(
+                        vertices1_spelufo, winding_angles1, mesh_gt_stuff, umbilicus_path, 15, gt_splitter, debug=False
+                    )
+                    if percentage_valid > 0.5:
+                        best_alignment = find_best_alignment(winding_angle_difference)
+                        nodes_winding_alignment.append((ids, best_alignment))
+                    elif i == 0:
+                        winding_angle_difference, winding_angles2, scene2, mesh2, percentage_valid = align_winding_angles(
+                            vertices1_spelufo, winding_angles1, mesh_gt_stuff, umbilicus_path, 210, gt_splitter
+                        )
+                        if percentage_valid == 0.0:
+                            break
 
     return nodes_winding_alignment
     
@@ -1049,14 +1120,14 @@ class ScrollGraph(Graph):
 
         if start_fresh:
             blocks_tar_files = glob.glob(path_instances + '/*.tar')
-
-            print(f"Found {len(blocks_tar_files)} blocks.")
+            blocks_7z_files  = glob.glob(path_instances + '/*.7z')
+            blocks_files = blocks_tar_files + blocks_7z_files
+            print(f"Found {len(blocks_files)} blocks.")
             print("Building graph...")
-
             # Create a pool of worker processes
             with Pool(num_processes) as pool:
                 # Map the process_block function to each file
-                zipped_args = list(zip(blocks_tar_files, [path_instances] * len(blocks_tar_files), [self.overlapp_threshold] * len(blocks_tar_files), [self.umbilicus_data] * len(blocks_tar_files)))
+                zipped_args = list(zip(blocks_files, [path_instances] * len(blocks_files), [self.overlapp_threshold] * len(blocks_files), [self.umbilicus_data] * len(blocks_files)))
                 results = list(tqdm(pool.imap(process_block, zipped_args), total=len(zipped_args)))
 
             print(f"Number of results: {len(results)}")
@@ -1639,4 +1710,4 @@ if __name__ == '__main__':
     multiprocessing.set_start_method('spawn') # need sppawn because of open3d initialization deadlock in the init worker function
     random_walks()
 
-# Example command: python3 -m ThaumatoAnakalyptor.instances_to_graph --path /scroll.volpkg/working/scroll3_surface_points/point_cloud_colorized_verso_subvolume_blocks --recompute 1
+# Example command: python3 -m ThaumatoAnakalyptor.instances_to_graph --path /tomato_files/instances --recompute 1

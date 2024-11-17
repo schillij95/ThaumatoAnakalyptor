@@ -9,6 +9,7 @@ Author: Julian Schilliger - ThaumatoAnakalyptor - 2024
 #include <archive.h>
 #include <archive_entry.h>
 
+#include <filesystem>  // Requires C++17
 #include <iostream>
 #include <sstream>
 #include <fstream>
@@ -161,7 +162,11 @@ public:
     PointCloudLoader(const std::vector<std::tuple<std::vector<int>, int, double>>& node_data, const std::string& base_path, const int start_z, const int end_z, bool verbose)
         : node_data_(node_data), base_path_(base_path), start_z_(start_z), end_z_(end_z), verbose(verbose) {}
 
-    bool extract_ply_from_tar(const std::string& tar_path, const std::string& ply_filename, std::string& out_ply_content) {
+    bool file_exists(const std::string& name) {
+        return std::filesystem::exists(name);
+    }
+
+    bool extract_ply_from_archive(const std::string& archive_path, const std::string& ply_filename, std::string& out_ply_content) {
         struct archive *a;
         struct archive_entry *entry;
         int r;
@@ -169,8 +174,9 @@ public:
         a = archive_read_new();
         archive_read_support_filter_all(a);
         archive_read_support_format_all(a);
-        r = archive_read_open_filename(a, tar_path.c_str(), 65536); // 64 KB = 65,536 Bytes is the buffer size.
+        r = archive_read_open_filename(a, archive_path.c_str(), 65536); // 64 KB buffer size
         if (r != ARCHIVE_OK) {
+            archive_read_free(a);
             return false;
         }
 
@@ -210,13 +216,28 @@ public:
                 continue;
             }
 
-            std::string tar_path = base_path_ + "/" + format_filename(xyz[0]) + "_" + format_filename(xyz[1]) + "_" + format_filename(xyz[2]) + ".tar";
+            std::string base_filename = base_path_ + "/" + format_filename(xyz[0]) + "_" + format_filename(xyz[1]) + "_" + format_filename(xyz[2]);
+            std::string archive_path;
+
+            if (file_exists(base_filename + ".tar")) {
+                archive_path = base_filename + ".tar";
+                // std::cout << "Loading " << archive_path << std::endl;
+            } else if (file_exists(base_filename + ".7z")) {
+                archive_path = base_filename + ".7z";
+                // std::cout << "Loading " << archive_path << std::endl;
+            } else {
+                std::cerr << "No archive found for " << base_filename << std::endl;
+                std::lock_guard<std::mutex> lock(mutex_);
+                print_progress();
+                continue;
+            }
+
             std::string ply_file_name = "surface_" + std::to_string(patch_nr) + ".ply";
             std::string ply_content;
 
-            if (!extract_ply_from_tar(tar_path, ply_file_name, ply_content)) {
-                std::cerr << "Failed to extract PLY file from TAR archive" << std::endl;
-                return;
+            if (!extract_ply_from_archive(archive_path, ply_file_name, ply_content)) {
+                std::cerr << "Failed to extract PLY file from archive: " << archive_path << std::endl;
+                continue;
             }
 
             try {
@@ -226,7 +247,7 @@ public:
                 // Load PLY content using hapPLY
                 happly::PLYData plyIn(plyStream);
 
-                std::tuple<std::tuple<std::vector<double>, std::vector<double>, std::vector<double>>, std::tuple<std::vector<double>, std::vector<double>, std::vector<double>>, std::tuple<std::vector<unsigned char>, std::vector<unsigned char>, std::vector<unsigned char>>> vertices = plyIn.getVertexData();
+                auto vertices = plyIn.getVertexData();
 
                 std::vector<double> x = std::get<0>(std::get<0>(vertices));
                 std::vector<double> y = std::get<1>(std::get<0>(vertices));
@@ -272,11 +293,26 @@ public:
                 continue;
             }
 
-            std::string tar_path = base_path_ + "/" + format_filename(xyz[0]) + "_" + format_filename(xyz[1]) + "_" + format_filename(xyz[2]) + ".tar";
+            std::string base_filename = base_path_ + "/" + format_filename(xyz[0]) + "_" + format_filename(xyz[1]) + "_" + format_filename(xyz[2]);
+            std::string archive_path;
+
+            if (file_exists(base_filename + ".tar")) {
+                archive_path = base_filename + ".tar";
+                // std::cout << "Loading " << archive_path << std::endl;
+            } else if (file_exists(base_filename + ".7z")) {
+                archive_path = base_filename + ".7z";
+                // std::cout << "Loading " << archive_path << std::endl;
+            } else {
+                std::cerr << "No archive found for " << base_filename << std::endl;
+                std::lock_guard<std::mutex> lock(mutex_);
+                print_progress();
+                continue;
+            }
+
             std::string ply_file_name = "surface_" + std::to_string(patch_nr) + ".ply";
             std::string ply_content;
 
-            if (extract_ply_from_tar(tar_path, ply_file_name, ply_content)) {
+            if (extract_ply_from_archive(archive_path, ply_file_name, ply_content)) {
                 std::istringstream plyStream(ply_content);
                 happly::PLYData plyData(plyStream);
 
