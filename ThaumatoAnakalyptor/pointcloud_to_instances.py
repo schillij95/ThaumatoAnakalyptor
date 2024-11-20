@@ -6,7 +6,6 @@ import open3d as o3d
 #import tarfile
 import py7zr
 import time
-import colorcet as cc
 # surface points extraction
 import torch
 from torch.utils.data import Dataset, DataLoader
@@ -183,13 +182,6 @@ def post_process_surfaces(surfaces, surfaces_normals, surfaces_colors, scores, s
     surfaces_normals = [surfaces_normals[i] for i in indices]
     surfaces_colors = [surfaces_colors[i] for i in indices]
     scores = [scores[i] for i in indices]
-    
-     # Get the Glasbey colormap
-    glasbey_cmap = cc.cm.glasbey
-    num_colors = len(indices)
-    for i in range(len(indices)):
-        color = glasbey_cmap(i/num_colors)[:3]
-        surfaces_colors[i][:] = color
 
     return surfaces, surfaces_normals, surfaces_colors, scores, distances_list, coeff_list
 
