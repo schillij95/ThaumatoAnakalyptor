@@ -75,7 +75,7 @@ class MeshSplitter:
         
         angle1 = atan2(dy1, dx1)
         angle2 = atan2(dy2, dx2)
-        return self.normalize_angle_diff(angle1 - angle2)
+        return self.normalize_angle_diff(angle2 - angle1)
     
     def compute_adjacency_list(self):
         """
