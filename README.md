@@ -1,3 +1,7 @@
+# This repository has been archived and is beeing further developed by the monorepo of the Vesuvius Organization Team over at https://github.com/ScrollPrize/villa/tree/main/ThaumatoAnakalyptor
+
+Thank you to everyone who helped develop it and continues to do so. 
+
 # <img align="center" width="60" height="60" src="GUI/ThaumatoAnakalyptor.png"> ThaumatoAnakalyptor
 
 **ThaumatoAnakalyptor** is an advanced automatic segmentation pipeline designed for high-precision extraction of papyrus sheet segmentations from CT scans of ancient scrolls with minimal human intervention.
