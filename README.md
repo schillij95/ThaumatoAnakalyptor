@@ -3,7 +3,7 @@
 **ThaumatoAnakalyptor** is an advanced automatic segmentation pipeline designed for high-precision extraction of papyrus sheet segmentations from CT scans of ancient scrolls with minimal human intervention.
 
 <figure>
-  <img src="pictures/thaumato_0-5m_scroll3.png" alt="0.5 meter long segmentation of Scroll 3" width="100%">
+  <img src="pictures/thaumato_0-5m_scroll3.jpg" alt="0.5 meter long segmentation of Scroll 3" width="100%">
   <figcaption><i>0.5 meter long automatic segmentation of Scroll 3.</i></figcaption>
 </figure>
 
